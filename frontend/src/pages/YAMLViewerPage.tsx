@@ -90,6 +90,9 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
     /^\s*x-app-key:/,
     /^\s*valueFrom:/,
     /^\s*secretKeyRef:/,
+    /^\s*user_key:/,
+    /^\s*app_id:/,
+    /^\s*app_key:/,
   ];
 
   const renderHighlightedYaml = (content: string) => {
