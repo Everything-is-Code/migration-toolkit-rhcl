@@ -280,13 +280,6 @@ deploy_backend() {
   done
   log_ok "$(msg 'バックエンドリソースを適用しました' 'Backend resources applied')"
 
-  log_info "$(msg 'レポート生成中 (テスト / 静的解析 / 品質チェック)...' 'Running report generation (tests / static analysis / quality gate)...')"
-  if bash "$ROOT_DIR/backend/generate-report.sh"; then
-    log_ok "$(msg 'レポート生成完了 → backend/target/test-report/index.html' 'Report generated → backend/target/test-report/index.html')"
-  else
-    log_warn "$(msg 'レポート生成で警告/エラーがありましたが、ビルドを続行します → backend/target/test-report/index.html' 'Report generation had warnings/errors — continuing build → backend/target/test-report/index.html')"
-  fi
-
   if [ -d "$ROOT_DIR/backend/target" ]; then
     log_info "$(msg 'target/ を削除中（S2I アップロード前のクリーンアップ）...' 'Removing target/ (cleanup before S2I upload)...')"
     rm -rf "$ROOT_DIR/backend/target"
@@ -304,6 +297,13 @@ deploy_backend() {
   log_info "$(msg 'バックエンドデプロイを待機中...' 'Waiting for backend deployment...')"
   oc rollout status deployment/migration-tool-backend -n "$NAMESPACE" --timeout=5m
   log_ok "$(msg 'バックエンドデプロイ完了' 'Backend deployment complete')"
+
+  log_info "$(msg 'レポート生成中 (テスト / 静的解析 / 品質チェック)...' 'Running report generation (tests / static analysis / quality gate)...')"
+  if bash "$ROOT_DIR/backend/generate-report.sh"; then
+    log_ok "$(msg 'レポート生成完了 → backend/target/test-report/index.html' 'Report generated → backend/target/test-report/index.html')"
+  else
+    log_warn "$(msg 'レポート生成で警告/エラーがありました → backend/target/test-report/index.html' 'Report generation had warnings/errors → backend/target/test-report/index.html')"
+  fi
 }
 
 # フロントエンドビルド&デプロイ / Build & Deploy Frontend
