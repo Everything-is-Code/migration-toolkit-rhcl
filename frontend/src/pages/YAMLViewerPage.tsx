@@ -81,16 +81,28 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
   return (
     <>
       <PageSection variant={PageSectionVariants.light}>
-        <Title headingLevel="h1" size="2xl">{t('yamlViewer.title')}</Title>
-        {!noResults && (
-          <p style={{ marginTop: '8px', color: '#6a6e73' }}>
-            {t('yamlViewer.description')}
-          </p>
-        )}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <Title headingLevel="h1" size="2xl">{t('yamlViewer.title')}</Title>
+            {!noResults && (
+              <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+                {t('yamlViewer.description')}
+              </p>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <Button variant="secondary" onClick={() => saveAndNavigate('/convert')}>
+              {t('yamlViewer.btnBack')}
+            </Button>
+            <Button variant="primary" onClick={() => saveAndNavigate('/validate')} isDisabled={noResults}>
+              {t('yamlViewer.btnNext')}
+            </Button>
+          </div>
+        </div>
       </PageSection>
       <PageSection>
         {noResults ? (
-          <Alert variant="warning" title={t('yamlViewer.warningTitle')} style={{ marginBottom: '24px' }} />
+          <Alert variant="warning" title={t('yamlViewer.warningTitle')} />
         ) : (
           <Card>
             <CardBody>
@@ -177,15 +189,6 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
             </CardBody>
           </Card>
         )}
-
-        <div style={{ marginTop: '24px', display: 'flex', gap: '8px' }}>
-          <Button variant="secondary" onClick={() => saveAndNavigate('/convert')}>
-            {t('yamlViewer.btnBack')}
-          </Button>
-          <Button variant="primary" onClick={() => saveAndNavigate('/validate')} isDisabled={noResults}>
-            {t('yamlViewer.btnNext')}
-          </Button>
-        </div>
       </PageSection>
     </>
   );
