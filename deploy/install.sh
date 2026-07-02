@@ -280,6 +280,10 @@ deploy_backend() {
   done
   log_ok "$(msg 'バックエンドリソースを適用しました' 'Backend resources applied')"
 
+  log_info "$(msg 'レポート生成中 (テスト / 静的解析 / 品質チェック)...' 'Running report generation (tests / static analysis / quality gate)...')"
+  bash "$ROOT_DIR/backend/generate-report.sh"
+  log_ok "$(msg 'レポート生成完了 → backend/target/test-report/index.html' 'Report generated → backend/target/test-report/index.html')"
+
   if [ -d "$ROOT_DIR/backend/target" ]; then
     log_info "$(msg 'target/ を削除中（S2I アップロード前のクリーンアップ）...' 'Removing target/ (cleanup before S2I upload)...')"
     rm -rf "$ROOT_DIR/backend/target"
