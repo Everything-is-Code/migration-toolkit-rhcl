@@ -67,7 +67,7 @@ public class ConversionController {
             try {
                 ApiService service = exportService.exportService(
                         request.threescaleUrl, request.accessToken, serviceId);
-                CompatibilityResult compatibility = compatibilityService.check(service);
+                CompatibilityResult compatibility = compatibilityService.check(service, java.util.Set.of());
                 Map<String, String> yamlFiles = conversionService.convert(
                         service, namespace, request.externalBackendUrl);
 

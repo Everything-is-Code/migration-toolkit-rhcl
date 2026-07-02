@@ -23,6 +23,7 @@ import { servicesApi } from '../api/client';
 import { CompatibilityResult, CompatibilityItem } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import { loadSupportedPolicies } from './SupportedPoliciesPage';
 
 interface Props {
   appState: AppState;
@@ -64,7 +65,8 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState }) => {
     for (const service of appState.selectedServices) {
       try {
         const resp = await servicesApi.checkCompatibility(
-          service.id, appState.connection.url, appState.connection.accessToken
+          service.id, appState.connection.url, appState.connection.accessToken,
+          loadSupportedPolicies()
         );
         all.push(resp.data);
       } catch {

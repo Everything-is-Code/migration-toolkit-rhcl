@@ -224,7 +224,9 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                               )}
                             </DataListCell>,
                             <DataListCell key="backends">
-                              {t('apiSelection.backendCount', { count: service.backends?.length || 0 })}
+                              {service.backends && service.backends.length > 0
+                                ? service.backends.map(b => b.name || b.systemName || b.id).join(', ')
+                                : t('apiSelection.backendCount', { count: 0 })}
                             </DataListCell>,
                           ]}
                         />

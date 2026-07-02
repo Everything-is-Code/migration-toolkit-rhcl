@@ -17,8 +17,8 @@ export const servicesApi = {
     api.get('/api/services', { params: { url, accessToken } }),
   get: (id: string, url: string, accessToken: string) =>
     api.get(`/api/services/${id}`, { params: { url, accessToken } }),
-  checkCompatibility: (id: string, url: string, accessToken: string) =>
-    api.get(`/api/services/${id}/compatibility`, { params: { url, accessToken } }),
+  checkCompatibility: (id: string, url: string, accessToken: string, supportedPolicies: string[]) =>
+    api.get(`/api/services/${id}/compatibility`, { params: { url, accessToken, supportedPolicies: supportedPolicies.join('|') } }),
 };
 
 export const conversionApi = {

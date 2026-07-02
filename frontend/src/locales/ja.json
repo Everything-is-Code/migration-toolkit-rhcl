@@ -14,7 +14,8 @@
     "connected": "接続済み: {{url}}",
     "appTitle": "Migration Toolkit for Red Hat Connectivity Link",
     "settings": "設定",
-    "settingsGeneral": "共通設定"
+    "settingsGeneral": "共通設定",
+    "settingsPolicies": "対応ポリシー"
   },
   "connection": {
     "title": "3scale 接続設定",
@@ -278,6 +279,13 @@
   "app": {
     "errorTitle": "ページの表示中にエラーが発生しました",
     "btnRetry": "再試行"
+  },
+  "supportedPolicies": {
+    "title": "対応ポリシー設定",
+    "description": "互換性チェックで「対応済み」と判定するポリシーを選択してください。",
+    "btnSave": "保存",
+    "btnReset": "デフォルトに戻す",
+    "saved": "設定を保存しました"
   },
   "settings": {
     "title": "設定",

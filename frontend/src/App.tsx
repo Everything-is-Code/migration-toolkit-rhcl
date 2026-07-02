@@ -47,6 +47,7 @@ import DownloadPage from './pages/DownloadPage';
 import HistoryPage from './pages/HistoryPage';
 import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
+import SupportedPoliciesPage from './pages/SupportedPoliciesPage';
 
 import { ConnectionRequest, ApiService, ConversionResultItem } from './api/types';
 
@@ -246,6 +247,7 @@ const AppContent: React.FC = () => {
 
   const settingsItems = [
     { path: '/settings', label: t('nav.settingsGeneral'), icon: <CogIcon /> },
+    { path: '/settings/policies', label: t('nav.settingsPolicies'), icon: <CogIcon /> },
   ];
 
   const isWorkflowActive = workflowItems.some(i => i.path === location.pathname);
@@ -386,6 +388,7 @@ const AppContent: React.FC = () => {
             <Route path="/import" element={<ImportPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/policies" element={<SupportedPoliciesPage />} />
           </Routes>
         </RouteErrorBoundary>
       </Page>

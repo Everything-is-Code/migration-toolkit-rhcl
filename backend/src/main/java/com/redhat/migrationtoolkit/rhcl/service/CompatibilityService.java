@@ -9,6 +9,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @ApplicationScoped
 public class CompatibilityService {
@@ -17,14 +19,53 @@ public class CompatibilityService {
     private static final int SCORE_WARNING = 10;
     private static final int SCORE_UNSUPPORTED = 0;
 
-    public CompatibilityResult check(ApiService service) {
+    // Mapping from 3scale policy system name → display name shown in the UI
+    private static final Map<String, String> POLICY_DISPLAY_NAMES = Map.ofEntries(
+        Map.entry("apicast",                    "3scale APIcast"),
+        Map.entry("3scale_batcher",             "3scale Batcher"),
+        Map.entry("auth_caching",               "3scale Auth Caching"),
+        Map.entry("referrer",                   "3scale Referrer"),
+        Map.entry("anonymous_access",           "Anonymous Access"),
+        Map.entry("camel",                      "Camel Service"),
+        Map.entry("conditional",                "Conditional Policy"),
+        Map.entry("content_caching",            "Content Caching"),
+        Map.entry("cors",                       "CORS Request Handling"),
+        Map.entry("custom_metrics",             "Custom metrics"),
+        Map.entry("echo",                       "Echo"),
+        Map.entry("edge_limiting",              "Edge Limiting"),
+        Map.entry("header_modification",        "Header Modification"),
+        Map.entry("ip_check",                   "IP Check"),
+        Map.entry("jwt_claim_check",            "JWT Claim Check"),
+        Map.entry("liquid_context_debug",       "Liquid Context Debug"),
+        Map.entry("logging",                    "Logging"),
+        Map.entry("maintenance_mode",           "Maintenance Mode"),
+        Map.entry("oauth2_mutual_tls",          "OAuth 2.0 Mutual TLS Client Authentication"),
+        Map.entry("token_introspection",        "OAuth 2.0 Token Introspection"),
+        Map.entry("proxy_service",              "Proxy Service"),
+        Map.entry("rate_limit_headers",         "Rate Limit Headers"),
+        Map.entry("content_limits",             "Response/Request Content Limits"),
+        Map.entry("retry",                      "Retry"),
+        Map.entry("keycloak_role_check",        "RH-SSO/Keycloak Role Check"),
+        Map.entry("routing",                    "Routing"),
+        Map.entry("soap",                       "SOAP"),
+        Map.entry("tls_validation",             "TLS Client Certificate Validation"),
+        Map.entry("tls_termination",            "TLS Termination"),
+        Map.entry("upstream",                   "Upstream"),
+        Map.entry("upstream_connection",        "Upstream Connection"),
+        Map.entry("upstream_mtls",              "Upstream Mutual TLS"),
+        Map.entry("url_rewriting",              "URL Rewriting"),
+        Map.entry("rewrite",                    "URL Rewriting with Captures"),
+        Map.entry("url_rewriting_captures",     "URL Rewriting with Captures")
+    );
+
+    public CompatibilityResult check(ApiService service, Set<String> supportedPolicies) {
         CompatibilityResult result = new CompatibilityResult();
         result.serviceId = service.id;
         result.serviceName = service.name;
         result.items = new ArrayList<>();
 
         checkAuthentication(service, result.items);
-        checkPolicies(service, result.items);
+        checkPolicies(service, result.items, supportedPolicies);
         checkMappingRules(service, result.items);
         checkBackend(service, result.items);
 
@@ -56,45 +97,23 @@ public class CompatibilityService {
         }
     }
 
-    private void checkPolicies(ApiService service, List<CompatibilityItem> items) {
+    private void checkPolicies(ApiService service, List<CompatibilityItem> items, Set<String> supportedPolicies) {
         if (service.policies == null || service.policies.isEmpty()) {
             return;
         }
         for (Policy policy : service.policies) {
-            if (!policy.enabled) {
+            if (Boolean.FALSE.equals(policy.enabled)) {
                 continue;
             }
-            switch (policy.name.toLowerCase()) {
-                case "url_rewriting", "rewrite" ->
-                    items.add(new CompatibilityItem(
-                            "URL Rewrite", "SUPPORTED",
-                            "URL rewriting is supported via HTTPRoute filters"));
-                case "header_modification", "headers" ->
-                    items.add(new CompatibilityItem(
-                            "Header Modification", "SUPPORTED",
-                            "Header manipulation is supported"));
-                case "cors" ->
-                    items.add(new CompatibilityItem(
-                            "CORS", "SUPPORTED", "CORS policy is supported"));
-                case "rate_limit", "rate-limit" ->
-                    items.add(new CompatibilityItem(
-                            "Rate Limiting", "SUPPORTED",
-                            "Rate limiting supported via Kuadrant RateLimitPolicy"));
-                case "lua" ->
-                    items.add(new CompatibilityItem(
-                            "Lua Policy", "WARNING",
-                            "Lua scripts need manual conversion to WASM or custom policies"));
-                case "soap" ->
-                    items.add(new CompatibilityItem(
-                            "SOAP", "UNSUPPORTED",
-                            "SOAP policies are not supported in Connectivity Link"));
-                case "camel" ->
-                    items.add(new CompatibilityItem(
-                            "Camel Integration", "UNSUPPORTED",
-                            "Camel integrations require separate migration"));
-                default ->
-                    items.add(new CompatibilityItem(
-                            "Policy: " + policy.name, "WARNING", "Policy requires manual review"));
+            String systemName = policy.name != null ? policy.name.toLowerCase() : "";
+            String displayName = POLICY_DISPLAY_NAMES.getOrDefault(systemName, policy.name);
+
+            if (supportedPolicies.contains(displayName)) {
+                items.add(new CompatibilityItem(displayName, "SUPPORTED",
+                        "Policy is in the supported policy list"));
+            } else {
+                items.add(new CompatibilityItem(displayName, "WARNING",
+                        "Policy is not in the supported policy list — manual review required"));
             }
         }
     }
@@ -151,12 +170,8 @@ public class CompatibilityService {
     }
 
     private String scoreToLevel(int score) {
-        if (score >= 80) {
-            return "HIGH";
-        }
-        if (score >= 50) {
-            return "MEDIUM";
-        }
+        if (score >= 80) return "HIGH";
+        if (score >= 50) return "MEDIUM";
         return "LOW";
     }
 }

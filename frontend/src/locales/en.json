@@ -14,7 +14,8 @@
     "connected": "Connected: {{url}}",
     "appTitle": "Migration Toolkit for Red Hat Connectivity Link",
     "settings": "Settings",
-    "settingsGeneral": "General"
+    "settingsGeneral": "General",
+    "settingsPolicies": "Supported Policies"
   },
   "connection": {
     "title": "3scale Connection",
@@ -278,6 +279,13 @@
   "app": {
     "errorTitle": "An error occurred while rendering this page",
     "btnRetry": "Retry"
+  },
+  "supportedPolicies": {
+    "title": "Supported Policies",
+    "description": "Select the policies that should be considered compatible during the compatibility check.",
+    "btnSave": "Save",
+    "btnReset": "Reset to defaults",
+    "saved": "Settings saved"
   },
   "settings": {
     "title": "Settings",

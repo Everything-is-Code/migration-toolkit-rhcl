@@ -16,7 +16,10 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Path("/api/services")
 @Produces(MediaType.APPLICATION_JSON)
@@ -58,9 +61,14 @@ public class ExportController {
     @Operation(summary = "Check compatibility of a service")
     public Response checkCompatibility(@PathParam("id") String id,
                                         @QueryParam("url") String url,
-                                        @QueryParam("accessToken") String accessToken) {
+                                        @QueryParam("accessToken") String accessToken,
+                                        @QueryParam("supportedPolicies") String supportedPoliciesParam) {
         ApiService service = exportService.exportService(url, accessToken, id);
-        CompatibilityResult result = compatibilityService.check(service);
+        Set<String> supportedPolicies = new HashSet<>();
+        if (supportedPoliciesParam != null && !supportedPoliciesParam.isBlank()) {
+            supportedPolicies.addAll(Arrays.asList(supportedPoliciesParam.split("\\|")));
+        }
+        CompatibilityResult result = compatibilityService.check(service, supportedPolicies);
         return Response.ok(result).build();
     }
 }
