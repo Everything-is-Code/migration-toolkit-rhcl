@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
+import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.security.SecureRandom;
@@ -206,6 +207,8 @@ spec:
   rules:
 """.formatted(name, namespace, name, name, namespace));
 
+        String timeoutsBlock = buildTimeoutsBlock(service);
+
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             for (MappingRule rule : service.mappingRules) {
                 String path   = rule.pattern != null ? rule.pattern.replaceAll("\\{\\?\\}", "*") : "/";
@@ -216,10 +219,10 @@ spec:
             type: PathPrefix
             value: "%s"
           method: %s
-%s      backendRefs:
+%s%s      backendRefs:
         - name: %s
           port: %d
-""".formatted(path, method, urlRewriteFilter, backendSvc, backendPort));
+""".formatted(path, method, urlRewriteFilter, timeoutsBlock, backendSvc, backendPort));
             }
         } else {
             sb.append("""
@@ -227,12 +230,34 @@ spec:
         - path:
             type: PathPrefix
             value: "/"
-%s      backendRefs:
+%s%s      backendRefs:
         - name: %s
           port: %d
-""".formatted(urlRewriteFilter, backendSvc, backendPort));
+""".formatted(urlRewriteFilter, timeoutsBlock, backendSvc, backendPort));
         }
         return sb.toString();
+    }
+
+    /**
+     * upstream_connection ポリシーの connect_timeout を Gateway API timeouts フィールドに変換する。
+     * 値は秒単位で "Xs" 形式にして request / backendRequest の両方に設定する。
+     */
+    private String buildTimeoutsBlock(ApiService service) {
+        if (service.policies == null) return "";
+        for (Policy p : service.policies) {
+            if (!"upstream_connection".equals(p.name)) continue;
+            if (!Boolean.TRUE.equals(p.enabled)) continue;
+            if (p.configuration == null) continue;
+            Object raw = p.configuration.get("connect_timeout");
+            if (raw == null) continue;
+            String timeout = raw + "s";
+            return """
+      timeouts:
+        request: "%s"
+        backendRequest: "%s"
+""".formatted(timeout, timeout);
+        }
+        return "";
     }
 
     // ─────────────────────────────────────────────
