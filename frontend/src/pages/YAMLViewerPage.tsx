@@ -77,7 +77,9 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
     /^\s*authorizationHeader:/,
     /^\s*credentials:/,
     /^\s*timeouts:/,
-    /^\s*#.*send_timeout/,
+    /^\s*backendRequest:/,
+    /^\s*request:.*#/,
+    /#\s*(connect_timeout|send_timeout|upstream)/,
   ];
 
   const renderHighlightedYaml = (content: string) => {

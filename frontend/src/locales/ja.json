@@ -41,6 +41,7 @@
     "labelVersion": "3scale バージョン",
     "versionHelper": "3scale のバージョン（Version 2.16 以上が必要）。接続テスト時に自動取得を試みます。",
     "errorVersionTooLow": "3scale バージョン {{version}} はサポートされていません。Version 2.16 以上が必要です。",
+    "warnVersionUnknown": "3scale バージョンを自動取得できませんでした。Version 2.16 以上が必要です。API一覧に進むには手動でバージョンを確認してください。",
     "errorDefault": "接続に失敗しました。URLとアクセストークンを確認してください。"
   },
   "apiSelection": {

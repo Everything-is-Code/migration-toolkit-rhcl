@@ -41,6 +41,7 @@
     "labelVersion": "3scale Version",
     "versionHelper": "3scale version (2.16 or higher required). Auto-detected on connection test when possible.",
     "errorVersionTooLow": "3scale version {{version}} is not supported. Version 2.16 or higher is required.",
+    "warnVersionUnknown": "Could not auto-detect 3scale version. Version 2.16 or higher is required. Please verify the version manually before proceeding.",
     "errorDefault": "Connection failed. Please check your URL and access token."
   },
   "apiSelection": {

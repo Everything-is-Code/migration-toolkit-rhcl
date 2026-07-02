@@ -38,7 +38,6 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [accessToken, setAccessToken] = useState(appState.connection.accessToken);
   const [tenant, setTenant] = useState(appState.connection.tenant || '');
   const [namespace, setNamespace] = useState(appState.namespace);
-  const [threescaleVersion, setThreescaleVersion] = useState(appState.connection.threescaleVersion || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -57,32 +56,27 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     return true;
   };
 
+  const detectedVersion = appState.connection.threescaleVersion;
+  const versionOk = !!detectedVersion && isVersionGte(detectedVersion, '2.16');
+
   const handleTest = async () => {
-    if (threescaleVersion && !isVersionGte(threescaleVersion, '2.16')) {
-      setError(t('connection.errorVersionTooLow', { version: threescaleVersion }));
-      return;
-    }
     setLoading(true);
     setError(null);
     setSuccess(false);
     try {
       const resp = await connectionApi.test({ url, accessToken, tenant });
-      const detectedVersion: string | undefined = (resp.data as any)?.detectedVersion;
-      const resolvedVersion = detectedVersion || threescaleVersion;
-      if (detectedVersion) {
-        setThreescaleVersion(detectedVersion);
-      }
+      const detected: string | undefined = (resp.data as any)?.detectedVersion;
       setSuccess(true);
       setAppState(prev => ({
         ...prev,
-        connection: { url, accessToken, tenant, threescaleVersion: resolvedVersion, connected: true },
+        connection: { url, accessToken, tenant, threescaleVersion: detected, connected: true },
         namespace,
       }));
     } catch (e: any) {
       setError(e.response?.data?.message || t('connection.errorDefault'));
       setAppState(prev => ({
         ...prev,
-        connection: { url, accessToken, tenant, threescaleVersion, connected: false },
+        connection: { url, accessToken, tenant, threescaleVersion: undefined, connected: false },
       }));
     } finally {
       setLoading(false);
@@ -103,7 +97,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
             {error && (
               <Alert variant={AlertVariant.danger} title={error} style={{ marginBottom: '16px' }} />
             )}
-            {success && (
+            {success && versionOk && (
               <Alert
                 variant={AlertVariant.success}
                 title={t('connection.successAlert')}
@@ -113,6 +107,15 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     {t('connection.goToApiList')}
                   </Button>
                 }
+              />
+            )}
+            {success && !versionOk && (
+              <Alert
+                variant={AlertVariant.warning}
+                title={detectedVersion
+                  ? t('connection.errorVersionTooLow', { version: detectedVersion })
+                  : t('connection.warnVersionUnknown')}
+                style={{ marginBottom: '16px' }}
               />
             )}
             <Form>
@@ -178,22 +181,6 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   placeholder={t('connection.tenantPlaceholder')}
                 />
               </FormGroup>
-              <FormGroup label={t('connection.labelVersion')} isRequired fieldId="version"
-                helperText={t('connection.versionHelper')}>
-                <TextInput
-                  id="version"
-                  value={threescaleVersion}
-                  onChange={(_e, val) => setThreescaleVersion(val)}
-                  placeholder="2.16"
-                  isRequired
-                  validated={threescaleVersion && !isVersionGte(threescaleVersion, '2.16') ? 'error' : 'default'}
-                />
-                {threescaleVersion && !isVersionGte(threescaleVersion, '2.16') && (
-                  <div style={{ color: '#c9190b', fontSize: '0.875rem', marginTop: 4 }}>
-                    {t('connection.errorVersionTooLow', { version: threescaleVersion })}
-                  </div>
-                )}
-              </FormGroup>
               <FormGroup label={t('connection.labelNamespace')} isRequired fieldId="namespace"
                 helperText={t('connection.namespaceHelper')}>
                 <TextInput
@@ -208,11 +195,11 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 <Button
                   variant="primary"
                   onClick={handleTest}
-                  isDisabled={loading || !url || !accessToken || !threescaleVersion || !isVersionGte(threescaleVersion, '2.16')}
+                  isDisabled={loading || !url || !accessToken}
                 >
                   {loading ? <><Spinner size="sm" /> {t('connection.btnTesting')}</> : t('connection.btnTest')}
                 </Button>
-                {success && (
+                {success && versionOk && (
                   <Button variant="secondary" onClick={() => navigate('/services')}>
                     {t('connection.btnNext')}
                   </Button>
