@@ -594,8 +594,7 @@ const ImportPageInner: React.FC = () => {
     if (!packageName.trim()) { setPkgNameError(true); return; }
     setApplying(true); setApplyResults(null); setError(null); setTestInfo(null);
     const yamlFiles: Record<string, string> = {};
-    files.filter(f => f.name.endsWith('.yaml') || f.name.endsWith('.yml'))
-      .forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
+    files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
     try {
       const res = await applyApi.apply(namespace, yamlFiles, 'IMPORT', packageName || undefined);
       const results: ApplyResult[] = res.data?.results ?? [];

@@ -96,6 +96,7 @@ public class ApplyController {
             String fileName = entry.getKey();
             String lower = fileName.toLowerCase();
             if (!lower.endsWith(".yaml") && !lower.endsWith(".yml")) {
+                exportedYamls.put(fileName, entry.getValue());
                 continue;
             }
             String yaml = entry.getValue();
