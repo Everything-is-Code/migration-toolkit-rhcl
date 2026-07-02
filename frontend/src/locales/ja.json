@@ -38,6 +38,9 @@
     "btnTesting": "接続確認中...",
     "btnNext": "次へ: API一覧取得",
     "infoTitle": "接続情報",
+    "labelVersion": "3scale バージョン",
+    "versionHelper": "3scale のバージョンを入力してください（Version 2.16 以上が必要）",
+    "errorVersionTooLow": "3scale バージョン {{version}} はサポートされていません。Version 2.16 以上が必要です。",
     "errorDefault": "接続に失敗しました。URLとアクセストークンを確認してください。"
   },
   "apiSelection": {
@@ -66,8 +69,10 @@
     "goToApiList": "API選択へ戻る",
     "loading": "互換性チェック実行中...",
     "btnBack": "戻る",
+    "btnCancel": "キャンセル",
     "btnRecheck": "再チェック",
     "btnNext": "次へ: YAML生成",
+    "btnGenerateYaml": "YAML生成",
     "errorCheck": "互換性チェックに失敗しました"
   },
   "conversion": {

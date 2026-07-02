@@ -162,14 +162,14 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState }) => {
         )}
 
         <div style={{ marginTop: '24px', display: 'flex', gap: '8px' }}>
-          <Button variant="secondary" onClick={() => navigate('/services')}>{t('compatibility.btnBack')}</Button>
+          <Button variant="secondary" onClick={() => navigate('/services')}>{t('compatibility.btnCancel')}</Button>
           <Button variant="secondary" onClick={checkAll} isDisabled={loading}>{t('compatibility.btnRecheck')}</Button>
           <Button
             variant="primary"
             onClick={() => navigate('/convert')}
             isDisabled={results.length === 0}
           >
-            {t('compatibility.btnNext')}
+            {t('compatibility.btnGenerateYaml')}
           </Button>
         </div>
       </PageSection>

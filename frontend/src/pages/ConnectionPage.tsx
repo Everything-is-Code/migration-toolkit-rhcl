@@ -38,12 +38,30 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [accessToken, setAccessToken] = useState(appState.connection.accessToken);
   const [tenant, setTenant] = useState(appState.connection.tenant || '');
   const [namespace, setNamespace] = useState(appState.namespace);
+  const [threescaleVersion, setThreescaleVersion] = useState(appState.connection.threescaleVersion || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
+  const parseVersion = (v: string): number[] => v.split('.').map(n => parseInt(n, 10) || 0);
+  const isVersionGte = (version: string, min: string): boolean => {
+    const v = parseVersion(version);
+    const m = parseVersion(min);
+    for (let i = 0; i < Math.max(v.length, m.length); i++) {
+      const vi = v[i] ?? 0;
+      const mi = m[i] ?? 0;
+      if (vi > mi) return true;
+      if (vi < mi) return false;
+    }
+    return true;
+  };
+
   const handleTest = async () => {
+    if (threescaleVersion && !isVersionGte(threescaleVersion, '2.16')) {
+      setError(t('connection.errorVersionTooLow', { version: threescaleVersion }));
+      return;
+    }
     setLoading(true);
     setError(null);
     setSuccess(false);
@@ -52,14 +70,14 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       setSuccess(true);
       setAppState(prev => ({
         ...prev,
-        connection: { url, accessToken, tenant, connected: true },
+        connection: { url, accessToken, tenant, threescaleVersion, connected: true },
         namespace,
       }));
     } catch (e: any) {
       setError(e.response?.data?.message || t('connection.errorDefault'));
       setAppState(prev => ({
         ...prev,
-        connection: { url, accessToken, tenant, connected: false },
+        connection: { url, accessToken, tenant, threescaleVersion, connected: false },
       }));
     } finally {
       setLoading(false);
@@ -155,6 +173,22 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   placeholder={t('connection.tenantPlaceholder')}
                 />
               </FormGroup>
+              <FormGroup label={t('connection.labelVersion')} isRequired fieldId="version"
+                helperText={t('connection.versionHelper')}>
+                <TextInput
+                  id="version"
+                  value={threescaleVersion}
+                  onChange={(_e, val) => setThreescaleVersion(val)}
+                  placeholder="2.16"
+                  isRequired
+                  validated={threescaleVersion && !isVersionGte(threescaleVersion, '2.16') ? 'error' : 'default'}
+                />
+                {threescaleVersion && !isVersionGte(threescaleVersion, '2.16') && (
+                  <div style={{ color: '#c9190b', fontSize: '0.875rem', marginTop: 4 }}>
+                    {t('connection.errorVersionTooLow', { version: threescaleVersion })}
+                  </div>
+                )}
+              </FormGroup>
               <FormGroup label={t('connection.labelNamespace')} isRequired fieldId="namespace"
                 helperText={t('connection.namespaceHelper')}>
                 <TextInput
@@ -169,7 +203,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 <Button
                   variant="primary"
                   onClick={handleTest}
-                  isDisabled={loading || !url || !accessToken}
+                  isDisabled={loading || !url || !accessToken || !threescaleVersion || !isVersionGte(threescaleVersion, '2.16')}
                 >
                   {loading ? <><Spinner size="sm" /> {t('connection.btnTesting')}</> : t('connection.btnTest')}
                 </Button>
@@ -196,6 +230,10 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 <DescriptionListGroup>
                   <DescriptionListTerm>Tenant</DescriptionListTerm>
                   <DescriptionListDescription>{appState.connection.tenant || '-'}</DescriptionListDescription>
+                </DescriptionListGroup>
+                <DescriptionListGroup>
+                  <DescriptionListTerm>3scale Version</DescriptionListTerm>
+                  <DescriptionListDescription>{appState.connection.threescaleVersion || '-'}</DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
                   <DescriptionListTerm>Namespace</DescriptionListTerm>

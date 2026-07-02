@@ -38,6 +38,9 @@
     "btnTesting": "Testing...",
     "btnNext": "Next: API List",
     "infoTitle": "Connection Info",
+    "labelVersion": "3scale Version",
+    "versionHelper": "Enter your 3scale version (Version 2.16 or higher is required)",
+    "errorVersionTooLow": "3scale version {{version}} is not supported. Version 2.16 or higher is required.",
     "errorDefault": "Connection failed. Please check your URL and access token."
   },
   "apiSelection": {
@@ -66,8 +69,10 @@
     "goToApiList": "Back to API selection",
     "loading": "Running compatibility check...",
     "btnBack": "Back",
+    "btnCancel": "Cancel",
     "btnRecheck": "Re-check",
     "btnNext": "Next: Generate YAML",
+    "btnGenerateYaml": "Generate YAML",
     "errorCheck": "Compatibility check failed"
   },
   "conversion": {
