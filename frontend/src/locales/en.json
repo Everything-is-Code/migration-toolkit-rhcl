@@ -48,15 +48,16 @@
     "searchPlaceholder": "Search by API name",
     "btnRefresh": "Refresh",
     "refreshing": "Refreshing",
-    "selectedCount": "{{count}} selected",
+    "selectedCount": "Selected",
     "loading": "Fetching APIs from 3scale...",
     "emptyTitle": "No APIs found",
     "emptyBody": "No APIs are registered in 3scale, or none match the search criteria.",
     "ariaLabel": "API list",
     "backendCount": "Backends: {{count}}",
     "btnBack": "Back",
-    "btnNext": "Next: Compatibility Check ({{count}})",
-    "errorFetch": "Failed to fetch APIs: {{message}}"
+    "btnNext": "Next: Compatibility Check",
+    "errorFetch": "Failed to fetch APIs: {{message}}",
+    "policyCount": "Policies: {{count}}"
   },
   "compatibility": {
     "title": "Compatibility Check",

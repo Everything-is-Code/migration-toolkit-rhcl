@@ -48,15 +48,16 @@
     "searchPlaceholder": "API名で検索",
     "btnRefresh": "更新",
     "refreshing": "更新中",
-    "selectedCount": "{{count}} 件選択中",
+    "selectedCount": "選択中",
     "loading": "3scale からAPIを取得中...",
     "emptyTitle": "APIが見つかりません",
     "emptyBody": "3scaleにAPIが登録されていないか、検索条件に一致するAPIがありません。",
     "ariaLabel": "API一覧",
     "backendCount": "バックエンド: {{count}}",
     "btnBack": "戻る",
-    "btnNext": "次へ: 互換性チェック ({{count}} 件)",
-    "errorFetch": "APIの取得に失敗しました: {{message}}"
+    "btnNext": "次へ: 互換性チェック",
+    "errorFetch": "APIの取得に失敗しました: {{message}}",
+    "policyCount": "ポリシー: {{count}} 件"
   },
   "compatibility": {
     "title": "互換性チェック",
