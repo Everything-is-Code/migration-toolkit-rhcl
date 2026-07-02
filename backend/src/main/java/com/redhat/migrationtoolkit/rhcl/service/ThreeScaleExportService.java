@@ -252,23 +252,34 @@ public class ThreeScaleExportService {
 
     private List<Backend> fetchBackendsForService(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
-            Map<String, Object> resp = client.getBackends(accessToken, 1, 500);
-            List<Map<String, Object>> backendList = extractList(resp, "backends");
+            // Step 1: get backend usages (links between this product and its backend APIs)
+            Map<String, Object> usageResp = client.getBackendUsages(serviceId, accessToken);
+            List<Map<String, Object>> usages = extractList(usageResp, "backend_usages");
             List<Backend> backends = new ArrayList<>();
-            for (Map<String, Object> bw : backendList) {
-                Map<String, Object> b = (Map<String, Object>) bw.get("backend_api");
-                if (b == null) {
-                    continue;
+            for (Map<String, Object> uw : usages) {
+                Map<String, Object> usage = (Map<String, Object>) uw.get("backend_usage");
+                if (usage == null) continue;
+                Object backendIdObj = usage.get("backend_id");
+                if (backendIdObj == null) continue;
+                String backendId = String.valueOf(backendIdObj);
+                // Step 2: fetch each backend API detail
+                try {
+                    Map<String, Object> bResp = client.getBackend(backendId, accessToken);
+                    Map<String, Object> b = (Map<String, Object>) bResp.get("backend_api");
+                    if (b == null) continue;
+                    Backend backend = new Backend();
+                    backend.id = String.valueOf(b.get("id"));
+                    backend.name = (String) b.get("name");
+                    backend.systemName = (String) b.get("system_name");
+                    backend.privateEndpoint = (String) b.get("private_endpoint");
+                    backends.add(backend);
+                } catch (Exception ex) {
+                    LOG.warnf("Failed to fetch backend %s: %s", backendId, ex.getMessage());
                 }
-                Backend backend = new Backend();
-                backend.id = String.valueOf(b.get("id"));
-                backend.name = (String) b.get("name");
-                backend.systemName = (String) b.get("system_name");
-                backend.privateEndpoint = (String) b.get("private_endpoint");
-                backends.add(backend);
             }
             return backends;
         } catch (Exception e) {
+            LOG.warnf("Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }

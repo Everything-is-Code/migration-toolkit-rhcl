@@ -32,6 +32,16 @@ public interface ThreeScaleClient {
                                      @QueryParam("per_page") @DefaultValue("500") int perPage);
 
     @GET
+    @Path("/admin/api/services/{serviceId}/backend_usages.json")
+    Map<String, Object> getBackendUsages(@PathParam("serviceId") String serviceId,
+                                          @QueryParam("access_token") String accessToken);
+
+    @GET
+    @Path("/admin/api/backend_apis/{backendId}.json")
+    Map<String, Object> getBackend(@PathParam("backendId") String backendId,
+                                    @QueryParam("access_token") String accessToken);
+
+    @GET
     @Path("/admin/api/services/{serviceId}/proxy/configs/production/latest.json")
     Map<String, Object> getProxyConfig(@PathParam("serviceId") String serviceId,
                                         @QueryParam("access_token") String accessToken);
