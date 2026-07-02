@@ -95,6 +95,12 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
     /^\s*app_key:/,
     /^\s*plain:/,
     /^\s*value:/,
+    // Logging / Telemetry
+    /kind:\s*Telemetry/,
+    /^\s*accessLogging:/,
+    /3scale-migration\/source/,
+    /3scale-migration\/enable-json/,
+    /3scale-migration\/enable-access/,
   ];
 
   const renderHighlightedYaml = (content: string) => {

@@ -51,6 +51,11 @@ public class ConversionService {
             files.put("destinationrule.yaml", generateDestinationRule(name, namespace, externalHost));
         }
 
+        Policy loggingPolicy = findLoggingPolicy(service);
+        if (loggingPolicy != null) {
+            files.put("telemetry.yaml", generateTelemetry(name, namespace, loggingPolicy));
+        }
+
         files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
         return files;
     }
@@ -464,6 +469,91 @@ spec:
 """.formatted(name, namespace, name, name);
     }
 
+    private Policy findLoggingPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled) && "logging".equals(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String generateTelemetry(String name, String namespace, Policy policy) {
+        Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
+        boolean enableJson = Boolean.TRUE.equals(cfg.get("enable_json_logs"));
+        boolean enableAccess = !Boolean.FALSE.equals(cfg.get("enable_access_logs"));
+
+        // Build JSON log format from json_object_config if present
+        StringBuilder formatBuilder = new StringBuilder();
+        Object rawJsonCfg = cfg.get("json_object_config");
+        if (enableJson && rawJsonCfg instanceof java.util.List) {
+            java.util.List<Map<String, Object>> jsonCfg = (java.util.List<Map<String, Object>>) rawJsonCfg;
+            formatBuilder.append("{");
+            for (int i = 0; i < jsonCfg.size(); i++) {
+                Map<String, Object> entry = jsonCfg.get(i);
+                String key = String.valueOf(entry.getOrDefault("key", ""));
+                String value = String.valueOf(entry.getOrDefault("value", ""));
+                if (i > 0) {
+                    formatBuilder.append(",");
+                }
+                formatBuilder.append(String.format("\\\"%s\\\":\\\"%s\\\"", key, value));
+            }
+            formatBuilder.append("}%n");
+        }
+
+        String disabledSection = enableAccess ? "" : """
+      filter:
+        expression: "false"
+""";
+
+        String formatSection = (enableJson && formatBuilder.length() > 0)
+                ? String.format("""
+      filter:
+        expression: "true"
+      format:
+        text: |
+          %s
+""", formatBuilder)
+                : "";
+
+        String accessLoggingSection = enableAccess
+                ? String.format("""
+  accessLogging:
+    - providers:
+        - name: envoy
+%s""", formatSection)
+                : """
+  accessLogging:
+    - providers:
+        - name: envoy
+      filter:
+        expression: "false"
+""";
+
+        return """
+apiVersion: telemetry.istio.io/v1
+kind: Telemetry
+metadata:
+  name: %s-logging
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: logging
+    3scale-migration/enable-json: "%s"
+    3scale-migration/enable-access: "%s"
+spec:
+  selector:
+    matchLabels:
+      app: %s
+%s""".formatted(name, namespace, name,
+                enableJson, enableAccess,
+                name, accessLoggingSection);
+    }
+
     private Policy findAnonymousPolicy(ApiService service) {
         if (service.policies == null) {
             return null;
@@ -709,10 +799,15 @@ ServiceEntry・DestinationRule・URLRewrite フィルターは不要なため生
 """;
         };
 
-        String fileList = backendType == BackendType.EXTERNAL
-                ? "| serviceentry.yaml | Istio ServiceEntry + ExternalName Service for external backend |\n"
-                + "| destinationrule.yaml | TLS origination to external host |"
-                : "";
+        boolean hasLogging = findLoggingPolicy(service) != null;
+        String loggingFile = hasLogging
+                ? "| telemetry.yaml | Istio Telemetry リソース（アクセスログ設定） |\n" : "";
+
+        String fileList = loggingFile
+                + (backendType == BackendType.EXTERNAL
+                    ? "| serviceentry.yaml | Istio ServiceEntry + ExternalName Service for external backend |\n"
+                    + "| destinationrule.yaml | TLS origination to external host |"
+                    : "");
 
         return """
 # %s - Connectivity Link Migration
