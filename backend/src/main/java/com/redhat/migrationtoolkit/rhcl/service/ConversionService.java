@@ -386,6 +386,12 @@ spec:
     private String generateAuthPolicy(String name, String namespace, ApiService service) {
         String authType = service.authentication != null ? service.authentication.type : "none";
 
+        // Anonymous Access (default_credentials policy) — inject credentials as response headers
+        Policy anonymousPolicy = findAnonymousPolicy(service);
+        if (anonymousPolicy != null) {
+            return generateAnonymousAuthPolicy(name, namespace, anonymousPolicy);
+        }
+
         if ("jwt".equals(authType)) {
             String issuer = service.authentication.oidcIssuerEndpoint != null
                     ? service.authentication.oidcIssuerEndpoint
@@ -456,6 +462,67 @@ spec:
   rules:
     authentication: {}
 """.formatted(name, namespace, name, name);
+    }
+
+    private Policy findAnonymousPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && ("default_credentials".equals(p.name) || "anonymous_access".equals(p.name)))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String generateAnonymousAuthPolicy(String name, String namespace, Policy policy) {
+        Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
+        String authType = String.valueOf(cfg.getOrDefault("auth_type", "user_key"));
+        String userKey  = String.valueOf(cfg.getOrDefault("user_key", ""));
+        String appId    = String.valueOf(cfg.getOrDefault("app_id", ""));
+        String appKey   = String.valueOf(cfg.getOrDefault("app_key", ""));
+
+        StringBuilder responseHeaders = new StringBuilder();
+        if ("user_key".equals(authType) && !userKey.isEmpty()) {
+            responseHeaders.append(String.format(
+                "      x-user-key:%n        plain:%n          value: \"%s\"%n", userKey));
+        } else if ("app_id_and_app_key".equals(authType) || "app_id".equals(authType)) {
+            if (!appId.isEmpty()) {
+                responseHeaders.append(String.format(
+                    "      x-app-id:%n        plain:%n          value: \"%s\"%n", appId));
+            }
+            if (!appKey.isEmpty()) {
+                responseHeaders.append(String.format(
+                    "      x-app-key:%n        plain:%n          value: \"%s\"%n", appKey));
+            }
+        }
+
+        String responseSection = responseHeaders.length() > 0
+                ? "    response:\n      success:\n        headers:\n" + responseHeaders
+                : "";
+
+        return """
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: %s-auth
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/anonymous-access: "true"
+    3scale-migration/auth-type: "%s"
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: %s-route
+  rules:
+    authentication:
+      anonymous:
+        anonymous: {}
+%s""".formatted(name, namespace, name, authType, name, responseSection);
     }
 
     // ─────────────────────────────────────────────
