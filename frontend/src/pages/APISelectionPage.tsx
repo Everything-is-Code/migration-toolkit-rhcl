@@ -193,27 +193,14 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       }}
                     >
                       <DataListItemRow>
-                        {/* ラジオボタン */}
-                        <div style={{ display: 'flex', alignItems: 'flex-start', padding: '12px 12px 12px 16px' }}>
-                          <input
-                            type="radio"
-                            name="service-select"
-                            id={`radio-${service.id}`}
-                            checked={isSelected}
-                            onChange={() => setSelectedId(service.id)}
-                            style={{ marginTop: 3, accentColor: '#0066cc', width: 16, height: 16 }}
-                          />
-                        </div>
                         <DataListItemCells
                           dataListCells={[
                             <DataListCell key="name" width={2}>
-                              <label htmlFor={`radio-${service.id}`} style={{ cursor: 'pointer' }}>
-                                <span id={`service-${service.id}`} style={{ fontWeight: 'bold' }}>
-                                  {service.name}
-                                </span>
-                                <br />
-                                <small style={{ color: '#6a6e73' }}>{service.systemName}</small>
-                              </label>
+                              <span id={`service-${service.id}`} style={{ fontWeight: 'bold' }}>
+                                {service.name}
+                              </span>
+                              <br />
+                              <small style={{ color: '#6a6e73' }}>{service.systemName}</small>
                               {isSelected && allPolicies.length > 0 && (
                                 <PolicyPanel policies={allPolicies} />
                               )}
