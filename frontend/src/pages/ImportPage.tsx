@@ -636,6 +636,41 @@ const ImportPageInner: React.FC = () => {
             </StackItem>
           )}
 
+          {/* ── パッケージ名（常時表示・必須） ── */}
+          <StackItem>
+            <Card>
+              <CardBody>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <label
+                    htmlFor="imp-pkg"
+                    style={{ fontSize: 14, fontWeight: 600, color: pkgNameError ? '#c9190b' : '#151515', whiteSpace: 'nowrap' }}
+                  >
+                    {t('import.labelPackageName')}
+                    <span style={{ color: '#c9190b', marginLeft: 2 }}>*</span>
+                  </label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, maxWidth: 320 }}>
+                    <TextInput
+                      id="imp-pkg"
+                      value={packageName}
+                      onChange={(_e, v) => handlePackageNameChange(v)}
+                      placeholder={t('import.pkgNamePlaceholder')}
+                      style={{
+                        borderColor: pkgNameError ? '#c9190b' : undefined,
+                        outline: pkgNameError ? '1px solid #c9190b' : undefined,
+                      }}
+                      aria-invalid={pkgNameError}
+                    />
+                    {pkgNameError ? (
+                      <span style={{ fontSize: 12, color: '#c9190b' }}>{t('import.pkgNameRequired')}</span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: '#6a6e73' }}>{t('import.pkgNameHint')}</span>
+                    )}
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          </StackItem>
+
           {/* ── アップロードゾーン ── */}
           {files.length === 0 && (
             <StackItem>
@@ -810,30 +845,9 @@ const ImportPageInner: React.FC = () => {
                   <CardBody>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                       <Title headingLevel="h3" size="md">{t('import.yamlEditorTitle')}</Title>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <label style={{ fontSize: 13, color: pkgNameError ? '#c9190b' : '#6a6e73', fontWeight: 600 }}>
-                          {t('import.labelPackageName')}
-                          <span style={{ color: '#c9190b', marginLeft: 2 }}>*</span>
-                        </label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <TextInput
-                            id="imp-pkg"
-                            value={packageName}
-                            onChange={(_e, v) => handlePackageNameChange(v)}
-                            style={{
-                              width: 220,
-                              borderColor: pkgNameError ? '#c9190b' : undefined,
-                              outline: pkgNameError ? '1px solid #c9190b' : undefined,
-                            }}
-                            aria-invalid={pkgNameError}
-                          />
-                          {pkgNameError && (
-                            <span style={{ fontSize: 12, color: '#c9190b' }}>
-                              {t('import.pkgNameRequired')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <span style={{ fontSize: 13, color: '#6a6e73' }}>
+                        {t('import.pkgNameApplied', { name: packageName })}
+                      </span>
                     </div>
                     {downloaded && <Alert variant="success" isInline title={t('import.downloadSuccess')} style={{ marginBottom: 12 }} />}
                     <SimpleYamlTabs files={files} edits={edits}
