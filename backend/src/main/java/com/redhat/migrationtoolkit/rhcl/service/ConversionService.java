@@ -478,23 +478,20 @@ spec:
     private String generateAnonymousAuthPolicy(String name, String namespace, Policy policy) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
         String authType = String.valueOf(cfg.getOrDefault("auth_type", "user_key"));
-        String userKey  = String.valueOf(cfg.getOrDefault("user_key", ""));
-        String appId    = String.valueOf(cfg.getOrDefault("app_id", ""));
-        String appKey   = String.valueOf(cfg.getOrDefault("app_key", ""));
+        String secretName = name + "-anonymous-credentials";
 
         StringBuilder responseHeaders = new StringBuilder();
-        if ("user_key".equals(authType) && !userKey.isEmpty()) {
+        if ("user_key".equals(authType)) {
             responseHeaders.append(String.format(
-                "      x-user-key:%n        plain:%n          value: \"%s\"%n", userKey));
+                "      x-user-key:%n        valueFrom:%n          secretKeyRef:%n"
+                + "            name: %s%n            key: user_key%n", secretName));
         } else if ("app_id_and_app_key".equals(authType) || "app_id".equals(authType)) {
-            if (!appId.isEmpty()) {
-                responseHeaders.append(String.format(
-                    "      x-app-id:%n        plain:%n          value: \"%s\"%n", appId));
-            }
-            if (!appKey.isEmpty()) {
-                responseHeaders.append(String.format(
-                    "      x-app-key:%n        plain:%n          value: \"%s\"%n", appKey));
-            }
+            responseHeaders.append(String.format(
+                "      x-app-id:%n        valueFrom:%n          secretKeyRef:%n"
+                + "            name: %s%n            key: app_id%n", secretName));
+            responseHeaders.append(String.format(
+                "      x-app-key:%n        valueFrom:%n          secretKeyRef:%n"
+                + "            name: %s%n            key: app_key%n", secretName));
         }
 
         String responseSection = responseHeaders.length() > 0
@@ -541,6 +538,36 @@ spec:
 
     private String generateSecret(String name, String namespace, ApiService service) {
         String authType = service.authentication != null ? service.authentication.type : "none";
+
+        // Anonymous Access: store credentials migrated from 3scale default_credentials policy
+        Policy anonymousPolicy = findAnonymousPolicy(service);
+        if (anonymousPolicy != null) {
+            Map<String, Object> cfg = anonymousPolicy.configuration != null
+                    ? anonymousPolicy.configuration : Map.of();
+            String polAuthType = String.valueOf(cfg.getOrDefault("auth_type", "user_key"));
+            StringBuilder stringData = new StringBuilder();
+            if ("user_key".equals(polAuthType)) {
+                String userKey = String.valueOf(cfg.getOrDefault("user_key", "REPLACE_ME"));
+                stringData.append(String.format("  user_key: \"%s\"%n", userKey));
+            } else {
+                String appId  = String.valueOf(cfg.getOrDefault("app_id",  "REPLACE_ME"));
+                String appKey = String.valueOf(cfg.getOrDefault("app_key", "REPLACE_ME"));
+                stringData.append(String.format("  app_id: \"%s\"%n", appId));
+                stringData.append(String.format("  app_key: \"%s\"%n", appKey));
+            }
+            return """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s-anonymous-credentials
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+type: Opaque
+stringData:
+%s""".formatted(name, namespace, name, stringData);
+        }
 
         if ("apiKey".equals(authType)) {
             String apiKey = generateRandomHex(32);
