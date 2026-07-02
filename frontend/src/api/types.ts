@@ -118,6 +118,7 @@ export interface ConversionHistory {
   status: string;
   compatibilityScore?: number;
   source?: string;        // CONVERT | IMPORT
+  packageName?: string;
   namespace?: string;
   totalCount?: number;
   successCount?: number;

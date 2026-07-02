@@ -224,6 +224,7 @@
     "colDate": "Generated at",
     "colDateTime": "Executed At",
     "colType": "Type",
+    "colPackageName": "API Package",
     "colService": "Service Name",
     "colStatus": "Status",
     "colSuccessFail": "Success/Fail",

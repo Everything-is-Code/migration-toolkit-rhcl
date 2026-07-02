@@ -554,7 +554,7 @@ const ImportPageInner: React.FC = () => {
     const yamlFiles: Record<string, string> = {};
     files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
     try {
-      const res = await applyApi.apply(namespace, yamlFiles, 'IMPORT');
+      const res = await applyApi.apply(namespace, yamlFiles, 'IMPORT', packageName || undefined);
       const results: ApplyResult[] = res.data?.results ?? [];
       setApplyResults(results);
       // 1件以上成功した場合にテスト情報パネルを表示

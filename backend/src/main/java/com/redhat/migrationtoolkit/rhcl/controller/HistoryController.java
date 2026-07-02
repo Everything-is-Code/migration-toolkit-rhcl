@@ -59,6 +59,7 @@ public class HistoryController {
             m.put("serviceName",      h.serviceName);
             m.put("serviceId",        h.serviceId);
             m.put("compatibilityScore", h.compatibilityScore);
+            m.put("packageName",      h.packageName);
             m.put("createdAt",        h.createdAt);
             return m;
         }).collect(java.util.stream.Collectors.toList());

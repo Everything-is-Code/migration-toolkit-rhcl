@@ -31,13 +31,11 @@ import { useTranslation } from 'react-i18next';
 import { historyApi } from '../api/client';
 import { ConversionHistory, FailureDetail } from '../api/types';
 
-const formatDate = (iso: string, locale: string): string => {
+const formatDate = (iso: string): string => {
   try {
-    const isJa = locale === 'ja';
-    return new Date(iso).toLocaleString(isJa ? 'ja-JP' : 'en-US', {
+    return new Date(iso).toLocaleString(undefined, {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
-      timeZone: isJa ? 'Asia/Tokyo' : undefined,
     });
   } catch { return iso; }
 };
@@ -58,7 +56,7 @@ const sourceLabel = (source?: string) => {
 };
 
 const HistoryPage: React.FC = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [history, setHistory]         = useState<ConversionHistory[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -241,6 +239,7 @@ const HistoryPage: React.FC = () => {
                         <th style={{ ...thS, width: 32 }}></th>
                         <th style={thS}>{t('history.colDateTime')}</th>
                         <th style={thS}>{t('history.colType')}</th>
+                        <th style={thS}>{t('history.colPackageName')}</th>
                         <th style={thS}>Namespace</th>
                         <th style={{ ...thS, textAlign: 'center' }}>{t('history.colStatus')}</th>
                         <th style={{ ...thS, textAlign: 'center' }}>{t('history.colSuccessFail')}</th>
@@ -286,13 +285,20 @@ const HistoryPage: React.FC = () => {
 
                               {/* 実行日時 */}
                               <td style={tdS}>
-                                <span style={{ fontFamily: 'monospace', fontSize: 13, whiteSpace: 'nowrap' }}>
-                                  {formatDate(entry.createdAt, i18n.language)}
+                                <span style={{ fontFamily: 'monospace', fontSize: 14, whiteSpace: 'nowrap' }}>
+                                  {formatDate(entry.createdAt)}
                                 </span>
                               </td>
 
                               {/* 種別 */}
                               <td style={tdS}>{sourceLabel(entry.source)}</td>
+
+                              {/* APIパッケージ名 */}
+                              <td style={tdS}>
+                                {entry.packageName
+                                  ? <code style={{ fontSize: 13 }}>{entry.packageName}</code>
+                                  : <span style={{ color: '#8a8d90' }}>—</span>}
+                              </td>
 
                               {/* Namespace */}
                               <td style={tdS}>
@@ -346,7 +352,7 @@ const HistoryPage: React.FC = () => {
                             {/* 展開: 失敗詳細 */}
                             {isExpanded && hasFailures && (
                               <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
-                                <td colSpan={8} style={{ padding: '0 0 12px 72px', background: '#fff8f7' }}>
+                                <td colSpan={9} style={{ padding: '0 0 12px 72px', background: '#fff8f7' }}>
                                   <div style={{ fontSize: 13, fontWeight: 600, color: '#c9190b', marginBottom: 8 }}>
                                     {t('history.failedResources', { count: failures.length })}
                                   </div>

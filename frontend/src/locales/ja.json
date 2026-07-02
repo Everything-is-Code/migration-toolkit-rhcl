@@ -224,6 +224,7 @@
     "colDate": "生成日時",
     "colDateTime": "実行日時",
     "colType": "種別",
+    "colPackageName": "APIパッケージ名",
     "colService": "サービス名",
     "colStatus": "ステータス",
     "colSuccessFail": "成功/失敗",

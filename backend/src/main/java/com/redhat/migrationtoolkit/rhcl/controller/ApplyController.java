@@ -55,7 +55,7 @@ public class ApplyController {
     @Inject
     ObjectMapper objectMapper;
 
-    public record ApplyRequest(String namespace, Map<String, String> files, String source) {}
+    public record ApplyRequest(String namespace, Map<String, String> files, String source, String packageName) {}
 
     public record ApplyResult(String fileName, boolean success, String message) {}
 
@@ -167,7 +167,7 @@ public class ApplyController {
             restartAuthorino();
         }
 
-        saveHistory(source, namespace, resourceResults, exportedYamls, successCount, failureCount);
+        saveHistory(source, namespace, request.packageName(), resourceResults, exportedYamls, successCount, failureCount);
 
         boolean anySuccess = fileResults.stream().anyMatch(ApplyResult::success);
         boolean anyError   = fileResults.stream().anyMatch(r -> !r.success());
@@ -181,7 +181,7 @@ public class ApplyController {
         )).build();
     }
 
-    private void saveHistory(String source, String namespace,
+    private void saveHistory(String source, String namespace, String packageName,
                              List<ResourceResult> resourceResults,
                              Map<String, String> exportedYamls,
                              long successCount, long failureCount) {
@@ -201,6 +201,7 @@ public class ApplyController {
             ConversionHistoryEntity entity = new ConversionHistoryEntity();
             entity.source         = source;
             entity.namespace      = namespace;
+            entity.packageName    = packageName;
             entity.status         = failureCount == 0 ? "COMPLETED" : (successCount == 0 ? "FAILED" : "PARTIAL");
             entity.totalCount     = resourceResults.size();
             entity.successCount   = (int) successCount;

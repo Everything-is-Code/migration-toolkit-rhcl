@@ -43,8 +43,8 @@ export const downloadApi = {
 };
 
 export const applyApi = {
-  apply: (namespace: string, files: Record<string, string>, source = 'CONVERT') =>
-    api.post('/api/apply', { namespace, files, source }),
+  apply: (namespace: string, files: Record<string, string>, source = 'CONVERT', packageName?: string) =>
+    api.post('/api/apply', { namespace, files, source, packageName }),
 };
 
 export const importApi = {

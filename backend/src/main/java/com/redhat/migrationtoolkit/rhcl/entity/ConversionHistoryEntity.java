@@ -55,6 +55,10 @@ public class ConversionHistoryEntity extends PanacheEntity {
     @Column(name = "exported_yaml", columnDefinition = "TEXT")
     public String exportedYaml;
 
+    /** IMPORT 時のAPIパッケージ名 */
+    @Column(name = "package_name")
+    public String packageName;
+
     @Column(name = "created_at", nullable = false)
     public LocalDateTime createdAt = LocalDateTime.now();
 
