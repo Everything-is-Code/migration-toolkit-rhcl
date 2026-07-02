@@ -14,7 +14,7 @@ import {
   SelectOption,
   MenuToggle,
 } from '@patternfly/react-core';
-import { UndoIcon } from '@patternfly/react-icons';
+import { UndoIcon, PencilAltIcon, TimesIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
@@ -30,6 +30,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [activeService, setActiveService] = useState(0);
   const [activeTab, setActiveTab] = useState(0);
   const [selectOpen, setSelectOpen] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   // edits[serviceIndex][filename] = edited content
   const [edits, setEdits] = useState<Record<number, Record<string, string>>>(() => {
@@ -91,6 +92,19 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {!noResults && (
+              editMode ? (
+                <Button variant="secondary" onClick={() => setEditMode(false)}>
+                  <TimesIcon style={{ marginRight: 6 }} />
+                  {t('yamlViewer.btnViewMode')}
+                </Button>
+              ) : (
+                <Button variant="secondary" onClick={() => setEditMode(true)}>
+                  <PencilAltIcon style={{ marginRight: 6 }} />
+                  {t('yamlViewer.btnEdit')}
+                </Button>
+              )
+            )}
             <Button variant="secondary" onClick={() => saveAndNavigate('/convert')}>
               {t('yamlViewer.btnBack')}
             </Button>
@@ -149,24 +163,44 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                     }
                   >
                     <div style={{ marginTop: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-                        {isModified(filename) && (
-                          <Button
-                            variant="plain"
-                            onClick={() => handleReset(filename)}
-                            title={t('yamlViewer.btnReset')}
-                            style={{ fontSize: 12, color: '#6a6e73', padding: '2px 8px' }}
-                          >
-                            <UndoIcon style={{ marginRight: 4 }} />
-                            {t('yamlViewer.btnReset')}
-                          </Button>
-                        )}
-                      </div>
-                      <textarea
-                        value={currentEdits[filename] ?? originalFiles[i][1]}
-                        onChange={e => handleEdit(filename, e.target.value)}
-                        spellCheck={false}
-                        style={{
+                      {editMode ? (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                            {isModified(filename) && (
+                              <Button
+                                variant="plain"
+                                onClick={() => handleReset(filename)}
+                                title={t('yamlViewer.btnReset')}
+                                style={{ fontSize: 12, color: '#6a6e73', padding: '2px 8px' }}
+                              >
+                                <UndoIcon style={{ marginRight: 4 }} />
+                                {t('yamlViewer.btnReset')}
+                              </Button>
+                            )}
+                          </div>
+                          <textarea
+                            value={currentEdits[filename] ?? originalFiles[i][1]}
+                            onChange={e => handleEdit(filename, e.target.value)}
+                            spellCheck={false}
+                            style={{
+                              width: '100%',
+                              minHeight: '500px',
+                              background: '#1b1d21',
+                              color: '#d4d4d4',
+                              padding: '16px',
+                              borderRadius: '4px',
+                              border: isModified(filename) ? '1px solid #f0ab00' : '1px solid #3c3f42',
+                              fontSize: '13px',
+                              fontFamily: 'monospace',
+                              lineHeight: 1.6,
+                              resize: 'vertical',
+                              boxSizing: 'border-box',
+                              outline: 'none',
+                            }}
+                          />
+                        </>
+                      ) : (
+                        <pre style={{
                           width: '100%',
                           minHeight: '500px',
                           background: '#1b1d21',
@@ -177,11 +211,14 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                           fontSize: '13px',
                           fontFamily: 'monospace',
                           lineHeight: 1.6,
-                          resize: 'vertical',
                           boxSizing: 'border-box',
-                          outline: 'none',
-                        }}
-                      />
+                          overflowX: 'auto',
+                          whiteSpace: 'pre',
+                          margin: 0,
+                        }}>
+                          {currentEdits[filename] ?? originalFiles[i][1]}
+                        </pre>
+                      )}
                     </div>
                   </Tab>
                 ))}

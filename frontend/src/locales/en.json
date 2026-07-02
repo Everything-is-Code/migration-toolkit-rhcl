@@ -109,7 +109,9 @@
     "goToConvert": "Back to YAML generation",
     "btnBack": "Back",
     "btnNext": "Next: Validation",
-    "btnReset": "Reset changes"
+    "btnReset": "Reset changes",
+    "btnEdit": "Edit",
+    "btnViewMode": "View mode"
   },
   "validation": {
     "title": "Validation",

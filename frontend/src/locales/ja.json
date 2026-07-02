@@ -109,7 +109,9 @@
     "goToConvert": "YAML生成へ戻る",
     "btnBack": "戻る",
     "btnNext": "次へ: バリデーション",
-    "btnReset": "変更をリセット"
+    "btnReset": "変更をリセット",
+    "btnEdit": "編集",
+    "btnViewMode": "表示に戻る"
   },
   "validation": {
     "title": "バリデーション",
