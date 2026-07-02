@@ -42,21 +42,25 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  useEffect(() => {
-    if (!appState.connection.url) {
-      clusterApi.getDomain()
-        .then(res => {
-          const domain = res.data?.domain;
-          if (domain) {
-            setUrl(`https://3scale-admin.${domain}`);
-          }
-        })
-        .catch(() => { /* no cluster available in local dev */ });
-    }
-  }, []);
+  const [fetchingDomain, setFetchingDomain] = useState(false);
+  const [domainError, setDomainError] = useState<string | null>(null);
 
-  const handleNamespaceChange = (val: string) => {
-    setNamespace(val);
+  const handleFetchDomain = async () => {
+    setFetchingDomain(true);
+    setDomainError(null);
+    try {
+      const res = await clusterApi.getDomain();
+      const domain = res.data?.domain;
+      if (domain) {
+        setUrl(`https://3scale-admin.${domain}`);
+      } else {
+        setDomainError(t('connection.domainNotFound'));
+      }
+    } catch {
+      setDomainError(t('connection.domainError'));
+    } finally {
+      setFetchingDomain(false);
+    }
   };
 
   const handleTest = async () => {
@@ -110,15 +114,29 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
             )}
             <Form>
               <FormGroup label="3scale URL" isRequired fieldId="url"
-                helperText={t('connection.urlHelper')}>
-                <TextInput
-                  id="url"
-                  type="url"
-                  value={url}
-                  onChange={(_e, val) => setUrl(val)}
-                  placeholder="https://your-admin.3scale.net"
-                  isRequired
-                />
+                helperText={domainError || t('connection.urlHelper')}>
+                <InputGroup>
+                  <InputGroupItem isFill>
+                    <TextInput
+                      id="url"
+                      type="url"
+                      value={url}
+                      onChange={(_e, val) => setUrl(val)}
+                      placeholder="https://your-admin.3scale.net"
+                      isRequired
+                    />
+                  </InputGroupItem>
+                  <InputGroupItem>
+                    <Button
+                      variant="control"
+                      onClick={handleFetchDomain}
+                      isDisabled={fetchingDomain}
+                      title={t('connection.btnFetchDomain')}
+                    >
+                      {fetchingDomain ? <Spinner size="sm" /> : t('connection.btnFetchDomain')}
+                    </Button>
+                  </InputGroupItem>
+                </InputGroup>
               </FormGroup>
               <FormGroup
                 label={t('connection.labelToken')}

@@ -45,8 +45,9 @@
     "warnVersionUnknown": "3scale バージョンを自動取得できませんでした。Version 2.16 以降であることを確認の上、次に進んでください。",
     "goToApiListAnyway": "2.16 以降であることを確認しました。API一覧へ進む →",
     "errorDefault": "接続に失敗しました。URLとアクセストークンを確認してください。",
-    "suggestedUrlTitle": "3scale URL 候補",
-    "useSuggestedUrl": "{{url}} を使用する"
+    "btnFetchDomain": "URLを自動取得",
+    "domainNotFound": "クラスタードメインを取得できませんでした",
+    "domainError": "クラスタードメインの取得に失敗しました — クラスター接続を確認してください"
   },
   "apiSelection": {
     "title": "API一覧",
