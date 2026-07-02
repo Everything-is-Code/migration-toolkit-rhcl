@@ -8,6 +8,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
+import java.util.List;
 import java.util.Map;
 
 @RegisterRestClient(configKey = "threescale-api")
@@ -33,8 +34,8 @@ public interface ThreeScaleClient {
 
     @GET
     @Path("/admin/api/services/{serviceId}/backend_usages.json")
-    Map<String, Object> getBackendUsages(@PathParam("serviceId") String serviceId,
-                                          @QueryParam("access_token") String accessToken);
+    List<Map<String, Object>> getBackendUsages(@PathParam("serviceId") String serviceId,
+                                                @QueryParam("access_token") String accessToken);
 
     @GET
     @Path("/admin/api/backend_apis/{backendId}.json")

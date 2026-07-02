@@ -252,9 +252,8 @@ public class ThreeScaleExportService {
 
     private List<Backend> fetchBackendsForService(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
-            // Step 1: get backend usages (links between this product and its backend APIs)
-            Map<String, Object> usageResp = client.getBackendUsages(serviceId, accessToken);
-            List<Map<String, Object>> usages = extractList(usageResp, "backend_usages");
+            // backend_usages returns a JSON array directly (not wrapped in an object)
+            List<Map<String, Object>> usages = client.getBackendUsages(serviceId, accessToken);
             List<Backend> backends = new ArrayList<>();
             for (Map<String, Object> uw : usages) {
                 Map<String, Object> usage = (Map<String, Object>) uw.get("backend_usage");
@@ -262,7 +261,6 @@ public class ThreeScaleExportService {
                 Object backendIdObj = usage.get("backend_id");
                 if (backendIdObj == null) continue;
                 String backendId = String.valueOf(backendIdObj);
-                // Step 2: fetch each backend API detail
                 try {
                     Map<String, Object> bResp = client.getBackend(backendId, accessToken);
                     Map<String, Object> b = (Map<String, Object>) bResp.get("backend_api");
