@@ -8,8 +8,10 @@ import {
   Checkbox,
   Button,
   Alert,
+  Spinner,
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
+import { settingsApi } from '../api/client';
 
 export const ALL_POLICIES = [
   '3scale APIcast',
@@ -49,20 +51,30 @@ export const ALL_POLICIES = [
 ];
 
 export const DEFAULT_SUPPORTED_POLICIES = ['3scale APIcast', 'Upstream Connection'];
-export const STORAGE_KEY = 'supportedPolicies';
+const SETTINGS_KEY = 'supportedPolicies';
 
-export function loadSupportedPolicies(): string[] {
+export async function loadSupportedPolicies(): Promise<string[]> {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {}
-  return DEFAULT_SUPPORTED_POLICIES;
+    const resp = await settingsApi.get(SETTINGS_KEY);
+    return JSON.parse(resp.data.value);
+  } catch {
+    return DEFAULT_SUPPORTED_POLICIES;
+  }
 }
 
 const SupportedPoliciesPage: React.FC = () => {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<string[]>(loadSupportedPolicies);
+  const [selected, setSelected] = useState<string[]>(DEFAULT_SUPPORTED_POLICIES);
+  const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadSupportedPolicies().then(policies => {
+      setSelected(policies);
+      setLoading(false);
+    });
+  }, []);
 
   useEffect(() => { setSaved(false); }, [selected]);
 
@@ -72,9 +84,14 @@ const SupportedPoliciesPage: React.FC = () => {
     );
   };
 
-  const handleSave = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(selected));
-    setSaved(true);
+  const handleSave = async () => {
+    try {
+      await settingsApi.put(SETTINGS_KEY, JSON.stringify(selected));
+      setSaved(true);
+      setError(null);
+    } catch {
+      setError(t('supportedPolicies.saveError'));
+    }
   };
 
   const handleReset = () => {
@@ -93,23 +110,34 @@ const SupportedPoliciesPage: React.FC = () => {
         {saved && (
           <Alert variant="success" title={t('supportedPolicies.saved')} style={{ marginBottom: '16px' }} />
         )}
+        {error && (
+          <Alert variant="danger" title={error} style={{ marginBottom: '16px' }} />
+        )}
         <Card>
           <CardBody>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '8px 24px', marginBottom: '24px' }}>
-              {ALL_POLICIES.map(name => (
-                <Checkbox
-                  key={name}
-                  id={`policy-${name}`}
-                  label={name}
-                  isChecked={selected.includes(name)}
-                  onChange={() => toggle(name)}
-                />
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Button variant="primary" onClick={handleSave}>{t('supportedPolicies.btnSave')}</Button>
-              <Button variant="secondary" onClick={handleReset}>{t('supportedPolicies.btnReset')}</Button>
-            </div>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '40px' }}>
+                <Spinner size="xl" />
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '8px 24px', marginBottom: '24px' }}>
+                  {ALL_POLICIES.map(name => (
+                    <Checkbox
+                      key={name}
+                      id={`policy-${name}`}
+                      label={name}
+                      isChecked={selected.includes(name)}
+                      onChange={() => toggle(name)}
+                    />
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button variant="primary" onClick={handleSave}>{t('supportedPolicies.btnSave')}</Button>
+                  <Button variant="secondary" onClick={handleReset}>{t('supportedPolicies.btnReset')}</Button>
+                </div>
+              </>
+            )}
           </CardBody>
         </Card>
       </PageSection>

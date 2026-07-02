@@ -64,9 +64,10 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState }) => {
     const all: CompatibilityResult[] = [];
     for (const service of appState.selectedServices) {
       try {
+        const policies = await loadSupportedPolicies();
         const resp = await servicesApi.checkCompatibility(
           service.id, appState.connection.url, appState.connection.accessToken,
-          loadSupportedPolicies()
+          policies
         );
         all.push(resp.data);
       } catch {

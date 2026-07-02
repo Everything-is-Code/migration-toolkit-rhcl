@@ -285,7 +285,8 @@
     "description": "Select the policies that should be considered compatible during the compatibility check.",
     "btnSave": "Save",
     "btnReset": "Reset to defaults",
-    "saved": "Settings saved"
+    "saved": "Settings saved",
+    "saveError": "Failed to save settings"
   },
   "settings": {
     "title": "Settings",

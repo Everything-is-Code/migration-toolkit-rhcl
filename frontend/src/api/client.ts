@@ -62,6 +62,11 @@ export const gatewayApi = {
     api.get('/api/gateway/info', { params: { namespace, name } }),
 };
 
+export const settingsApi = {
+  get: (key: string) => api.get(`/api/settings/${key}`),
+  put: (key: string, value: string) => api.put(`/api/settings/${key}`, { value }),
+};
+
 export const historyApi = {
   list: (page = 0, size = 50) =>
     api.get('/api/history', { params: { page, size } }),
