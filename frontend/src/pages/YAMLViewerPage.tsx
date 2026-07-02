@@ -67,6 +67,31 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
   const isModified = (filename: string) =>
     current ? currentEdits[filename] !== (current.yamlFiles?.[filename] ?? '') : false;
 
+  const POLICY_PATTERNS = [
+    /kind:\s*AuthPolicy/,
+    /kind:\s*RateLimitPolicy/,
+    /^\s*authentication:/,
+    /^\s*authorization:/,
+    /^\s*jwt-auth:/,
+    /^\s*api-key-auth:/,
+    /^\s*authorizationHeader:/,
+    /^\s*credentials:/,
+    /^\s*timeouts:/,
+    /^\s*#.*send_timeout/,
+  ];
+
+  const renderHighlightedYaml = (content: string) => {
+    const lines = content.split('\n');
+    return lines.map((line, i) => {
+      const isPolicy = POLICY_PATTERNS.some(p => p.test(line));
+      return (
+        <span key={i} style={isPolicy ? { color: '#ffa657' } : undefined}>
+          {line}{i < lines.length - 1 ? '\n' : ''}
+        </span>
+      );
+    });
+  };
+
   const saveAndNavigate = useCallback((path: string) => {
     setAppState(prev => {
       const updated = prev.conversionResults.map((r, i) => {
@@ -216,7 +241,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                           whiteSpace: 'pre',
                           margin: 0,
                         }}>
-                          {currentEdits[filename] ?? originalFiles[i][1]}
+                          {renderHighlightedYaml(currentEdits[filename] ?? originalFiles[i][1])}
                         </pre>
                       )}
                     </div>
