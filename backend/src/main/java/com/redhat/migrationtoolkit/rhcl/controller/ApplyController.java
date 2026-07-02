@@ -94,6 +94,10 @@ public class ApplyController {
 
         for (Map.Entry<String, String> entry : request.files().entrySet()) {
             String fileName = entry.getKey();
+            String lower = fileName.toLowerCase();
+            if (!lower.endsWith(".yaml") && !lower.endsWith(".yml")) {
+                continue;
+            }
             String yaml = entry.getValue();
             try {
                 List<GenericKubernetesResource> items = splitYamlDocs(normalizeApiVersion(yaml)).stream()
