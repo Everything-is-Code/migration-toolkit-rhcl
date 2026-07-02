@@ -478,20 +478,20 @@ spec:
     private String generateAnonymousAuthPolicy(String name, String namespace, Policy policy) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
         String authType = String.valueOf(cfg.getOrDefault("auth_type", "user_key"));
-        String secretName = name + "-anonymous-credentials";
 
+        // Build response headers using plain.value (secretKeyRef is not in AuthPolicy schema)
         StringBuilder responseHeaders = new StringBuilder();
         if ("user_key".equals(authType)) {
+            String userKey = String.valueOf(cfg.getOrDefault("user_key", "REPLACE_ME"));
             responseHeaders.append(String.format(
-                "      x-user-key:%n        valueFrom:%n          secretKeyRef:%n"
-                + "            name: %s%n            key: user_key%n", secretName));
+                "          x-user-key:%n            plain:%n              value: \"%s\"%n", userKey));
         } else if ("app_id_and_app_key".equals(authType) || "app_id".equals(authType)) {
+            String appId  = String.valueOf(cfg.getOrDefault("app_id",  "REPLACE_ME"));
+            String appKey = String.valueOf(cfg.getOrDefault("app_key", "REPLACE_ME"));
             responseHeaders.append(String.format(
-                "      x-app-id:%n        valueFrom:%n          secretKeyRef:%n"
-                + "            name: %s%n            key: app_id%n", secretName));
+                "          x-app-id:%n            plain:%n              value: \"%s\"%n", appId));
             responseHeaders.append(String.format(
-                "      x-app-key:%n        valueFrom:%n          secretKeyRef:%n"
-                + "            name: %s%n            key: app_key%n", secretName));
+                "          x-app-key:%n            plain:%n              value: \"%s\"%n", appKey));
         }
 
         String responseSection = responseHeaders.length() > 0
