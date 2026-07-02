@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   PageSection,
   PageSectionVariants,
@@ -44,18 +44,28 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [showToken, setShowToken] = useState(false);
   const [suggestedUrl, setSuggestedUrl] = useState<string | null>(null);
 
+  const fetchClusterDomain = async () => {
+    try {
+      const res = await clusterApi.getDomain();
+      const domain = res.data.domain;
+      if (domain) {
+        setSuggestedUrl(`https://3scale-admin.${domain}`);
+      }
+    } catch {
+      // ignore — cluster domain unavailable (local dev, no OpenShift)
+    }
+  };
+
+  useEffect(() => {
+    if (!appState.connection.url) {
+      fetchClusterDomain();
+    }
+  }, []);
+
   const handleNamespaceChange = async (val: string) => {
     setNamespace(val);
-    if (!url && val.trim()) {
-      try {
-        const res = await clusterApi.getDomain();
-        const domain = res.data.domain;
-        if (domain) {
-          setSuggestedUrl(`https://3scale-admin.${domain}`);
-        }
-      } catch {
-        // ignore — cluster domain unavailable
-      }
+    if (!url) {
+      fetchClusterDomain();
     }
   };
 
