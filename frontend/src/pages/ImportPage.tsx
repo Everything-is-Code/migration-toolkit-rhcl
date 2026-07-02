@@ -578,8 +578,9 @@ const ImportPageInner: React.FC = () => {
 
   const handleDownload = async () => {
     if (!packageName.trim()) { setPkgNameError(true); return; }
+    const isYaml = (name: string) => name.endsWith('.yaml') || name.endsWith('.yml');
     const yamlFiles: Record<string, string> = {};
-    files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
+    files.filter(f => isYaml(f.name)).forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
     try {
       const resp = await downloadApi.downloadZip(packageName, yamlFiles);
       const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/zip' }));
@@ -594,7 +595,8 @@ const ImportPageInner: React.FC = () => {
     if (!packageName.trim()) { setPkgNameError(true); return; }
     setApplying(true); setApplyResults(null); setError(null); setTestInfo(null);
     const yamlFiles: Record<string, string> = {};
-    files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
+    files.filter(f => f.name.endsWith('.yaml') || f.name.endsWith('.yml'))
+      .forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
     try {
       const res = await applyApi.apply(namespace, yamlFiles, 'IMPORT', packageName || undefined);
       const results: ApplyResult[] = res.data?.results ?? [];
