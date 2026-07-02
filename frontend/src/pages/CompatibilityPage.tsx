@@ -81,32 +81,28 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState }) => {
     setLoading(false);
   };
 
-  if (appState.selectedServices.length === 0) {
-    return (
-      <PageSection>
-        <Alert variant="warning" title={t('compatibility.warningTitle')}>
-          <Button variant="link" onClick={() => navigate('/services')}>{t('compatibility.goToApiList')}</Button>
-        </Alert>
-      </PageSection>
-    );
-  }
+  const noServices = appState.selectedServices.length === 0;
 
   return (
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('compatibility.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
-          {t('compatibility.description', { count: appState.selectedServices.length })}
-        </p>
+        {!noServices && (
+          <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+            {t('compatibility.description', { count: appState.selectedServices.length })}
+          </p>
+        )}
       </PageSection>
       <PageSection>
-        {loading ? (
+        {noServices ? (
+          <Alert variant="warning" title={t('compatibility.warningTitle')} style={{ marginBottom: '24px' }} />
+        ) : loading ? (
           <div style={{ textAlign: 'center', padding: '60px' }}>
             <Spinner size="xl" />
             <p style={{ marginTop: '16px' }}>{t('compatibility.loading')}</p>
           </div>
         ) : error ? (
-          <Alert variant="danger" title={error} />
+          <Alert variant="danger" title={error} style={{ marginBottom: '24px' }} />
         ) : (
           <Stack hasGutter>
             {results.map(result => (
@@ -163,11 +159,13 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState }) => {
 
         <div style={{ marginTop: '24px', display: 'flex', gap: '8px' }}>
           <Button variant="secondary" onClick={() => navigate('/services')}>{t('compatibility.btnCancel')}</Button>
-          <Button variant="secondary" onClick={checkAll} isDisabled={loading}>{t('compatibility.btnRecheck')}</Button>
+          {!noServices && (
+            <Button variant="secondary" onClick={checkAll} isDisabled={loading}>{t('compatibility.btnRecheck')}</Button>
+          )}
           <Button
             variant="primary"
             onClick={() => navigate('/convert')}
-            isDisabled={results.length === 0}
+            isDisabled={noServices || results.length === 0}
           >
             {t('compatibility.btnGenerateYaml')}
           </Button>
