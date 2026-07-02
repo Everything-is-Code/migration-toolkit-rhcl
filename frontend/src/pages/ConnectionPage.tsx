@@ -44,6 +44,18 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [showToken, setShowToken] = useState(false);
   const [fetchingDomain, setFetchingDomain] = useState(false);
   const [domainError, setDomainError] = useState<string | null>(null);
+  const [clusterDomain, setClusterDomain] = useState<string | null>(null);
+
+  // Namespace が変わったら URL のプレフィックス部分を更新する
+  const buildUrlFromNamespace = (ns: string, domain: string) =>
+    `https://${ns}-admin.${domain}`;
+
+  const handleNamespaceChange = (val: string) => {
+    setNamespace(val);
+    if (clusterDomain && val.trim()) {
+      setUrl(buildUrlFromNamespace(val.trim(), clusterDomain));
+    }
+  };
 
   const handleFetchDomain = async () => {
     setFetchingDomain(true);
@@ -51,8 +63,14 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     try {
       const res = await clusterApi.getDomain();
       const domain = res.data?.domain;
+      const detectedNs = (res.data as any)?.namespace;
       if (domain) {
-        setUrl(`https://3scale-admin.${domain}`);
+        setClusterDomain(domain);
+        const ns = detectedNs || namespace || '3scale';
+        if (detectedNs) {
+          setNamespace(detectedNs);
+        }
+        setUrl(buildUrlFromNamespace(ns, domain));
       } else {
         setDomainError(t('connection.domainNotFound'));
       }

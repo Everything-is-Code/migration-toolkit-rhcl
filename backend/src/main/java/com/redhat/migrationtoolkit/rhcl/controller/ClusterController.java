@@ -53,20 +53,27 @@ public class ClusterController {
             var allRoutes = client.genericKubernetesResources(rdc).inAnyNamespace().list();
             LOG.debugf("Found %d routes in cluster", allRoutes.getItems().size());
 
-            String routeHost = allRoutes.getItems().stream()
+            GenericKubernetesResource backendRoute = allRoutes.getItems().stream()
                     .filter(r -> BACKEND_ROUTE_NAME.equals(r.getMetadata().getName()))
-                    .map(this::extractRouteHost)
-                    .filter(h -> h != null && !h.isBlank())
                     .findFirst()
                     .orElse(null);
 
-            if (routeHost == null) {
-                LOG.warnf("Route '%s' not found or has no host", BACKEND_ROUTE_NAME);
+            if (backendRoute == null) {
+                LOG.warnf("Route '%s' not found", BACKEND_ROUTE_NAME);
                 return Response.status(404).entity(Map.of(
-                        "error", "Route '" + BACKEND_ROUTE_NAME + "' not found or host not assigned")).build();
+                        "error", "Route '" + BACKEND_ROUTE_NAME + "' not found")).build();
             }
 
-            LOG.debugf("Backend route host: %s", routeHost);
+            String routeNamespace = backendRoute.getMetadata().getNamespace();
+            String routeHost = extractRouteHost(backendRoute);
+
+            if (routeHost == null || routeHost.isBlank()) {
+                LOG.warnf("Route '%s' has no host assigned yet", BACKEND_ROUTE_NAME);
+                return Response.status(404).entity(Map.of(
+                        "error", "Route host not assigned yet — wait for Route to be ready")).build();
+            }
+
+            LOG.debugf("Backend route host: %s (namespace: %s)", routeHost, routeNamespace);
 
             // ホスト名から "apps." 以降をドメインとして抽出
             // 例: migration-tool-backend-myns.apps.cluster-abc.example.com
@@ -79,8 +86,14 @@ public class ClusterController {
             }
 
             String domain = routeHost.substring(appsIdx + 1); // "apps.cluster-abc.example.com"
-            LOG.infof("Cluster domain detected: %s", domain);
-            return Response.ok(Map.of("domain", domain)).build();
+            LOG.infof("Cluster domain: %s, namespace: %s", domain, routeNamespace);
+
+            var result = new java.util.HashMap<String, String>();
+            result.put("domain", domain);
+            if (routeNamespace != null && !routeNamespace.isBlank()) {
+                result.put("namespace", routeNamespace);
+            }
+            return Response.ok(result).build();
 
         } catch (Exception e) {
             LOG.warnf("Failed to get cluster domain: %s", e.getMessage());
