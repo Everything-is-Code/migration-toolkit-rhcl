@@ -105,7 +105,7 @@
   },
   "yamlViewer": {
     "title": "YAML プレビュー",
-    "description": "生成されたYAMLファイルを確認してください",
+    "description": "生成されたYAMLファイルを確認してください\nポリシーによる変更部分は文字色が変更されています",
     "warningTitle": "変換結果がありません",
     "goToConvert": "YAML生成へ戻る",
     "btnBack": "戻る",

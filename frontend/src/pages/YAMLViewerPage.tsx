@@ -113,7 +113,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
           <div>
             <Title headingLevel="h1" size="2xl">{t('yamlViewer.title')}</Title>
             {!noResults && (
-              <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+              <p style={{ marginTop: '8px', color: '#6a6e73', whiteSpace: 'pre-line' }}>
                 {t('yamlViewer.description')}
               </p>
             )}
