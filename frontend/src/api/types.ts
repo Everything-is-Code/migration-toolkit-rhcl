@@ -2,7 +2,6 @@ export interface ConnectionRequest {
   url: string;
   accessToken: string;
   tenant?: string;
-  threescaleVersion?: string;
 }
 
 export interface ApiService {

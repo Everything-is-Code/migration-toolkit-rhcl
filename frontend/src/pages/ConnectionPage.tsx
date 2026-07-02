@@ -43,40 +43,23 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [success, setSuccess] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
-  const parseVersion = (v: string): number[] => v.split('.').map(n => parseInt(n, 10) || 0);
-  const isVersionGte = (version: string, min: string): boolean => {
-    const v = parseVersion(version);
-    const m = parseVersion(min);
-    for (let i = 0; i < Math.max(v.length, m.length); i++) {
-      const vi = v[i] ?? 0;
-      const mi = m[i] ?? 0;
-      if (vi > mi) return true;
-      if (vi < mi) return false;
-    }
-    return true;
-  };
-
-  const detectedVersion = appState.connection.threescaleVersion;
-  const versionOk = !!detectedVersion && isVersionGte(detectedVersion, '2.16');
-
   const handleTest = async () => {
     setLoading(true);
     setError(null);
     setSuccess(false);
     try {
-      const resp = await connectionApi.test({ url, accessToken, tenant });
-      const detected: string | undefined = (resp.data as any)?.detectedVersion;
+      await connectionApi.test({ url, accessToken, tenant });
       setSuccess(true);
       setAppState(prev => ({
         ...prev,
-        connection: { url, accessToken, tenant, threescaleVersion: detected, connected: true },
+        connection: { url, accessToken, tenant, connected: true },
         namespace,
       }));
     } catch (e: any) {
       setError(e.response?.data?.message || t('connection.errorDefault'));
       setAppState(prev => ({
         ...prev,
-        connection: { url, accessToken, tenant, threescaleVersion: undefined, connected: false },
+        connection: { url, accessToken, tenant, connected: false },
       }));
     } finally {
       setLoading(false);
@@ -97,7 +80,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
             {error && (
               <Alert variant={AlertVariant.danger} title={error} style={{ marginBottom: '16px' }} />
             )}
-            {success && versionOk && (
+            {success && (
               <Alert
                 variant={AlertVariant.success}
                 title={t('connection.successAlert')}
@@ -107,20 +90,6 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     {t('connection.goToApiList')}
                   </Button>
                 }
-              />
-            )}
-            {success && !versionOk && (
-              <Alert
-                variant={AlertVariant.warning}
-                title={detectedVersion
-                  ? t('connection.errorVersionTooLow', { version: detectedVersion })
-                  : t('connection.warnVersionUnknown')}
-                style={{ marginBottom: '16px' }}
-                actionLinks={!detectedVersion && (
-                  <Button variant="link" onClick={() => navigate('/services')}>
-                    {t('connection.goToApiListAnyway')}
-                  </Button>
-                )}
               />
             )}
             <Form>
@@ -204,7 +173,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 >
                   {loading ? <><Spinner size="sm" /> {t('connection.btnTesting')}</> : t('connection.btnTest')}
                 </Button>
-                {success && versionOk && (
+                {success && (
                   <Button variant="secondary" onClick={() => navigate('/services')}>
                     {t('connection.btnNext')}
                   </Button>
@@ -227,10 +196,6 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 <DescriptionListGroup>
                   <DescriptionListTerm>Tenant</DescriptionListTerm>
                   <DescriptionListDescription>{appState.connection.tenant || '-'}</DescriptionListDescription>
-                </DescriptionListGroup>
-                <DescriptionListGroup>
-                  <DescriptionListTerm>3scale Version</DescriptionListTerm>
-                  <DescriptionListDescription>{appState.connection.threescaleVersion || '-'}</DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
                   <DescriptionListTerm>Namespace</DescriptionListTerm>

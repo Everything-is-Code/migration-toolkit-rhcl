@@ -122,28 +122,6 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     );
   }
 
-  const ver = appState.connection.threescaleVersion;
-  const parseVer = (v: string) => v.split('.').map(n => parseInt(n, 10) || 0);
-  const isVerOk = (v: string | undefined): boolean => {
-    if (!v) return false;
-    const parts = parseVer(v);
-    const min = parseVer('2.16');
-    for (let i = 0; i < Math.max(parts.length, min.length); i++) {
-      if ((parts[i] ?? 0) > (min[i] ?? 0)) return true;
-      if ((parts[i] ?? 0) < (min[i] ?? 0)) return false;
-    }
-    return true;
-  };
-  if (ver && !isVerOk(ver)) {
-    return (
-      <PageSection>
-        <Alert variant="warning" title={t('connection.errorVersionTooLow', { version: ver })}>
-          <Button variant="link" onClick={() => navigate('/')}>{t('apiSelection.goToConnection')}</Button>
-        </Alert>
-      </PageSection>
-    );
-  }
-
   return (
     <>
       <PageSection variant={PageSectionVariants.light}>
