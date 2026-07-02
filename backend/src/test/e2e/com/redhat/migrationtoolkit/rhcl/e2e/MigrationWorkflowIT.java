@@ -50,7 +50,7 @@ class MigrationWorkflowIT {
         ApiService svc = buildCompleteService("jwt");
 
         // Step 2: Check compatibility
-        CompatibilityResult compat = compatibilityService.check(svc);
+        CompatibilityResult compat = compatibilityService.check(svc, java.util.Set.of());
         assertNotNull(compat);
         assertEquals("HIGH", compat.level, "JWT service should be HIGH compatibility");
         assertTrue(compat.score >= 80);
@@ -88,7 +88,7 @@ class MigrationWorkflowIT {
     void fullWorkflow_apiKeyService_includesApiKeyResources() {
         ApiService svc = buildCompleteService("apiKey");
 
-        CompatibilityResult compat = compatibilityService.check(svc);
+        CompatibilityResult compat = compatibilityService.check(svc, java.util.Set.of());
         assertTrue(compat.score > 0);
 
         Map<String, String> yamlFiles = conversionService.convert(svc, "apikey-test-ns");
@@ -154,8 +154,8 @@ class MigrationWorkflowIT {
         assertFalse(jwtFiles.containsKey("apikey.yaml"));
         assertTrue(apiKeyFiles.containsKey("apikey.yaml"));
 
-        CompatibilityResult jwtCompat = compatibilityService.check(jwtSvc);
-        CompatibilityResult apiKeyCompat = compatibilityService.check(apiKeySvc);
+        CompatibilityResult jwtCompat = compatibilityService.check(jwtSvc, java.util.Set.of());
+        CompatibilityResult apiKeyCompat = compatibilityService.check(apiKeySvc, java.util.Set.of());
         assertEquals("HIGH", jwtCompat.level);
         assertNotNull(apiKeyCompat.level);
     }

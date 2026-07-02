@@ -80,7 +80,7 @@ class ConversionControllerTest {
         CompatibilityResult compat = buildCompat("svc-1", 90, "HIGH");
 
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
-        when(compatibilityService.check(any())).thenReturn(compat);
+        when(compatibilityService.check(any(), any())).thenReturn(compat);
         when(conversionService.convert(any(), anyString(), isNull())).thenReturn(
                 Map.of("gateway.yaml", "kind: Gateway", "httproute.yaml", "kind: HTTPRoute"));
 
@@ -110,7 +110,7 @@ class ConversionControllerTest {
 
         when(exportService.exportService(anyString(), anyString(), anyString()))
                 .thenReturn(svc1).thenReturn(svc2);
-        when(compatibilityService.check(any())).thenReturn(compat);
+        when(compatibilityService.check(any(), any())).thenReturn(compat);
         when(conversionService.convert(any(), anyString(), isNull()))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 
@@ -134,7 +134,7 @@ class ConversionControllerTest {
     void convert_defaultNamespaceWhenNull() {
         ApiService svc = buildService("svc-1", "My API", "jwt");
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
-        when(compatibilityService.check(any())).thenReturn(buildCompat("svc-1", 70, "MEDIUM"));
+        when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 70, "MEDIUM"));
         when(conversionService.convert(any(), anyString(), isNull()))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 
@@ -178,7 +178,7 @@ class ConversionControllerTest {
     void convert_withExternalBackendUrl_passed() {
         ApiService svc = buildService("svc-1", "API One", "jwt");
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
-        when(compatibilityService.check(any())).thenReturn(buildCompat("svc-1", 80, "HIGH"));
+        when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 80, "HIGH"));
         when(conversionService.convert(any(), anyString(), anyString()))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 
@@ -204,7 +204,7 @@ class ConversionControllerTest {
         ApiService svc = buildService("svc-1", "My Great API", "jwt");
         svc.systemName = "My Great API";
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
-        when(compatibilityService.check(any())).thenReturn(buildCompat("svc-1", 85, "HIGH"));
+        when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 85, "HIGH"));
         when(conversionService.convert(any(), anyString(), isNull()))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 

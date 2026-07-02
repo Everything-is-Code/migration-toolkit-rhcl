@@ -83,7 +83,7 @@ class ExportControllerTest {
         result.items = List.of();
 
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
-        when(compatibilityService.check(any())).thenReturn(result);
+        when(compatibilityService.check(any(), any())).thenReturn(result);
 
         given()
                 .queryParam("url", "https://3scale.example.com")

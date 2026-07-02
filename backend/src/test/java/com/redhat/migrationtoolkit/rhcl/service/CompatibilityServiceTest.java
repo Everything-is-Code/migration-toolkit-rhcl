@@ -8,16 +8,19 @@ import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class CompatibilityServiceTest {
 
     private CompatibilityService service;
+
+    // Default supported policies used in most tests
+    private static final Set<String> DEFAULT_POLICIES = Set.of("3scale APIcast", "Upstream Connection");
+    private static final Set<String> EMPTY_POLICIES = Set.of();
 
     @BeforeEach
     void setUp() {
@@ -30,7 +33,7 @@ class CompatibilityServiceTest {
     void check_nullAuthentication_warningItem() {
         ApiService svc = basicService();
         svc.authentication = null;
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
                 && i.name.equals("Authentication")));
     }
@@ -39,7 +42,7 @@ class CompatibilityServiceTest {
     void check_jwtAuthentication_supported() {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("JWT")));
     }
@@ -48,7 +51,7 @@ class CompatibilityServiceTest {
     void check_apiKeyAuthentication_supported() {
         ApiService svc = basicService();
         svc.authentication = auth("apiKey");
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("API Key")));
     }
@@ -57,7 +60,7 @@ class CompatibilityServiceTest {
     void check_appIdKeyAuthentication_warning() {
         ApiService svc = basicService();
         svc.authentication = auth("appIdKey");
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
                 && i.name.contains("App ID")));
     }
@@ -66,42 +69,51 @@ class CompatibilityServiceTest {
     void check_unknownAuthentication_warning() {
         ApiService svc = basicService();
         svc.authentication = auth("oauth2-custom");
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)));
     }
 
     // ── Policy checks ────────────────────────────────────────────────────────
 
-    @ParameterizedTest
-    @CsvSource({
-        "url_rewriting, SUPPORTED",
-        "rewrite, SUPPORTED",
-        "header_modification, SUPPORTED",
-        "headers, SUPPORTED",
-        "cors, SUPPORTED",
-        "rate_limit, SUPPORTED",
-        "rate-limit, SUPPORTED",
-        "lua, WARNING",
-        "soap, UNSUPPORTED",
-        "camel, UNSUPPORTED",
-        "unknown_policy, WARNING"
-    })
-    void check_policy_expectedStatus(String policyName, String expectedStatus) {
+    @Test
+    void check_policyInSupportedList_supported() {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
-        svc.policies = List.of(enabledPolicy(policyName));
-        CompatibilityResult result = service.check(svc);
-        boolean found = result.items.stream().anyMatch(i -> {
-            if (!expectedStatus.equals(i.status)) return false;
-            String itemLower = i.name.toLowerCase();
-            String policyLower = policyName.toLowerCase();
-            if (itemLower.contains(policyLower.replace("_", " ").replace("-", " "))) return true;
-            if (itemLower.contains("policy")) return true;
-            // match by first keyword (handles "url_rewriting"→"url", "headers"→"header")
-            String firstWord = policyLower.split("[_-]")[0];
-            return itemLower.contains(firstWord) || itemLower.contains(firstWord.replaceAll("s$", ""));
-        });
-        assertTrue(found, "Expected " + expectedStatus + " for policy " + policyName);
+        svc.policies = List.of(enabledPolicy("cors"));
+        // "cors" maps to "CORS Request Handling"
+        CompatibilityResult result = service.check(svc, Set.of("CORS Request Handling"));
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && i.name.contains("CORS")));
+    }
+
+    @Test
+    void check_policyNotInSupportedList_warning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("soap"));
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES);
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && i.name.contains("SOAP")));
+    }
+
+    @Test
+    void check_urlRewritingInList_supported() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("url_rewriting"));
+        CompatibilityResult result = service.check(svc, Set.of("URL Rewriting"));
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && i.name.contains("URL Rewriting")));
+    }
+
+    @Test
+    void check_headerModificationInList_supported() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("header_modification"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification"));
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && i.name.contains("Header")));
     }
 
     @Test
@@ -112,8 +124,9 @@ class CompatibilityServiceTest {
         p.name = "soap";
         p.enabled = false;
         svc.policies = List.of(p);
-        CompatibilityResult result = service.check(svc);
-        assertTrue(result.items.stream().noneMatch(i -> "UNSUPPORTED".equals(i.status)));
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES);
+        // Disabled policy should produce no items
+        assertTrue(result.items.stream().noneMatch(i -> "SOAP".equals(i.name)));
     }
 
     @Test
@@ -121,7 +134,7 @@ class CompatibilityServiceTest {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         svc.policies = null;
-        assertDoesNotThrow(() -> service.check(svc));
+        assertDoesNotThrow(() -> service.check(svc, DEFAULT_POLICIES));
     }
 
     @Test
@@ -129,7 +142,7 @@ class CompatibilityServiceTest {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         svc.policies = List.of();
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertNotNull(result);
     }
 
@@ -140,7 +153,7 @@ class CompatibilityServiceTest {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         svc.mappingRules = null;
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
                 && i.name.equals("Mapping Rules")));
     }
@@ -150,7 +163,7 @@ class CompatibilityServiceTest {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         svc.mappingRules = List.of();
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
                 && i.name.equals("Mapping Rules")));
     }
@@ -162,7 +175,7 @@ class CompatibilityServiceTest {
         MappingRule rule = new MappingRule();
         rule.pattern = "/api/{?}";
         svc.mappingRules = List.of(rule);
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
                 && i.name.equals("Mapping Rules")));
     }
@@ -174,7 +187,7 @@ class CompatibilityServiceTest {
         MappingRule rule = new MappingRule();
         rule.pattern = "/api/users";
         svc.mappingRules = List.of(rule);
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.equals("Mapping Rules")));
     }
@@ -188,7 +201,7 @@ class CompatibilityServiceTest {
                 rule("POST", "/users"),
                 rule("DELETE", "/users/{id}")
         );
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.message.contains("3")));
     }
@@ -200,7 +213,7 @@ class CompatibilityServiceTest {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         svc.backends = null;
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
                 && i.name.equals("Backend")));
     }
@@ -210,7 +223,7 @@ class CompatibilityServiceTest {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         svc.backends = List.of();
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
                 && i.name.equals("Backend")));
     }
@@ -223,7 +236,7 @@ class CompatibilityServiceTest {
         b.name = "my-backend";
         b.privateEndpoint = "https://api.example.com";
         svc.backends = List.of(b);
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("TLS")));
     }
@@ -236,7 +249,7 @@ class CompatibilityServiceTest {
         b.name = "http-backend";
         b.privateEndpoint = "http://api.internal";
         svc.backends = List.of(b);
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)));
     }
 
@@ -245,20 +258,20 @@ class CompatibilityServiceTest {
     @Test
     void check_allSupported_scoreHigh() {
         ApiService svc = fullSupportedService();
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, Set.of("CORS Request Handling"));
         assertEquals("HIGH", result.level);
         assertTrue(result.score >= 80);
     }
 
     @Test
-    void check_soapPolicy_reducesScore() {
+    void check_unknownPolicyNotInList_reducesScore() {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         svc.mappingRules = List.of(rule("GET", "/api"));
         svc.backends = List.of(backend("http://svc"));
         svc.policies = List.of(enabledPolicy("soap"));
-        CompatibilityResult result = service.check(svc);
-        assertTrue(result.score < 100, "SOAP policy should reduce score");
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES);
+        assertTrue(result.score < 100, "Policy not in list should reduce score");
     }
 
     @Test
@@ -267,7 +280,7 @@ class CompatibilityServiceTest {
         svc.id = "test-id-99";
         svc.name = "My Test Service";
         svc.authentication = auth("jwt");
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertEquals("test-id-99", result.serviceId);
         assertEquals("My Test Service", result.serviceName);
     }
@@ -283,7 +296,7 @@ class CompatibilityServiceTest {
         svc.mappingRules = null;
         svc.backends = null;
         svc.policies = null;
-        CompatibilityResult result = service.check(svc);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertNotNull(result.level);
         assertTrue(result.score >= 0 && result.score <= 100);
     }
