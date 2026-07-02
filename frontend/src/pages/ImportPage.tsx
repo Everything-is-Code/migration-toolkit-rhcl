@@ -578,9 +578,8 @@ const ImportPageInner: React.FC = () => {
 
   const handleDownload = async () => {
     if (!packageName.trim()) { setPkgNameError(true); return; }
-    const isYaml = (name: string) => name.endsWith('.yaml') || name.endsWith('.yml');
     const yamlFiles: Record<string, string> = {};
-    files.filter(f => isYaml(f.name)).forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
+    files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
     try {
       const resp = await downloadApi.downloadZip(packageName, yamlFiles);
       const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/zip' }));
