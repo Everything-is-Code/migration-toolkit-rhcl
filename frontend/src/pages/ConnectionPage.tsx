@@ -56,8 +56,9 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       } else {
         setDomainError(t('connection.domainNotFound'));
       }
-    } catch {
-      setDomainError(t('connection.domainError'));
+    } catch (e: any) {
+      const detail = e?.response?.data?.error || e?.message || '';
+      setDomainError(`${t('connection.domainError')}: ${detail}`);
     } finally {
       setFetchingDomain(false);
     }

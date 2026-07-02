@@ -21,47 +21,97 @@ public class ClusterController {
 
     private static final Logger LOG = Logger.getLogger(ClusterController.class);
 
+    /** バックエンドの Route 名（deploy/backend/05-route.yaml と一致させること） */
+    private static final String BACKEND_ROUTE_NAME = "migration-tool-backend";
+
     @Inject
     KubernetesClient client;
 
+    /**
+     * バックエンド自身の OpenShift Route のホスト名からクラスタードメインを取得する。
+     * Route ホストは "{name}-{namespace}.apps.{cluster-domain}" の形式なので、
+     * "apps." 以降を domain として返す。
+     *
+     * この方法は config.openshift.io 権限が不要で、既存の route.openshift.io
+     * 権限（06-rbac.yaml）で動作する。
+     */
     @GET
     @Path("/domain")
     @Produces(MediaType.APPLICATION_JSON)
-    @Operation(summary = "Get cluster base domain from ingress.config.openshift.io/cluster")
+    @Operation(summary = "Get cluster base domain from backend Route host")
     public Response getDomain() {
         try {
             ResourceDefinitionContext rdc = new ResourceDefinitionContext.Builder()
-                    .withGroup("config.openshift.io")
+                    .withGroup("route.openshift.io")
                     .withVersion("v1")
-                    .withKind("Ingress")
-                    .withPlural("ingresses")
-                    .withNamespaced(false)
+                    .withKind("Route")
+                    .withPlural("routes")
+                    .withNamespaced(true)
                     .build();
 
-            GenericKubernetesResource ingress = client.genericKubernetesResources(rdc)
-                    .withName("cluster")
-                    .get();
+            // まず全 namespace から検索してバックエンド Route を探す
+            var allRoutes = client.genericKubernetesResources(rdc).inAnyNamespace().list();
+            LOG.debugf("Found %d routes in cluster", allRoutes.getItems().size());
 
-            if (ingress == null) {
-                return Response.status(404).entity(Map.of("error", "Ingress config not found")).build();
+            String routeHost = allRoutes.getItems().stream()
+                    .filter(r -> BACKEND_ROUTE_NAME.equals(r.getMetadata().getName()))
+                    .map(this::extractRouteHost)
+                    .filter(h -> h != null && !h.isBlank())
+                    .findFirst()
+                    .orElse(null);
+
+            if (routeHost == null) {
+                LOG.warnf("Route '%s' not found or has no host", BACKEND_ROUTE_NAME);
+                return Response.status(404).entity(Map.of(
+                        "error", "Route '" + BACKEND_ROUTE_NAME + "' not found or host not assigned")).build();
             }
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> spec = (Map<String, Object>) ingress.getAdditionalProperties().get("spec");
-            if (spec == null) {
-                return Response.status(404).entity(Map.of("error", "spec not found in Ingress config")).build();
+            LOG.debugf("Backend route host: %s", routeHost);
+
+            // ホスト名から "apps." 以降をドメインとして抽出
+            // 例: migration-tool-backend-myns.apps.cluster-abc.example.com
+            //  → apps.cluster-abc.example.com
+            int appsIdx = routeHost.indexOf(".apps.");
+            if (appsIdx < 0) {
+                LOG.warnf("Cannot extract cluster domain from route host: %s", routeHost);
+                return Response.status(404).entity(Map.of(
+                        "error", "Cannot extract cluster domain from route host: " + routeHost)).build();
             }
 
-            Object domain = spec.get("domain");
-            if (domain == null || domain.toString().isBlank()) {
-                return Response.status(404).entity(Map.of("error", "domain not set in Ingress config")).build();
-            }
-
-            return Response.ok(Map.of("domain", domain.toString())).build();
+            String domain = routeHost.substring(appsIdx + 1); // "apps.cluster-abc.example.com"
+            LOG.infof("Cluster domain detected: %s", domain);
+            return Response.ok(Map.of("domain", domain)).build();
 
         } catch (Exception e) {
             LOG.warnf("Failed to get cluster domain: %s", e.getMessage());
             return Response.status(500).entity(Map.of("error", e.getMessage())).build();
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractRouteHost(GenericKubernetesResource route) {
+        try {
+            Map<String, Object> spec = (Map<String, Object>) route.getAdditionalProperties().get("spec");
+            if (spec != null) {
+                Object host = spec.get("host");
+                if (host != null) {
+                    return host.toString();
+                }
+            }
+            // status.ingress[0].host にもある場合
+            Map<String, Object> status = (Map<String, Object>) route.getAdditionalProperties().get("status");
+            if (status != null) {
+                var ingresses = (java.util.List<Map<String, Object>>) status.get("ingress");
+                if (ingresses != null && !ingresses.isEmpty()) {
+                    Object host = ingresses.get(0).get("host");
+                    if (host != null) {
+                        return host.toString();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOG.warnf("Error extracting host from route: %s", e.getMessage());
+        }
+        return null;
     }
 }
