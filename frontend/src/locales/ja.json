@@ -165,6 +165,7 @@
     "resultFail": "失敗",
     "yamlEditorTitle": "YAMLファイル確認・編集",
     "labelPackageName": "パッケージ名",
+    "pkgNameRequired": "パッケージ名は必須です",
     "downloadSuccess": "ZIPファイルをダウンロードしました",
     "btnEdit": "編集",
     "btnEditDone": "編集終了",

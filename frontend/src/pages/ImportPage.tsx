@@ -432,8 +432,10 @@ const ImportPageInner: React.FC = () => {
   const [error, setError]               = useState<string | null>(null);
   const [files, setFiles]               = useState<YamlFile[]>([]);
   const [edits, setEdits]               = useState<EditMap>({});
+  const [baseEdits, setBaseEdits]       = useState<EditMap>({});
   const [namespace, setNamespace]       = useState('default');
   const [packageName, setPackageName]   = useState('');
+  const [pkgNameError, setPkgNameError] = useState(false);
   const [uploadedName, setUploadedName] = useState('');
   const [downloaded, setDownloaded]     = useState(false);
   const [applying, setApplying]         = useState(false);
@@ -442,9 +444,10 @@ const ImportPageInner: React.FC = () => {
   const [portFixNotice, setPortFixNotice] = useState<string | null>(null);
 
   const reset = () => {
-    setFiles([]); setEdits({}); setUploadedName('');
+    setFiles([]); setEdits({}); setBaseEdits({}); setUploadedName('');
     setApplyResults(null); setError(null); setDownloaded(false);
     setTestInfo(null); setPortFixNotice(null);
+    setPackageName(''); setPkgNameError(false);
   };
 
   /**
@@ -477,7 +480,9 @@ const ImportPageInner: React.FC = () => {
     }
     setLoading(true); setError(null); reset();
     setUploadedName(file.name);
-    setPackageName(file.name.replace(/\.zip$/i, ''));
+    const defaultPkg = file.name.replace(/\.zip$/i, '');
+    setPackageName(defaultPkg);
+    setPkgNameError(false);
     try {
       const res = await importApi.uploadZip(file);
       const yamlMap: Record<string, string> = res.data?.files ?? {};
@@ -489,8 +494,10 @@ const ImportPageInner: React.FC = () => {
         .sort((a, b) => a.name.localeCompare(b.name));
       const init: EditMap = {};
       loaded.forEach(f => { init[f.name] = f.content; });
-      setFiles(loaded); setEdits(init);
-      if (detectExternalBackend(init)) {
+      setBaseEdits(init);
+      const derived = deriveEdits(init, defaultPkg, namespace);
+      setFiles(loaded); setEdits(derived);
+      if (detectExternalBackend(derived)) {
         setPortFixNotice('portFixExternal');
       }
     } catch (e: any) {
@@ -507,6 +514,31 @@ const ImportPageInner: React.FC = () => {
     .replace(/apiVersion: kuadrant\.io\/v1beta2/g, 'apiVersion: kuadrant.io/v1')
     .replace(/apiVersion: kuadrant\.io\/v1beta1/g, 'apiVersion: kuadrant.io/v1')
     .replace(/apiVersion: gateway\.networking\.k8s\.io\/v1beta1/g, 'apiVersion: gateway.networking.k8s.io/v1');
+
+  // パッケージ名で YAML 内の "api" プレフィックスを置換する
+  const applyPkgToYaml = (yaml: string, pkg: string): string => {
+    if (!pkg) return yaml;
+    return yaml
+      // name: api-xxx → name: {pkg}-xxx  /  name: api → name: {pkg}
+      .replace(/^(\s+name:\s+)api(-|(?=\s*$))/gm, `$1${pkg}$2`)
+      // app: api-xxx → app: {pkg}-xxx  /  app: api → app: {pkg}
+      .replace(/^(\s+app:\s+)api(-|(?=\s*$))/gm, `$1${pkg}$2`)
+      // service-name: "API" or service-name: API
+      .replace(/^(\s+service-name:\s*)["']?API["']?/gm, `$1"${pkg}"`);
+  };
+
+  // baseEdits からネームスペース＋パッケージ名を一括適用して edits を再生成
+  const deriveEdits = useCallback((base: EditMap, pkg: string, ns: string): EditMap => {
+    const updated: EditMap = {};
+    for (const [name, content] of Object.entries(base)) {
+      let yaml = normalizeApiVersions(content);
+      yaml = yaml.replace(/^(\s*namespace:\s*).+$/gm, `$1${ns}`);
+      yaml = applyPkgToYaml(yaml, pkg);
+      updated[name] = yaml;
+    }
+    return updated;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const applyNamespace = () => {
     const isExternal = detectExternalBackend(edits);
@@ -536,20 +568,30 @@ const ImportPageInner: React.FC = () => {
     }
   };
 
+  const handlePackageNameChange = (newPkg: string) => {
+    setPackageName(newPkg);
+    setPkgNameError(newPkg.trim() === '');
+    if (Object.keys(baseEdits).length > 0) {
+      setEdits(deriveEdits(baseEdits, newPkg, namespace));
+    }
+  };
+
   const handleDownload = async () => {
+    if (!packageName.trim()) { setPkgNameError(true); return; }
     const yamlFiles: Record<string, string> = {};
     files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
     try {
-      const resp = await downloadApi.downloadZip(packageName || 'package', yamlFiles);
+      const resp = await downloadApi.downloadZip(packageName, yamlFiles);
       const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/zip' }));
       const a = document.createElement('a');
-      a.href = url; a.download = `${packageName || 'package'}.zip`;
+      a.href = url; a.download = `${packageName}.zip`;
       a.click(); URL.revokeObjectURL(url);
       setDownloaded(true);
     } catch (e: any) { setError(t('import.errorDownload', { message: e.message })); }
   };
 
   const handleApply = async () => {
+    if (!packageName.trim()) { setPkgNameError(true); return; }
     setApplying(true); setApplyResults(null); setError(null); setTestInfo(null);
     const yamlFiles: Record<string, string> = {};
     files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
@@ -769,9 +811,28 @@ const ImportPageInner: React.FC = () => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                       <Title headingLevel="h3" size="md">{t('import.yamlEditorTitle')}</Title>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <label style={{ fontSize: 13, color: '#6a6e73' }}>{t('import.labelPackageName')}</label>
-                        <TextInput id="imp-pkg" value={packageName}
-                          onChange={(_e, v) => setPackageName(v)} style={{ width: 180 }} />
+                        <label style={{ fontSize: 13, color: pkgNameError ? '#c9190b' : '#6a6e73', fontWeight: 600 }}>
+                          {t('import.labelPackageName')}
+                          <span style={{ color: '#c9190b', marginLeft: 2 }}>*</span>
+                        </label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <TextInput
+                            id="imp-pkg"
+                            value={packageName}
+                            onChange={(_e, v) => handlePackageNameChange(v)}
+                            style={{
+                              width: 220,
+                              borderColor: pkgNameError ? '#c9190b' : undefined,
+                              outline: pkgNameError ? '1px solid #c9190b' : undefined,
+                            }}
+                            aria-invalid={pkgNameError}
+                          />
+                          {pkgNameError && (
+                            <span style={{ fontSize: 12, color: '#c9190b' }}>
+                              {t('import.pkgNameRequired')}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {downloaded && <Alert variant="success" isInline title={t('import.downloadSuccess')} style={{ marginBottom: 12 }} />}

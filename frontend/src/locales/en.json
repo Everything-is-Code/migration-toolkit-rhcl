@@ -165,6 +165,7 @@
     "resultFail": "Failed",
     "yamlEditorTitle": "Review / Edit YAML Files",
     "labelPackageName": "Package Name",
+    "pkgNameRequired": "Package name is required",
     "downloadSuccess": "ZIP file downloaded",
     "btnEdit": "Edit",
     "btnEditDone": "Done",
