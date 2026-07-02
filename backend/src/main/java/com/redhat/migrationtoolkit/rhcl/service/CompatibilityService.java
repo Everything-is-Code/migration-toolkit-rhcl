@@ -26,6 +26,7 @@ public class CompatibilityService {
         Map.entry("auth_caching",               "3scale Auth Caching"),
         Map.entry("referrer",                   "3scale Referrer"),
         Map.entry("anonymous_access",           "Anonymous Access"),
+        Map.entry("default_credentials",        "Anonymous Access"),
         Map.entry("camel",                      "Camel Service"),
         Map.entry("conditional",                "Conditional Policy"),
         Map.entry("content_caching",            "Content Caching"),
