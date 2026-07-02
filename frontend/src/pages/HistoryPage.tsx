@@ -293,11 +293,16 @@ const HistoryPage: React.FC = () => {
                               {/* 種別 */}
                               <td style={tdS}>{sourceLabel(entry.source)}</td>
 
-                              {/* APIパッケージ名 */}
+                              {/* サービス/パッケージ名 */}
                               <td style={tdS}>
-                                {entry.packageName
-                                  ? <code style={{ fontSize: 13 }}>{entry.packageName}</code>
-                                  : <span style={{ color: '#8a8d90' }}>—</span>}
+                                {(() => {
+                                  const name = entry.source === 'IMPORT'
+                                    ? entry.packageName
+                                    : entry.serviceName;
+                                  return name
+                                    ? <code style={{ fontSize: 13 }}>{name}</code>
+                                    : <span style={{ color: '#8a8d90' }}>—</span>;
+                                })()}
                               </td>
 
                               {/* Namespace */}
