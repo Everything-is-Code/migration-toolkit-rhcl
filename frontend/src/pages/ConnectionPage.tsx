@@ -42,31 +42,21 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  const [suggestedUrl, setSuggestedUrl] = useState<string | null>(null);
-
-  const fetchClusterDomain = async () => {
-    try {
-      const res = await clusterApi.getDomain();
-      const domain = res.data.domain;
-      if (domain) {
-        setSuggestedUrl(`https://3scale-admin.${domain}`);
-      }
-    } catch {
-      // ignore — cluster domain unavailable (local dev, no OpenShift)
-    }
-  };
-
   useEffect(() => {
     if (!appState.connection.url) {
-      fetchClusterDomain();
+      clusterApi.getDomain()
+        .then(res => {
+          const domain = res.data?.domain;
+          if (domain) {
+            setUrl(`https://3scale-admin.${domain}`);
+          }
+        })
+        .catch(() => { /* no cluster available in local dev */ });
     }
   }, []);
 
-  const handleNamespaceChange = async (val: string) => {
+  const handleNamespaceChange = (val: string) => {
     setNamespace(val);
-    if (!url) {
-      fetchClusterDomain();
-    }
   };
 
   const handleTest = async () => {
@@ -191,19 +181,6 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   isRequired
                 />
               </FormGroup>
-              {suggestedUrl && !url && (
-                <Alert
-                  variant="info"
-                  isInline
-                  title={t('connection.suggestedUrlTitle')}
-                  style={{ marginTop: '-8px' }}
-                  actionLinks={
-                    <Button variant="link" onClick={() => { setUrl(suggestedUrl); setSuggestedUrl(null); }}>
-                      {t('connection.useSuggestedUrl', { url: suggestedUrl })}
-                    </Button>
-                  }
-                />
-              )}
               <ActionGroup>
                 <Button
                   variant="primary"
