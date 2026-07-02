@@ -20,6 +20,7 @@ public class ValidationService {
             "kuadrant.io/v1",
             "kuadrant.io/v1beta2",
             "kuadrant.io/v1alpha1",
+            "devportal.kuadrant.io/v1alpha1",
             "networking.istio.io/v1alpha3",
             "networking.istio.io/v1beta1",
             "networking.istio.io/v1",
