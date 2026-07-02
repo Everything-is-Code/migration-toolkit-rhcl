@@ -34,6 +34,7 @@ import {
   DownloadIcon,
   UploadIcon,
   HistoryIcon,
+  CogIcon,
 } from '@patternfly/react-icons';
 
 import ConnectionPage from './pages/ConnectionPage';
@@ -45,6 +46,7 @@ import ValidationPage from './pages/ValidationPage';
 import DownloadPage from './pages/DownloadPage';
 import HistoryPage from './pages/HistoryPage';
 import ImportPage from './pages/ImportPage';
+import SettingsPage from './pages/SettingsPage';
 
 import { ConnectionRequest, ApiService, ConversionResultItem } from './api/types';
 
@@ -237,8 +239,9 @@ const AppContent: React.FC = () => {
   ];
 
   const toolItems = [
-    { path: '/import',  label: t('nav.import'),  icon: <UploadIcon /> },
-    { path: '/history', label: t('nav.history'), icon: <HistoryIcon /> },
+    { path: '/import',   label: t('nav.import'),    icon: <UploadIcon /> },
+    { path: '/history',  label: t('nav.history'),   icon: <HistoryIcon /> },
+    { path: '/settings', label: t('nav.settings'),  icon: <CogIcon /> },
   ];
 
   const isWorkflowActive = workflowItems.some(i => i.path === location.pathname);
@@ -357,6 +360,7 @@ const AppContent: React.FC = () => {
             <Route path="/download" element={<DownloadPage appState={appState} setAppState={setAppState} />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </RouteErrorBoundary>
       </Page>

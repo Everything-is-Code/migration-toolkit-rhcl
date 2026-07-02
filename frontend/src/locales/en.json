@@ -12,7 +12,8 @@
     "import": "ZIP Import / CL Config",
     "history": "Conversion History",
     "connected": "Connected: {{url}}",
-    "appTitle": "Migration Toolkit for Red Hat Connectivity Link"
+    "appTitle": "Migration Toolkit for Red Hat Connectivity Link",
+    "settings": "Settings"
   },
   "connection": {
     "title": "3scale Connection",
@@ -265,5 +266,13 @@
   "app": {
     "errorTitle": "An error occurred while rendering this page",
     "btnRetry": "Retry"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure application display preferences",
+    "sectionDatetime": "Date & Time",
+    "labelTimezone": "Timezone",
+    "timezoneHint": "Used for displaying execution timestamps in Conversion History. Changes take effect immediately.",
+    "saved": "Settings saved"
   }
 }

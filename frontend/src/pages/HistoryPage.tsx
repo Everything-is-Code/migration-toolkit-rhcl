@@ -30,10 +30,11 @@ import {
 import { useTranslation } from 'react-i18next';
 import { historyApi } from '../api/client';
 import { ConversionHistory, FailureDetail } from '../api/types';
+import { getTimezone } from '../utils/timezone';
 
 const formatDate = (iso: string): string => {
   try {
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeZone = getTimezone();
     return new Date(iso).toLocaleString(undefined, {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -287,7 +288,7 @@ const HistoryPage: React.FC = () => {
 
                               {/* 実行日時 */}
                               <td style={tdS}>
-                                <span style={{ fontSize: 14, whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
                                   {formatDate(entry.createdAt)}
                                 </span>
                               </td>

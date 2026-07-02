@@ -12,7 +12,8 @@
     "import": "ZIPインポート / CL設定",
     "history": "変換履歴",
     "connected": "接続済み: {{url}}",
-    "appTitle": "Migration Toolkit for Red Hat Connectivity Link"
+    "appTitle": "Migration Toolkit for Red Hat Connectivity Link",
+    "settings": "設定"
   },
   "connection": {
     "title": "3scale 接続設定",
@@ -265,5 +266,13 @@
   "app": {
     "errorTitle": "ページの表示中にエラーが発生しました",
     "btnRetry": "再試行"
+  },
+  "settings": {
+    "title": "設定",
+    "subtitle": "アプリケーションの表示設定を変更します",
+    "sectionDatetime": "日時表示",
+    "labelTimezone": "タイムゾーン",
+    "timezoneHint": "変換履歴の実行日時表示に使用されます。変更は即時反映されます。",
+    "saved": "設定を保存しました"
   }
 }
