@@ -524,7 +524,7 @@ const ImportPageInner: React.FC = () => {
       // app: api-xxx → app: {pkg}-xxx  /  app: api → app: {pkg}
       .replace(/^(\s+app:\s+)api(-|(?=\s*$))/gm, `$1${pkg}$2`)
       // service-name: "API" or service-name: API
-      .replace(/^(\s+service-name:\s*)["']?API["']?/gm, `$1"${pkg}"`);
+      .replace(/^(\s+service-name:\s*)["']?API["']?/gm, `$1"${pkg.toUpperCase()}"`);
   };
 
   // baseEdits からネームスペース＋パッケージ名を一括適用して edits を再生成
