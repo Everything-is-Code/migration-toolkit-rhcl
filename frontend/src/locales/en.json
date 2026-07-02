@@ -201,6 +201,7 @@
     "btnRetry": "Retry",
     "editMode": "Edit Mode",
     "viewMode": "View Mode",
+    "diffMode": "Changes",
     "portFixExternal": "External backend resources detected. Running 'Apply Namespace' will automatically convert httproute.yaml backendRefs.port to 443.",
     "portFixed443": "External backend detected: httproute.yaml backendRefs.port converted from 8080 → 443",
     "portAlready443": "External backend detected: httproute.yaml port is already 443",

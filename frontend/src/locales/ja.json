@@ -201,6 +201,7 @@
     "btnRetry": "再試行",
     "editMode": "編集モード",
     "viewMode": "表示モード",
+    "diffMode": "変更差分",
     "portFixExternal": "外部バックエンドリソースを検出しました。「Namespace を適用」を実行すると httproute.yaml の backendRefs.port が自動的に 443 に変換されます",
     "portFixed443": "外部バックエンドを検出: httproute.yaml の backendRefs.port を 8080 → 443 に変換しました",
     "portAlready443": "外部バックエンドを検出: httproute.yaml の port は既に 443 です",

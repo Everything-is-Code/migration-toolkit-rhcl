@@ -352,55 +352,133 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 /* ── シンプルなタブ（Tabs コンポーネントを使わない） ── */
-interface SimpleTabs { files: YamlFile[]; edits: EditMap; onEdit: (name: string, val: string) => void; }
+// ── シンプルなライン差分 ────────────────────────────────────────────────────
+type DiffLine = { type: 'same' | 'add' | 'remove'; text: string };
+
+function computeDiff(original: string, current: string): DiffLine[] {
+  const oldLines = original.split('\n');
+  const newLines = current.split('\n');
+
+  // LCS DP テーブル
+  const m = oldLines.length;
+  const n = newLines.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = m - 1; i >= 0; i--) {
+    for (let j = n - 1; j >= 0; j--) {
+      if (oldLines[i] === newLines[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+
+  const result: DiffLine[] = [];
+  let i = 0, j = 0;
+  while (i < m || j < n) {
+    if (i < m && j < n && oldLines[i] === newLines[j]) {
+      result.push({ type: 'same', text: oldLines[i] });
+      i++; j++;
+    } else if (j < n && (i >= m || dp[i][j + 1] >= dp[i + 1][j])) {
+      result.push({ type: 'add', text: newLines[j] });
+      j++;
+    } else {
+      result.push({ type: 'remove', text: oldLines[i] });
+      i++;
+    }
+  }
+  return result;
+}
+
+interface SimpleTabs {
+  files: YamlFile[];
+  edits: EditMap;
+  onEdit: (name: string, val: string) => void;
+}
 const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
   const { t } = useTranslation();
   const [active, setActive] = useState(0);
-  const [editMode, setEditMode] = useState(false);
+  const [mode, setMode] = useState<'view' | 'edit' | 'diff'>('view');
 
   if (files.length === 0) return null;
   const current = files[active] ?? files[0];
   const content = edits[current.name] ?? current.content;
+  const isEdited = edits[current.name] !== undefined && edits[current.name] !== current.content;
+
+  const diffLines = mode === 'diff' ? computeDiff(current.content, content) : [];
 
   return (
     <div>
       {/* タブヘッダー */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, borderBottom: '2px solid #d2d2d2', marginBottom: 12 }}>
-        {files.map((f, i) => (
-          <button
-            key={f.name}
-            onClick={() => { setActive(i); setEditMode(false); }}
-            style={{
-              padding: '8px 16px', fontSize: 13, cursor: 'pointer',
-              border: 'none', borderBottom: i === active ? '2px solid #0066cc' : 'none',
-              background: i === active ? '#f0f7ff' : 'transparent',
-              color: i === active ? '#0066cc' : '#333',
-              fontWeight: i === active ? 600 : 400,
-              marginBottom: -2,
-            }}
-          >
-            {f.name}
-          </button>
-        ))}
+        {files.map((f, i) => {
+          const changed = edits[f.name] !== undefined && edits[f.name] !== f.content;
+          return (
+            <button
+              key={f.name}
+              onClick={() => { setActive(i); setMode('view'); }}
+              style={{
+                padding: '8px 16px', fontSize: 13, cursor: 'pointer',
+                border: 'none', borderBottom: i === active ? '2px solid #0066cc' : 'none',
+                background: i === active ? '#f0f7ff' : 'transparent',
+                color: i === active ? '#0066cc' : '#333',
+                fontWeight: i === active ? 600 : 400,
+                marginBottom: -2,
+                position: 'relative',
+              }}
+            >
+              {f.name}
+              {changed && (
+                <span style={{
+                  marginLeft: 6, fontSize: 10, background: '#f0ab00', color: '#1b1d21',
+                  borderRadius: 8, padding: '1px 6px', fontWeight: 700,
+                }}>M</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* 編集/表示トグル */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+      {/* モード切替ボタン */}
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginBottom: 8 }}>
         <button
-          onClick={() => setEditMode(m => !m)}
+          onClick={() => setMode('view')}
           style={{
             fontSize: 12, padding: '4px 12px', cursor: 'pointer',
             border: '1px solid #8a8d90', borderRadius: 4,
-            background: editMode ? '#0066cc' : '#fff',
-            color: editMode ? '#fff' : '#333',
+            background: mode === 'view' ? '#0066cc' : '#fff',
+            color: mode === 'view' ? '#fff' : '#333',
           }}
         >
-          {editMode ? t('import.viewMode') : t('import.editMode')}
+          {t('import.viewMode')}
+        </button>
+        <button
+          onClick={() => setMode('edit')}
+          style={{
+            fontSize: 12, padding: '4px 12px', cursor: 'pointer',
+            border: '1px solid #8a8d90', borderRadius: 4,
+            background: mode === 'edit' ? '#0066cc' : '#fff',
+            color: mode === 'edit' ? '#fff' : '#333',
+          }}
+        >
+          {t('import.editMode')}
+        </button>
+        <button
+          onClick={() => setMode('diff')}
+          disabled={!isEdited}
+          style={{
+            fontSize: 12, padding: '4px 12px', cursor: isEdited ? 'pointer' : 'not-allowed',
+            border: '1px solid #8a8d90', borderRadius: 4,
+            background: mode === 'diff' ? '#3e8635' : '#fff',
+            color: mode === 'diff' ? '#fff' : isEdited ? '#333' : '#8a8d90',
+          }}
+        >
+          {t('import.diffMode')}
         </button>
       </div>
 
       {/* コンテンツ */}
-      {editMode ? (
+      {mode === 'edit' ? (
         <textarea
           value={content}
           onChange={e => onEdit(current.name, e.target.value)}
@@ -410,6 +488,33 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
             borderRadius: 4, padding: 12, boxSizing: 'border-box', resize: 'vertical',
           }}
         />
+      ) : mode === 'diff' ? (
+        <div style={{
+          background: '#1b1d21', padding: 16, borderRadius: 4,
+          overflow: 'auto', maxHeight: 480, fontSize: 13, fontFamily: 'monospace',
+        }}>
+          {diffLines.map((line, idx) => (
+            <div key={idx} style={{
+              display: 'flex',
+              background: line.type === 'add' ? '#1a3a1a' : line.type === 'remove' ? '#3a1a1a' : 'transparent',
+              borderLeft: line.type === 'add' ? '3px solid #3e8635' : line.type === 'remove' ? '3px solid #c9190b' : '3px solid transparent',
+              paddingLeft: 8,
+            }}>
+              <span style={{
+                color: line.type === 'add' ? '#6a9f5a' : line.type === 'remove' ? '#c9190b' : '#6a6e73',
+                minWidth: 16, userSelect: 'none', marginRight: 8,
+              }}>
+                {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
+              </span>
+              <span style={{
+                color: line.type === 'add' ? '#b5e4a8' : line.type === 'remove' ? '#f1948a' : '#d4d4d4',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              }}>
+                {line.text}
+              </span>
+            </div>
+          ))}
+        </div>
       ) : (
         <pre style={{
           background: '#1b1d21', color: '#d4d4d4', padding: 16, borderRadius: 4,

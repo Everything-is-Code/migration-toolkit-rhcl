@@ -80,6 +80,16 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
     /^\s*backendRequest:/,
     /^\s*request:.*#/,
     /#\s*(connect_timeout|send_timeout|upstream)/,
+    // Anonymous Access
+    /^\s*anonymous:/,
+    /anonymous-credentials/,
+    /3scale-migration\/anonymous-access/,
+    /3scale-migration\/auth-type/,
+    /^\s*x-user-key:/,
+    /^\s*x-app-id:/,
+    /^\s*x-app-key:/,
+    /^\s*valueFrom:/,
+    /^\s*secretKeyRef:/,
   ];
 
   const renderHighlightedYaml = (content: string) => {
