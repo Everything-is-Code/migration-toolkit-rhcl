@@ -170,8 +170,12 @@ public class CompatibilityService {
     }
 
     private String scoreToLevel(int score) {
-        if (score >= 80) return "HIGH";
-        if (score >= 50) return "MEDIUM";
+        if (score >= 80) {
+            return "HIGH";
+        }
+        if (score >= 50) {
+            return "MEDIUM";
+        }
         return "LOW";
     }
 }

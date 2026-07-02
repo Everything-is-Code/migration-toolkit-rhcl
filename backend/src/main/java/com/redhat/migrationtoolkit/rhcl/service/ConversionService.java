@@ -246,17 +246,27 @@ metadata:
      *   send_timeout    → アノテーションに記録（Gateway API に直接対応フィールドなし）
      */
     private String buildTimeoutsBlock(ApiService service) {
-        if (service.policies == null) return "";
+        if (service.policies == null) {
+            return "";
+        }
         for (Policy p : service.policies) {
-            if (!"upstream_connection".equals(p.name)) continue;
-            if (!Boolean.TRUE.equals(p.enabled)) continue;
-            if (p.configuration == null) continue;
+            if (!"upstream_connection".equals(p.name)) {
+                continue;
+            }
+            if (!Boolean.TRUE.equals(p.enabled)) {
+                continue;
+            }
+            if (p.configuration == null) {
+                continue;
+            }
 
             Object connectRaw = p.configuration.get("connect_timeout");
             Object sendRaw    = p.configuration.get("send_timeout");
             Object readRaw    = p.configuration.get("read_timeout");
 
-            if (connectRaw == null && sendRaw == null && readRaw == null) return "";
+            if (connectRaw == null && sendRaw == null && readRaw == null) {
+                return "";
+            }
 
             StringBuilder block = new StringBuilder("      timeouts:\n");
             if (readRaw != null) {
@@ -278,13 +288,23 @@ metadata:
      * upstream_connection の send_timeout をアノテーションとして返す（HTTPRoute metadata に付与）。
      */
     private String buildUpstreamAnnotations(ApiService service) {
-        if (service.policies == null) return "";
+        if (service.policies == null) {
+            return "";
+        }
         for (Policy p : service.policies) {
-            if (!"upstream_connection".equals(p.name)) continue;
-            if (!Boolean.TRUE.equals(p.enabled)) continue;
-            if (p.configuration == null) continue;
+            if (!"upstream_connection".equals(p.name)) {
+                continue;
+            }
+            if (!Boolean.TRUE.equals(p.enabled)) {
+                continue;
+            }
+            if (p.configuration == null) {
+                continue;
+            }
             Object sendRaw = p.configuration.get("send_timeout");
-            if (sendRaw == null) return "";
+            if (sendRaw == null) {
+                return "";
+            }
             return """
   annotations:
     3scale-migration/upstream-send-timeout: "%ss"

@@ -172,7 +172,8 @@ public class ApplyController {
             restartAuthorino();
         }
 
-        saveHistory(source, namespace, request.packageName(), resourceResults, exportedYamls, successCount, failureCount);
+        saveHistory(source, namespace, request.packageName(),
+                resourceResults, exportedYamls, successCount, failureCount);
 
         boolean anySuccess = fileResults.stream().anyMatch(ApplyResult::success);
         boolean anyError   = fileResults.stream().anyMatch(r -> !r.success());

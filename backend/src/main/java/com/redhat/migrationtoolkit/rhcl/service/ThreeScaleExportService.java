@@ -89,13 +89,17 @@ public class ThreeScaleExportService {
             // Patterns commonly found in 3scale HTML pages
             List<Pattern> bodyPatterns = List.of(
                 // <meta name="3scale-version" content="2.16.0">
-                Pattern.compile("(?:name=[\"']3scale-version[\"']\\s+content=[\"']|content=[\"']\\s*(?:3scale\\s+)?)([\\d]+\\.[\\d]+(?:\\.[\\d]+)?)[\"']"),
+                Pattern.compile(
+                    "(?:name=[\"']3scale-version[\"']\\s+content=[\"']|content=[\"']\\s*(?:3scale\\s+)?)"
+                    + "([\\d]+\\.[\\d]+(?:\\.[\\d]+)?)[\"']"),
                 // <!-- 3scale 2.16.0 --> or <!-- version: 2.16.0 -->
                 Pattern.compile("<!--[^>]*(?:3scale|version)[^>]*?([2-9]\\.\\d+(?:\\.\\d+)?)[^>]*-->"),
                 // data-version="2.16.0" or data-3scale-version="2.16.0"
                 Pattern.compile("data-(?:3scale-)?version=[\"']([2-9]\\.\\d+(?:\\.\\d+)?)[\"']"),
                 // ThreeScale.version = "2.16" or window.version = "2.16"
-                Pattern.compile("(?:ThreeScale\\.version|threescale_version|THREESCALE_VERSION)\\s*[=:]\\s*[\"']([2-9]\\.\\d+(?:\\.\\d+)?)[\"']"),
+                Pattern.compile(
+                    "(?:ThreeScale\\.version|threescale_version|THREESCALE_VERSION)"
+                    + "\\s*[=:]\\s*[\"']([2-9]\\.\\d+(?:\\.\\d+)?)[\"']"),
                 // Generic: any "2.NN" or "2.NN.N" that appears near "3scale" within 100 chars
                 Pattern.compile("3[Ss]cale.{0,100}?([2-9]\\.\\d{1,2}(?:\\.\\d+)?)")
             );
@@ -257,14 +261,20 @@ public class ThreeScaleExportService {
             List<Backend> backends = new ArrayList<>();
             for (Map<String, Object> uw : usages) {
                 Map<String, Object> usage = (Map<String, Object>) uw.get("backend_usage");
-                if (usage == null) continue;
+                if (usage == null) {
+                    continue;
+                }
                 Object backendIdObj = usage.get("backend_id");
-                if (backendIdObj == null) continue;
+                if (backendIdObj == null) {
+                    continue;
+                }
                 String backendId = String.valueOf(backendIdObj);
                 try {
                     Map<String, Object> bResp = client.getBackend(backendId, accessToken);
                     Map<String, Object> b = (Map<String, Object>) bResp.get("backend_api");
-                    if (b == null) continue;
+                    if (b == null) {
+                        continue;
+                    }
                     Backend backend = new Backend();
                     backend.id = String.valueOf(b.get("id"));
                     backend.name = (String) b.get("name");
