@@ -13,7 +13,7 @@ import java.time.OffsetDateTime;
 public class AppSettingsEntity extends PanacheEntityBase {
 
     @Id
-    @Column(name = "\"key\"")
+    @Column(name = "settings_key")
     public String key;
 
     @Column(nullable = false, columnDefinition = "TEXT")
