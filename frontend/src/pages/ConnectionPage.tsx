@@ -22,7 +22,7 @@ import {
 } from '@patternfly/react-core';
 import { CheckCircleIcon, EyeIcon, EyeSlashIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import { connectionApi } from '../api/client';
+import { connectionApi, clusterApi } from '../api/client';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 
@@ -42,6 +42,22 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showToken, setShowToken] = useState(false);
+  const [suggestedUrl, setSuggestedUrl] = useState<string | null>(null);
+
+  const handleNamespaceChange = async (val: string) => {
+    setNamespace(val);
+    if (!url && val.trim()) {
+      try {
+        const res = await clusterApi.getDomain();
+        const domain = res.data.domain;
+        if (domain) {
+          setSuggestedUrl(`https://3scale-admin.${domain}`);
+        }
+      } catch {
+        // ignore — cluster domain unavailable
+      }
+    }
+  };
 
   const handleTest = async () => {
     setLoading(true);
@@ -160,11 +176,24 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 <TextInput
                   id="namespace"
                   value={namespace}
-                  onChange={(_e, val) => setNamespace(val)}
+                  onChange={(_e, val) => handleNamespaceChange(val)}
                   placeholder="default"
                   isRequired
                 />
               </FormGroup>
+              {suggestedUrl && !url && (
+                <Alert
+                  variant="info"
+                  isInline
+                  title={t('connection.suggestedUrlTitle')}
+                  style={{ marginTop: '-8px' }}
+                  actionLinks={
+                    <Button variant="link" onClick={() => { setUrl(suggestedUrl); setSuggestedUrl(null); }}>
+                      {t('connection.useSuggestedUrl', { url: suggestedUrl })}
+                    </Button>
+                  }
+                />
+              )}
               <ActionGroup>
                 <Button
                   variant="primary"

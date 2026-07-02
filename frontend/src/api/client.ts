@@ -68,6 +68,10 @@ export const settingsApi = {
   put: (key: string, value: string) => api.put(`/api/settings/${key}`, { value }),
 };
 
+export const clusterApi = {
+  getDomain: () => api.get<{ domain: string }>('/api/cluster/domain'),
+};
+
 export const historyApi = {
   list: (page = 0, size = 50) =>
     api.get('/api/history', { params: { page, size } }),
