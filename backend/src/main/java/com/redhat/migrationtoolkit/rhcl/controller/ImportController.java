@@ -48,7 +48,9 @@ public class ImportController {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 String name = entry.getName();
-                if (!entry.isDirectory() && (name.endsWith(".yaml") || name.endsWith(".yml"))) {
+                String lower = name.toLowerCase();
+                if (!entry.isDirectory() && (lower.endsWith(".yaml") || lower.endsWith(".yml")
+                        || lower.endsWith("readme.md") || lower.endsWith("readme.txt") || lower.equals("readme"))) {
                     String basename = name.contains("/") ? name.substring(name.lastIndexOf('/') + 1) : name;
                     byte[] content = zis.readAllBytes();
                     yamlFiles.put(basename, new String(content, StandardCharsets.UTF_8));
@@ -62,7 +64,9 @@ public class ImportController {
                     .build();
         }
 
-        if (yamlFiles.isEmpty()) {
+        boolean hasYaml = yamlFiles.keySet().stream()
+                .anyMatch(k -> k.endsWith(".yaml") || k.endsWith(".yml"));
+        if (!hasYaml) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(Map.of("error", messages.get("import.error.noYaml")))
                     .build();
