@@ -11,4 +11,6 @@ public class ConversionRequest {
     /** 外部バックエンドURL (例: https://foo.ecs.us-east-2.on.aws/api)。
      * 指定時は ServiceEntry + DestinationRule + Host rewrite を生成する。 */
     public String externalBackendUrl;
+    /** 互換性チェックで「対応済み」と見なすポリシー表示名のリスト。 */
+    public List<String> supportedPolicies;
 }

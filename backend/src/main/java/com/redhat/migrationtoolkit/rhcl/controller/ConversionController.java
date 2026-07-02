@@ -22,8 +22,10 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Path("/api/convert")
 @Produces(MediaType.APPLICATION_JSON)
@@ -67,7 +69,10 @@ public class ConversionController {
             try {
                 ApiService service = exportService.exportService(
                         request.threescaleUrl, request.accessToken, serviceId);
-                CompatibilityResult compatibility = compatibilityService.check(service, java.util.Set.of());
+                Set<String> supportedPolicies = (request.supportedPolicies != null)
+                        ? new HashSet<>(request.supportedPolicies)
+                        : Set.of();
+                CompatibilityResult compatibility = compatibilityService.check(service, supportedPolicies);
                 Map<String, String> yamlFiles = conversionService.convert(
                         service, namespace, request.externalBackendUrl);
 

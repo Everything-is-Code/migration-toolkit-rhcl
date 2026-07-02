@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { loadSupportedPolicies } from './SupportedPoliciesPage';
 import {
   PageSection,
   PageSectionVariants,
@@ -50,6 +51,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
     setProgress(10);
 
     try {
+      const supportedPolicies = await loadSupportedPolicies();
       const resp = await conversionApi.convert({
         threescaleUrl: appState.connection.url,
         accessToken: appState.connection.accessToken,
@@ -57,6 +59,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
         namespace: appState.namespace,
         serviceIds: appState.selectedServices.map(s => s.id),
         externalBackendUrl: isExternal && externalBackendUrl ? externalBackendUrl : undefined,
+        supportedPolicies,
       });
       setProgress(100);
       const convResults: ConversionResultItem[] = resp.data.results;

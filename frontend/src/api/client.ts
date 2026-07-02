@@ -29,6 +29,7 @@ export const conversionApi = {
     namespace: string;
     serviceIds: string[];
     externalBackendUrl?: string;
+    supportedPolicies?: string[];
   }) => api.post('/api/convert', data),
 };
 
