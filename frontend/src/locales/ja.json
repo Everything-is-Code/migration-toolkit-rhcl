@@ -103,7 +103,8 @@
     "warningTitle": "変換結果がありません",
     "goToConvert": "YAML生成へ戻る",
     "btnBack": "戻る",
-    "btnNext": "次へ: バリデーション"
+    "btnNext": "次へ: バリデーション",
+    "btnReset": "変更をリセット"
   },
   "validation": {
     "title": "バリデーション",

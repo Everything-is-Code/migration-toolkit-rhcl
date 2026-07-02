@@ -103,7 +103,8 @@
     "warningTitle": "No conversion results",
     "goToConvert": "Back to YAML generation",
     "btnBack": "Back",
-    "btnNext": "Next: Validation"
+    "btnNext": "Next: Validation",
+    "btnReset": "Reset changes"
   },
   "validation": {
     "title": "Validation",
