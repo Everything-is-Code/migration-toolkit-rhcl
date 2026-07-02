@@ -693,34 +693,6 @@ const ImportPageInner: React.FC = () => {
                         <Button variant="link" onClick={reset}>{t('import.btnUploadAnother')}</Button>
                       </FlexItem>
                     </Flex>
-                    {/* パッケージ名（ファイル読み込み後に表示・必須） */}
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 16, paddingTop: 16, borderTop: '1px solid #f0f0f0' }}>
-                      <label
-                        htmlFor="imp-pkg"
-                        style={{ fontSize: 14, fontWeight: 600, color: pkgNameError ? '#c9190b' : '#151515', whiteSpace: 'nowrap', paddingTop: 6 }}
-                      >
-                        {t('import.labelPackageName')}
-                        <span style={{ color: '#c9190b', marginLeft: 2 }}>*</span>
-                      </label>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 320 }}>
-                        <TextInput
-                          id="imp-pkg"
-                          value={packageName}
-                          onChange={(_e, v) => handlePackageNameChange(v)}
-                          placeholder={t('import.pkgNamePlaceholder')}
-                          style={{
-                            borderColor: pkgNameError ? '#c9190b' : undefined,
-                            outline: pkgNameError ? '1px solid #c9190b' : undefined,
-                          }}
-                          aria-invalid={pkgNameError}
-                        />
-                        {pkgNameError ? (
-                          <span style={{ fontSize: 12, color: '#c9190b' }}>{t('import.pkgNameRequired')}</span>
-                        ) : (
-                          <span style={{ fontSize: 12, color: '#6a6e73' }}>{t('import.pkgNameHint')}</span>
-                        )}
-                      </div>
-                    </div>
                   </CardBody>
                 </Card>
               </StackItem>
@@ -733,6 +705,27 @@ const ImportPageInner: React.FC = () => {
                       {t('import.namespaceSection')}
                     </Title>
                     <Form isHorizontal>
+                      <FormGroup label={<>{t('import.labelPackageName')}<span style={{ color: '#c9190b', marginLeft: 2 }}>*</span></>} fieldId="imp-pkg">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <TextInput
+                            id="imp-pkg"
+                            value={packageName}
+                            onChange={(_e, v) => handlePackageNameChange(v)}
+                            placeholder={t('import.pkgNamePlaceholder')}
+                            style={{
+                              width: 260,
+                              borderColor: pkgNameError ? '#c9190b' : undefined,
+                              outline: pkgNameError ? '1px solid #c9190b' : undefined,
+                            }}
+                            aria-invalid={pkgNameError}
+                          />
+                          {pkgNameError ? (
+                            <span style={{ fontSize: 12, color: '#c9190b' }}>{t('import.pkgNameRequired')}</span>
+                          ) : (
+                            <span style={{ fontSize: 12, color: '#6a6e73' }}>{t('import.pkgNameHint')}</span>
+                          )}
+                        </div>
+                      </FormGroup>
                       <FormGroup label="Namespace" fieldId="imp-ns">
                         <Flex>
                           <FlexItem>
