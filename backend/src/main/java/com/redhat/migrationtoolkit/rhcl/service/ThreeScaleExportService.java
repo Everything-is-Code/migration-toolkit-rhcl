@@ -13,10 +13,17 @@ import org.eclipse.microprofile.rest.client.RestClientBuilder;
 import org.jboss.logging.Logger;
 
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class ThreeScaleExportService {
@@ -31,6 +38,48 @@ public class ThreeScaleExportService {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * Attempts to detect the 3scale version from response headers of /admin/api/account.json.
+     * Returns null if version cannot be determined.
+     */
+    public String detectVersion(String url, String accessToken) {
+        try {
+            String accountUrl = url.replaceAll("/+$", "") + "/admin/api/account.json?access_token=" + accessToken;
+            HttpClient httpClient = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(5))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .build();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(new URI(accountUrl))
+                    .timeout(Duration.ofSeconds(5))
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            // Check known version headers
+            Pattern versionPattern = Pattern.compile("(\\d+\\.\\d+(?:\\.\\d+)?)");
+            for (String header : List.of("x-3scale-version", "x-powered-by", "server", "via")) {
+                Optional<String> value = response.headers().firstValue(header);
+                if (value.isPresent()) {
+                    Matcher m = versionPattern.matcher(value.get());
+                    if (m.find()) {
+                        String candidate = m.group(1);
+                        // filter out versions that are clearly not 3scale (e.g. "1.1" for HTTP)
+                        String[] parts = candidate.split("\\.");
+                        if (parts.length >= 2 && Integer.parseInt(parts[0]) >= 2) {
+                            LOG.infof("Detected 3scale version from header '%s': %s", header, candidate);
+                            return candidate;
+                        }
+                    }
+                }
+            }
+            LOG.info("Could not detect 3scale version from response headers");
+        } catch (Exception e) {
+            LOG.warnf("Failed to detect 3scale version: %s", e.getMessage());
+        }
+        return null;
     }
 
     public List<ApiService> exportServices(String url, String accessToken) {

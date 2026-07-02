@@ -66,11 +66,16 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     setError(null);
     setSuccess(false);
     try {
-      await connectionApi.test({ url, accessToken, tenant });
+      const resp = await connectionApi.test({ url, accessToken, tenant });
+      const detectedVersion: string | undefined = (resp.data as any)?.detectedVersion;
+      const resolvedVersion = detectedVersion || threescaleVersion;
+      if (detectedVersion) {
+        setThreescaleVersion(detectedVersion);
+      }
       setSuccess(true);
       setAppState(prev => ({
         ...prev,
-        connection: { url, accessToken, tenant, threescaleVersion, connected: true },
+        connection: { url, accessToken, tenant, threescaleVersion: resolvedVersion, connected: true },
         namespace,
       }));
     } catch (e: any) {

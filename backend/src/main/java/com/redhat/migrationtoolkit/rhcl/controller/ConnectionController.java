@@ -40,8 +40,14 @@ public class ConnectionController {
 
         boolean connected = exportService.testConnection(request);
         if (connected) {
-            return Response.ok(
-                    Map.of("success", true, "message", "Successfully connected to 3scale")).build();
+            String detectedVersion = exportService.detectVersion(request.url, request.accessToken);
+            java.util.Map<String, Object> body = new java.util.HashMap<>();
+            body.put("success", true);
+            body.put("message", "Successfully connected to 3scale");
+            if (detectedVersion != null) {
+                body.put("detectedVersion", detectedVersion);
+            }
+            return Response.ok(body).build();
         } else {
             return Response.status(Response.Status.BAD_GATEWAY)
                     .entity(Map.of("success", false,

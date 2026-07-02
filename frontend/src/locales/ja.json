@@ -39,7 +39,7 @@
     "btnNext": "次へ: API一覧取得",
     "infoTitle": "接続情報",
     "labelVersion": "3scale バージョン",
-    "versionHelper": "3scale のバージョンを入力してください（Version 2.16 以上が必要）",
+    "versionHelper": "3scale のバージョン（Version 2.16 以上が必要）。接続テスト時に自動取得を試みます。",
     "errorVersionTooLow": "3scale バージョン {{version}} はサポートされていません。Version 2.16 以上が必要です。",
     "errorDefault": "接続に失敗しました。URLとアクセストークンを確認してください。"
   },
