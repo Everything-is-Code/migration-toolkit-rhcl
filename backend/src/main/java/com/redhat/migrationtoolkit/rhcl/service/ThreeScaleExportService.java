@@ -58,15 +58,15 @@ public class ThreeScaleExportService {
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            // Check known version headers
             Pattern versionPattern = Pattern.compile("(\\d+\\.\\d+(?:\\.\\d+)?)");
+
+            // 1. Check known version response headers
             for (String header : List.of("x-3scale-version", "x-powered-by", "server", "via")) {
                 Optional<String> value = response.headers().firstValue(header);
                 if (value.isPresent()) {
                     Matcher m = versionPattern.matcher(value.get());
                     if (m.find()) {
                         String candidate = m.group(1);
-                        // filter out versions that are clearly not 3scale (e.g. "1.1" for HTTP)
                         String[] parts = candidate.split("\\.");
                         if (parts.length >= 2 && Integer.parseInt(parts[0]) >= 2) {
                             LOG.infof("Detected 3scale version from header '%s': %s", header, candidate);
@@ -75,7 +75,44 @@ public class ThreeScaleExportService {
                     }
                 }
             }
-            LOG.info("Could not detect 3scale version from response headers");
+
+            // 2. Parse HTML body from the admin dashboard for embedded version strings
+            String dashboardUrl = url.replaceAll("/+$", "") + "/p/admin/dashboard";
+            HttpRequest dashRequest = HttpRequest.newBuilder()
+                    .uri(new URI(dashboardUrl + "?access_token=" + accessToken))
+                    .timeout(Duration.ofSeconds(8))
+                    .GET()
+                    .build();
+            HttpResponse<String> dashResponse = httpClient.send(dashRequest, HttpResponse.BodyHandlers.ofString());
+            String body = dashResponse.body();
+
+            // Patterns commonly found in 3scale HTML pages
+            List<Pattern> bodyPatterns = List.of(
+                // <meta name="3scale-version" content="2.16.0">
+                Pattern.compile("(?:name=[\"']3scale-version[\"']\\s+content=[\"']|content=[\"']\\s*(?:3scale\\s+)?)([\\d]+\\.[\\d]+(?:\\.[\\d]+)?)[\"']"),
+                // <!-- 3scale 2.16.0 --> or <!-- version: 2.16.0 -->
+                Pattern.compile("<!--[^>]*(?:3scale|version)[^>]*?([2-9]\\.\\d+(?:\\.\\d+)?)[^>]*-->"),
+                // data-version="2.16.0" or data-3scale-version="2.16.0"
+                Pattern.compile("data-(?:3scale-)?version=[\"']([2-9]\\.\\d+(?:\\.\\d+)?)[\"']"),
+                // ThreeScale.version = "2.16" or window.version = "2.16"
+                Pattern.compile("(?:ThreeScale\\.version|threescale_version|THREESCALE_VERSION)\\s*[=:]\\s*[\"']([2-9]\\.\\d+(?:\\.\\d+)?)[\"']"),
+                // Generic: any "2.NN" or "2.NN.N" that appears near "3scale" within 100 chars
+                Pattern.compile("3[Ss]cale.{0,100}?([2-9]\\.\\d{1,2}(?:\\.\\d+)?)")
+            );
+
+            for (Pattern p : bodyPatterns) {
+                Matcher m = p.matcher(body);
+                if (m.find()) {
+                    String candidate = m.group(1);
+                    String[] parts = candidate.split("\\.");
+                    if (parts.length >= 2 && Integer.parseInt(parts[0]) >= 2) {
+                        LOG.infof("Detected 3scale version from HTML body: %s", candidate);
+                        return candidate;
+                    }
+                }
+            }
+
+            LOG.info("Could not detect 3scale version from headers or HTML body");
         } catch (Exception e) {
             LOG.warnf("Failed to detect 3scale version: %s", e.getMessage());
         }

@@ -134,12 +134,10 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     }
     return true;
   };
-  if (!isVerOk(ver)) {
+  if (ver && !isVerOk(ver)) {
     return (
       <PageSection>
-        <Alert variant="warning" title={ver
-          ? t('connection.errorVersionTooLow', { version: ver })
-          : t('connection.warnVersionUnknown')}>
+        <Alert variant="warning" title={t('connection.errorVersionTooLow', { version: ver })}>
           <Button variant="link" onClick={() => navigate('/')}>{t('apiSelection.goToConnection')}</Button>
         </Alert>
       </PageSection>

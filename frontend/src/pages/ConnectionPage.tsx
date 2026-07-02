@@ -116,6 +116,11 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   ? t('connection.errorVersionTooLow', { version: detectedVersion })
                   : t('connection.warnVersionUnknown')}
                 style={{ marginBottom: '16px' }}
+                actionLinks={!detectedVersion && (
+                  <Button variant="link" onClick={() => navigate('/services')}>
+                    {t('connection.goToApiListAnyway')}
+                  </Button>
+                )}
               />
             )}
             <Form>
