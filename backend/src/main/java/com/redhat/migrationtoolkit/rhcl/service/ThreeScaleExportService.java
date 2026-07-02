@@ -10,6 +10,7 @@ import com.redhat.migrationtoolkit.rhcl.model.Metric;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.rest.client.RestClientBuilder;
+import org.jboss.logging.Logger;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -19,6 +20,8 @@ import java.util.Map;
 
 @ApplicationScoped
 public class ThreeScaleExportService {
+
+    private static final Logger LOG = Logger.getLogger(ThreeScaleExportService.class);
 
     public boolean testConnection(ConnectionRequest req) {
         try {
@@ -109,6 +112,7 @@ public class ThreeScaleExportService {
             }
             return policies;
         } catch (Exception e) {
+            LOG.warnf("Failed to fetch policies for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }

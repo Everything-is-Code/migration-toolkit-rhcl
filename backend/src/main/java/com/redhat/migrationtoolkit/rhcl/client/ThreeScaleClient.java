@@ -37,7 +37,7 @@ public interface ThreeScaleClient {
                                         @QueryParam("access_token") String accessToken);
 
     @GET
-    @Path("/admin/api/services/{serviceId}/policies.json")
+    @Path("/admin/api/services/{serviceId}/proxy/policies.json")
     Map<String, Object> getPolicies(@PathParam("serviceId") String serviceId,
                                      @QueryParam("access_token") String accessToken);
 

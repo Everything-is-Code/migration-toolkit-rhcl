@@ -35,26 +35,32 @@ interface Props {
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;
 }
 
+const renderConfigValue = (v: unknown): string => {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+};
+
 const PolicyPanel: React.FC<{ policies: Policy[] }> = ({ policies }) => {
-  const enabled = policies.filter(p => p.enabled);
-  if (enabled.length === 0) return null;
+  if (policies.length === 0) return null;
   return (
     <div style={{ marginTop: 10, padding: '10px 14px', background: '#f9f9f9', borderRadius: 4, border: '1px solid #e8e8e8' }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: '#6a6e73', marginBottom: 6 }}>ポリシー定義</div>
-      {enabled.map((p, i) => (
-        <div key={i} style={{ marginBottom: i < enabled.length - 1 ? 8 : 0 }}>
+      {policies.map((p, i) => (
+        <div key={i} style={{ marginBottom: i < policies.length - 1 ? 8 : 0, opacity: p.enabled ? 1 : 0.45 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
             <code style={{ fontSize: 12, background: '#fff', border: '1px solid #d2d2d2', borderRadius: 3, padding: '1px 5px' }}>
               {p.name}
             </code>
-            {p.version && <span style={{ fontSize: 11, color: '#8a8d90' }}>v{p.version}</span>}
+            {p.version && <span style={{ fontSize: 11, color: '#8a8d90' }}>{p.version}</span>}
+            {!p.enabled && <span style={{ fontSize: 11, color: '#8a8d90' }}>(無効)</span>}
           </div>
           {p.configuration && Object.keys(p.configuration).length > 0 && (
             <div style={{ paddingLeft: 12 }}>
               {Object.entries(p.configuration).map(([k, v]) => (
                 <div key={k} style={{ fontSize: 12, color: '#3c3f42', lineHeight: 1.6 }}>
                   <span style={{ color: '#6a6e73' }}>{k}:</span>{' '}
-                  <span style={{ fontFamily: 'monospace' }}>{String(v)}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{renderConfigValue(v)}</span>
                 </div>
               ))}
             </div>
@@ -173,7 +179,8 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               >
                 {filtered.map(service => {
                   const isSelected = selectedId === service.id;
-                  const enabledPolicies = (service.policies ?? []).filter(p => p.enabled);
+                  const allPolicies = service.policies ?? [];
+                  const enabledPolicies = allPolicies.filter(p => p.enabled);
                   return (
                     <DataListItem
                       key={service.id}
@@ -207,8 +214,8 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                                 <br />
                                 <small style={{ color: '#6a6e73' }}>{service.systemName}</small>
                               </label>
-                              {isSelected && enabledPolicies.length > 0 && (
-                                <PolicyPanel policies={enabledPolicies} />
+                              {isSelected && allPolicies.length > 0 && (
+                                <PolicyPanel policies={allPolicies} />
                               )}
                             </DataListCell>,
                             <DataListCell key="state">
