@@ -13,7 +13,8 @@
     "history": "変換履歴",
     "connected": "接続済み: {{url}}",
     "appTitle": "Migration Toolkit for Red Hat Connectivity Link",
-    "settings": "設定"
+    "settings": "設定",
+    "settingsGeneral": "共通設定"
   },
   "connection": {
     "title": "3scale 接続設定",

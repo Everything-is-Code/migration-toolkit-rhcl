@@ -220,6 +220,7 @@ const AppContent: React.FC = () => {
   const [toolsExpanded, setToolsExpanded] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
+  const [settingsExpanded, setSettingsExpanded] = useState(() => location.pathname.startsWith('/settings'));
 
   const [appState, setAppState] = useState<AppState>({
     connection: { url: '', accessToken: '', tenant: '', connected: false },
@@ -239,13 +240,17 @@ const AppContent: React.FC = () => {
   ];
 
   const toolItems = [
-    { path: '/import',   label: t('nav.import'),    icon: <UploadIcon /> },
-    { path: '/history',  label: t('nav.history'),   icon: <HistoryIcon /> },
-    { path: '/settings', label: t('nav.settings'),  icon: <CogIcon /> },
+    { path: '/import',  label: t('nav.import'),  icon: <UploadIcon /> },
+    { path: '/history', label: t('nav.history'), icon: <HistoryIcon /> },
+  ];
+
+  const settingsItems = [
+    { path: '/settings', label: t('nav.settingsGeneral'), icon: <CogIcon /> },
   ];
 
   const isWorkflowActive = workflowItems.some(i => i.path === location.pathname);
   const isToolsActive = toolItems.some(i => i.path === location.pathname);
+  const isSettingsActive = settingsItems.some(i => i.path === location.pathname);
 
   const sidebar = (
     <PageSidebar isSidebarOpen={isSidebarOpen}>
@@ -278,6 +283,26 @@ const AppContent: React.FC = () => {
             isActive={isToolsActive}
           >
             {toolItems.map(item => (
+              <NavItem
+                key={item.path}
+                isActive={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ width: '16px', flexShrink: 0, opacity: 0.85 }}>{item.icon}</span>
+                  {item.label}
+                </span>
+              </NavItem>
+            ))}
+          </NavExpandable>
+
+          <NavExpandable
+            title={t('nav.settings')}
+            isExpanded={settingsExpanded}
+            onExpand={(_e, val) => setSettingsExpanded(val)}
+            isActive={isSettingsActive}
+          >
+            {settingsItems.map(item => (
               <NavItem
                 key={item.path}
                 isActive={location.pathname === item.path}

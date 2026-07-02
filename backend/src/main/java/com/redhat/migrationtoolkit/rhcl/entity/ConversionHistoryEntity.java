@@ -7,7 +7,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 @Entity
 @Table(name = "conversion_history")
@@ -60,7 +61,7 @@ public class ConversionHistoryEntity extends PanacheEntity {
     public String packageName;
 
     @Column(name = "created_at", nullable = false)
-    public LocalDateTime createdAt = LocalDateTime.now();
+    public OffsetDateTime createdAt = OffsetDateTime.now(ZoneOffset.UTC);
 
     public static ConversionHistoryEntity findLatestByServiceId(String serviceId) {
         return find("serviceId = ?1 ORDER BY createdAt DESC", serviceId).firstResult();
