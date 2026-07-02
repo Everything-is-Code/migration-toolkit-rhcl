@@ -33,9 +33,11 @@ import { ConversionHistory, FailureDetail } from '../api/types';
 
 const formatDate = (iso: string): string => {
   try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     return new Date(iso).toLocaleString(undefined, {
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', second: '2-digit',
+      timeZone,
     });
   } catch { return iso; }
 };
@@ -285,7 +287,7 @@ const HistoryPage: React.FC = () => {
 
                               {/* 実行日時 */}
                               <td style={tdS}>
-                                <span style={{ fontFamily: 'monospace', fontSize: 14, whiteSpace: 'nowrap' }}>
+                                <span style={{ fontSize: 14, whiteSpace: 'nowrap' }}>
                                   {formatDate(entry.createdAt)}
                                 </span>
                               </td>
