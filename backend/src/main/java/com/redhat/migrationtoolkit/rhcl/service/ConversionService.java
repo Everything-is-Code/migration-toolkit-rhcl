@@ -521,28 +521,24 @@ spec:
         boolean enableJson = Boolean.TRUE.equals(cfg.get("enable_json_logs"));
         boolean enableAccess = !Boolean.FALSE.equals(cfg.get("enable_access_logs"));
 
-        // json_object_config → Istio format.labels（Envoy変数にマッピング）
-        // String / List どちらの形式で来ても処理する
-        StringBuilder labelsBuilder = new StringBuilder();
+        // Telemetry v1 API は format フィールドをスキーマに持たないため出力しない。
+        // json_object_config のフィールド情報は annotations に記録し、
+        // MeshConfig/EnvoyFilter での手動設定の参考情報とする。
         java.util.List<Map<String, Object>> jsonCfg = parseJsonObjectConfig(cfg.get("json_object_config"));
+        StringBuilder jsonFieldsAnnotation = new StringBuilder();
         for (Map<String, Object> entry : jsonCfg) {
             String key        = String.valueOf(entry.getOrDefault("key", ""));
             String value      = String.valueOf(entry.getOrDefault("value", ""));
             String envoyValue = toEnvoyVar(value);
-            labelsBuilder.append(String.format("          %s: \"%s\"%n", key, envoyValue));
+            if (jsonFieldsAnnotation.length() > 0) {
+                jsonFieldsAnnotation.append(", ");
+            }
+            jsonFieldsAnnotation.append(key).append("=").append(envoyValue);
         }
 
-        String formatSection = labelsBuilder.length() > 0
-                ? "      format:\n        labels:\n" + labelsBuilder
+        String jsonFieldsLine = jsonFieldsAnnotation.length() > 0
+                ? String.format("    3scale-migration/log-fields: \"%s\"%n", jsonFieldsAnnotation)
                 : "";
-
-        // enable_access_logs の値に関わらず、Istio では format.labels を有効にして出力する。
-        // 3scale の enable_access_logs: false はAPICastのアクセスログ制御であり、
-        // Connectivity Link では Istio Telemetry で独立して管理するため。
-        String accessLoggingSection = "  accessLogging:\n"
-                + "    - providers:\n"
-                + "        - name: envoy\n"
-                + formatSection;
 
         return """
 apiVersion: telemetry.istio.io/v1
@@ -557,13 +553,17 @@ metadata:
     3scale-migration/source: logging
     3scale-migration/enable-json: "%s"
     3scale-migration/enable-access: "%s"
-spec:
+%sspec:
   selector:
     matchLabels:
       app: %s
-%s""".formatted(name, namespace, name,
+  accessLogging:
+    - providers:
+        - name: envoy
+""".formatted(name, namespace, name,
                 enableJson, enableAccess,
-                name, accessLoggingSection);
+                jsonFieldsLine,
+                name);
     }
 
     private Policy findAnonymousPolicy(ApiService service) {
