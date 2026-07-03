@@ -109,6 +109,16 @@ public class CompatibilityService {
             String systemName = policy.name != null ? policy.name.toLowerCase() : "";
             String displayName = POLICY_DISPLAY_NAMES.getOrDefault(systemName, policy.name);
 
+            // Logging ポリシーで enable_json_logs=true かつ json_object_config に
+            // 1件以上設定がある場合、対応ポリシーリストに含まれていても WARNING にする。
+            // Envoy 変数へのマッピング内容を目視確認してほしいため。
+            if ("logging".equals(systemName) && hasJsonObjectConfig(policy)) {
+                items.add(new CompatibilityItem(displayName, "WARNING",
+                        "JSON log format (json_object_config) will be mapped to Istio Telemetry format.labels"
+                        + " — please verify the generated telemetry.yaml"));
+                continue;
+            }
+
             if (supportedPolicies.contains(displayName)) {
                 items.add(new CompatibilityItem(displayName, "SUPPORTED",
                         "Policy is in the supported policy list"));
@@ -117,6 +127,24 @@ public class CompatibilityService {
                         "Policy is not in the supported policy list — manual review required"));
             }
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean hasJsonObjectConfig(Policy policy) {
+        if (policy.configuration == null) {
+            return false;
+        }
+        if (!Boolean.TRUE.equals(policy.configuration.get("enable_json_logs"))) {
+            return false;
+        }
+        Object raw = policy.configuration.get("json_object_config");
+        if (raw instanceof java.util.List<?> list) {
+            return !list.isEmpty();
+        }
+        if (raw instanceof String str) {
+            return !str.isBlank() && !str.equals("[]");
+        }
+        return false;
     }
 
     private void checkMappingRules(ApiService service, List<CompatibilityItem> items) {
