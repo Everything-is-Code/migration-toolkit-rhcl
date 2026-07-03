@@ -503,11 +503,6 @@ spec:
             formatBuilder.append("}%n");
         }
 
-        String disabledSection = enableAccess ? "" : """
-      filter:
-        expression: "false"
-""";
-
         String formatSection = (enableJson && formatBuilder.length() > 0)
                 ? String.format("""
       filter:
