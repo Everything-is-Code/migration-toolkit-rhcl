@@ -498,53 +498,48 @@ spec:
     }
 
     @SuppressWarnings("unchecked")
+    private java.util.List<Map<String, Object>> parseJsonObjectConfig(Object raw) {
+        if (raw instanceof java.util.List) {
+            return (java.util.List<Map<String, Object>>) raw;
+        }
+        if (raw instanceof String str && !str.isBlank()) {
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+                return om.readValue(str, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+            } catch (Exception e) {
+                LOG.warnf("Failed to parse json_object_config string: %s", e.getMessage());
+            }
+        }
+        return java.util.List.of();
+    }
+
     private String generateTelemetry(String name, String namespace, Policy policy) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
         boolean enableJson = Boolean.TRUE.equals(cfg.get("enable_json_logs"));
         boolean enableAccess = !Boolean.FALSE.equals(cfg.get("enable_access_logs"));
 
         // json_object_config → Istio format.labels（Envoy変数にマッピング）
+        // String / List どちらの形式で来ても処理する
         StringBuilder labelsBuilder = new StringBuilder();
-        Object rawJsonCfg = cfg.get("json_object_config");
-        if (enableJson && rawJsonCfg instanceof java.util.List) {
-            java.util.List<Map<String, Object>> jsonCfg = (java.util.List<Map<String, Object>>) rawJsonCfg;
-            for (Map<String, Object> entry : jsonCfg) {
-                String key   = String.valueOf(entry.getOrDefault("key", ""));
-                String value = String.valueOf(entry.getOrDefault("value", ""));
-                String envoyValue = toEnvoyVar(value);
-                labelsBuilder.append(String.format("        %s: \"%s\"%n", key, envoyValue));
-            }
+        java.util.List<Map<String, Object>> jsonCfg = parseJsonObjectConfig(cfg.get("json_object_config"));
+        for (Map<String, Object> entry : jsonCfg) {
+            String key        = String.valueOf(entry.getOrDefault("key", ""));
+            String value      = String.valueOf(entry.getOrDefault("value", ""));
+            String envoyValue = toEnvoyVar(value);
+            labelsBuilder.append(String.format("        %s: \"%s\"%n", key, envoyValue));
         }
 
         String formatSection = labelsBuilder.length() > 0
                 ? "      format:\n        labels:\n" + labelsBuilder
                 : "";
 
-        // enable_access_logs: false でもフォーマット定義は出力する
-        // (Istio 側ではアクセスログを有効化し、3scale のフォーマット設定を引き継ぐ)
-        String accessLoggingSection;
-        if (enableAccess) {
-            accessLoggingSection = "  accessLogging:\n"
-                    + "    - providers:\n"
-                    + "        - name: envoy\n"
-                    + formatSection;
-        } else {
-            // 3scale で無効化されていたが、ログフォーマット定義は保持して
-            // コメントで無効化の意図を明示する
-            accessLoggingSection = "  # enable_access_logs was false in 3scale — access logging disabled\n"
-                    + "  accessLogging:\n"
-                    + "    - providers:\n"
-                    + "        - name: envoy\n"
-                    + "      filter:\n"
-                    + "        expression: \"false\"\n"
-                    + (formatSection.isEmpty() ? "" :
-                        "      # Format preserved from 3scale json_object_config (uncomment to enable):\n"
-                        + "      # format:\n"
-                        + "      #   labels:\n"
-                        + labelsBuilder.toString().lines()
-                            .map(l -> "      #   " + l.stripLeading())
-                            .collect(java.util.stream.Collectors.joining("\n")) + "\n");
-        }
+        // enable_access_logs の値に関わらず、Istio では format.labels を有効にして出力する。
+        // 3scale の enable_access_logs: false はAPICastのアクセスログ制御であり、
+        // Connectivity Link では Istio Telemetry で独立して管理するため。
+        String accessLoggingSection = "  accessLogging:\n"
+                + "    - providers:\n"
+                + "        - name: envoy\n"
+                + formatSection;
 
         return """
 apiVersion: telemetry.istio.io/v1
