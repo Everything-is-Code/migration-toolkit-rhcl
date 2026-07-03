@@ -4,6 +4,7 @@ import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.jboss.logging.Logger;
 
 import java.security.SecureRandom;
 import java.util.LinkedHashMap;
@@ -11,6 +12,8 @@ import java.util.Map;
 
 @ApplicationScoped
 public class ConversionService {
+
+    private static final Logger LOG = Logger.getLogger(ConversionService.class);
 
     /**
      * バックエンドの種別を表す列挙型。
