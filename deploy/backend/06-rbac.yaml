@@ -11,7 +11,8 @@ metadata:
   name: migration-tool-applier
 rules:
   - apiGroups: ["", "apps", "networking.k8s.io", "route.openshift.io",
-                "kuadrant.io", "gateway.networking.k8s.io"]
+                "kuadrant.io", "gateway.networking.k8s.io",
+                "telemetry.istio.io"]
     resources: ["*"]
     verbs: ["get", "list", "create", "update", "patch", "apply"]
   - apiGroups: ["config.openshift.io"]

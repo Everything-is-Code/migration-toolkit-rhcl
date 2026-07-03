@@ -98,6 +98,12 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
     // Logging / Telemetry
     /kind:\s*Telemetry/,
     /^\s*accessLogging:/,
+    /^\s*format:/,
+    /^\s*labels:/,
+    /^\s*method:/,
+    /^\s*uri:/,
+    /^\s*status:/,
+    /%REQ\(|%RESPONSE_CODE%|%QUERY_STRING%/,
     /3scale-migration\/source/,
     /3scale-migration\/enable-json/,
     /3scale-migration\/enable-access/,
