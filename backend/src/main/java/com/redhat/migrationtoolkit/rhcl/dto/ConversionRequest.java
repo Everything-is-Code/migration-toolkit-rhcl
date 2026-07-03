@@ -13,4 +13,8 @@ public class ConversionRequest {
     public String externalBackendUrl;
     /** 互換性チェックで「対応済み」と見なすポリシー表示名のリスト。 */
     public List<String> supportedPolicies;
+    /** Logging ポリシーの適用先: "gateway"（デフォルト）または "workload" */
+    public String loggingTarget;
+    /** Anonymous Access ポリシーの targetRef: "httproute"（デフォルト）または "gateway" */
+    public String anonymousTarget;
 }

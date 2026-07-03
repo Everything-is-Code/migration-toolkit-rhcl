@@ -22,6 +22,7 @@ import {
   TextInput,
   FormGroup,
   Form,
+  Radio,
 } from '@patternfly/react-core';
 import { CheckCircleIcon, TimesCircleIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
@@ -44,6 +45,8 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [progress, setProgress] = useState(0);
   const [isExternal, setIsExternal] = useState(false);
   const [externalBackendUrl, setExternalBackendUrl] = useState('');
+  const [loggingTarget, setLoggingTarget] = useState<'gateway' | 'workload'>('gateway');
+  const [anonymousTarget, setAnonymousTarget] = useState<'httproute' | 'gateway'>('httproute');
 
   const handleConvert = async () => {
     setLoading(true);
@@ -60,6 +63,8 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
         serviceIds: appState.selectedServices.map(s => s.id),
         externalBackendUrl: isExternal && externalBackendUrl ? externalBackendUrl : undefined,
         supportedPolicies,
+        loggingTarget,
+        anonymousTarget,
       });
       setProgress(100);
       const convResults: ConversionResultItem[] = resp.data.results;
@@ -169,6 +174,61 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       </>
                     )}
                   </Form>
+                </div>
+
+                {/* ポリシー設定フォーム */}
+                <div style={{ marginTop: '16px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
+                  <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '16px', color: '#004080' }}>
+                    {t('conversion.policySettings', 'ポリシー設定')}
+                  </div>
+
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
+                      {t('conversion.loggingTarget', 'Logging ポリシー適用先')}
+                    </div>
+                    <div style={{ display: 'flex', gap: '24px' }}>
+                      <Radio
+                        id="logging-target-gateway"
+                        name="loggingTarget"
+                        label={t('conversion.loggingTargetGateway', 'Gateway Pod（推奨）')}
+                        isChecked={loggingTarget === 'gateway'}
+                        onChange={() => setLoggingTarget('gateway')}
+                        description={t('conversion.loggingTargetGatewayDesc', 'context: GATEWAY / istio.io/gateway-name selector')}
+                      />
+                      <Radio
+                        id="logging-target-workload"
+                        name="loggingTarget"
+                        label={t('conversion.loggingTargetWorkload', 'Workload Pod')}
+                        isChecked={loggingTarget === 'workload'}
+                        onChange={() => setLoggingTarget('workload')}
+                        description={t('conversion.loggingTargetWorkloadDesc', 'context: SIDECAR_INBOUND / app selector')}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
+                      {t('conversion.anonymousTarget', 'Anonymous Access ポリシー適用先')}
+                    </div>
+                    <div style={{ display: 'flex', gap: '24px' }}>
+                      <Radio
+                        id="anonymous-target-gateway"
+                        name="anonymousTarget"
+                        label={t('conversion.anonymousTargetGateway', 'Gateway')}
+                        isChecked={anonymousTarget === 'gateway'}
+                        onChange={() => setAnonymousTarget('gateway')}
+                        description={t('conversion.anonymousTargetGatewayDesc', 'targetRef.kind: Gateway — Gateway 経由の全ルートに適用')}
+                      />
+                      <Radio
+                        id="anonymous-target-httproute"
+                        name="anonymousTarget"
+                        label={t('conversion.anonymousTargetHttpRoute', 'HTTPRoute（推奨）')}
+                        isChecked={anonymousTarget === 'httproute'}
+                        onChange={() => setAnonymousTarget('httproute')}
+                        description={t('conversion.anonymousTargetHttpRouteDesc', 'targetRef.kind: HTTPRoute — 特定ルートのみに適用')}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {error && <Alert variant="danger" title={error} style={{ marginTop: '16px' }} />}

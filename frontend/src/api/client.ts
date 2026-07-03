@@ -30,6 +30,8 @@ export const conversionApi = {
     serviceIds: string[];
     externalBackendUrl?: string;
     supportedPolicies?: string[];
+    loggingTarget?: 'gateway' | 'workload';
+    anonymousTarget?: 'httproute' | 'gateway';
   }) => api.post('/api/convert', data),
 };
 

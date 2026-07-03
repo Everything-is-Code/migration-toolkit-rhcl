@@ -23,10 +23,20 @@ public class ConversionService {
     enum BackendType { INTERNAL, EXTERNAL }
 
     public Map<String, String> convert(ApiService service, String namespace) {
-        return convert(service, namespace, null);
+        return convert(service, namespace, null, "gateway", "httproute");
     }
 
     public Map<String, String> convert(ApiService service, String namespace, String backendUrl) {
+        return convert(service, namespace, backendUrl, "gateway", "httproute");
+    }
+
+    public Map<String, String> convert(ApiService service, String namespace,
+            String backendUrl, String loggingTarget) {
+        return convert(service, namespace, backendUrl, loggingTarget, "httproute");
+    }
+
+    public Map<String, String> convert(ApiService service, String namespace,
+            String backendUrl, String loggingTarget, String anonymousTarget) {
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
@@ -36,10 +46,10 @@ public class ConversionService {
                 ? extractInternalService(backendUrl, name) : null;
         int internalPort = backendType == BackendType.INTERNAL ? extractPort(backendUrl, 8080) : 8080;
 
-        files.put("gateway.yaml",    generateGateway(name, namespace));
+        files.put("gateway.yaml", generateGateway(name, namespace));
         files.put("httproute.yaml",  generateHttpRoute(
                 name, namespace, service, backendType, externalHost, internalService, internalPort));
-        files.put("policy.yaml",     generateAuthPolicy(name, namespace, service));
+        files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
         files.put("configmap.yaml",  generateConfigMap(name, namespace, service, backendUrl));
         files.put("apiproduct.yaml", generateApiProduct(name, namespace, service));
@@ -56,7 +66,15 @@ public class ConversionService {
 
         Policy loggingPolicy = findLoggingPolicy(service);
         if (loggingPolicy != null) {
-            files.put("telemetry.yaml", generateTelemetry(name, namespace, loggingPolicy));
+            boolean isGateway = !"workload".equals(loggingTarget);
+            files.put("telemetry.yaml", generateTelemetry(name, namespace, loggingPolicy, isGateway));
+            java.util.List<Map<String, Object>> jsonCfgCheck =
+                    parseJsonObjectConfig(loggingPolicy.configuration != null
+                            ? loggingPolicy.configuration.get("json_object_config") : null);
+            if (!jsonCfgCheck.isEmpty()) {
+                files.put("envoyfilter-logging.yaml",
+                        generateLoggingEnvoyFilter(name, namespace, jsonCfgCheck, isGateway));
+            }
         }
 
         files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
@@ -183,19 +201,25 @@ spec:
     private String generateHttpRoute(String name, String namespace, ApiService service,
                                      BackendType backendType, String externalHost,
                                      String internalService, int internalPort) {
-        // 外部バックエンド: port 443 + URLRewrite で Host ヘッダーを書き換え
-        // 内部バックエンド: URL 指定のポート（デフォルト 8080）、フィルターなし
         int backendPort   = backendType == BackendType.EXTERNAL ? 443 : internalPort;
         String backendSvc = backendType == BackendType.EXTERNAL
                 ? (name + "-backend")
                 : (internalService != null ? internalService : name + "-backend");
 
-        String urlRewriteFilter = backendType == BackendType.EXTERNAL ? """
-      filters:
+        // filters ブロックを構築（URLRewrite + Header Modification を統合）
+        StringBuilder filterItems = new StringBuilder();
+        if (backendType == BackendType.EXTERNAL) {
+            filterItems.append("""
         - type: URLRewrite
           urlRewrite:
             hostname: "%s"
-""".formatted(externalHost) : "";
+""".formatted(externalHost));
+        }
+        filterItems.append(buildHeaderModificationFilters(service));
+
+        String filtersBlock = filterItems.length() > 0
+                ? "      filters:\n" + filterItems
+                : "";
 
         String annotations = buildUpstreamAnnotations(service);
         StringBuilder sb = new StringBuilder();
@@ -231,7 +255,7 @@ metadata:
 %s%s      backendRefs:
         - name: %s
           port: %d
-""".formatted(path, method, urlRewriteFilter, timeoutsBlock, backendSvc, backendPort));
+""".formatted(path, method, filtersBlock, timeoutsBlock, backendSvc, backendPort));
             }
         } else {
             sb.append("""
@@ -242,9 +266,98 @@ metadata:
 %s%s      backendRefs:
         - name: %s
           port: %d
-""".formatted(urlRewriteFilter, timeoutsBlock, backendSvc, backendPort));
+""".formatted(filtersBlock, timeoutsBlock, backendSvc, backendPort));
         }
         return sb.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String buildHeaderModificationFilters(ApiService service) {
+        if (service.policies == null) {
+            return "";
+        }
+        Policy policy = service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled) && "headers".equals(p.name))
+                .findFirst().orElse(null);
+        if (policy == null || policy.configuration == null) {
+            return "";
+        }
+
+        StringBuilder result = new StringBuilder();
+
+        for (String direction : new String[]{"response", "request"}) {
+            Object raw = policy.configuration.get(direction);
+            if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) {
+                continue;
+            }
+
+            StringBuilder setHeaders    = new StringBuilder();
+            StringBuilder addHeaders    = new StringBuilder();
+            StringBuilder removeHeaders = new StringBuilder();
+
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> entry)) {
+                    continue;
+                }
+                Object hRaw = entry.get("header");
+                Object vRaw = entry.get("value");
+                Object oRaw = entry.get("op");
+                Object tRaw = entry.get("value_type");
+                String headerRaw = (hRaw != null ? hRaw.toString() : "").replace(":", "").trim();
+                String value     = vRaw != null ? vRaw.toString() : "";
+                String op        = oRaw != null ? oRaw.toString() : "push";
+                String valueType = tRaw != null ? tRaw.toString() : "plain";
+
+                if (headerRaw.isBlank()) {
+                    continue;
+                }
+
+                if ("liquid".equals(valueType)) {
+                    result.append(String.format(
+                            "        # Header '%s' uses liquid template — manual conversion required: %s%n",
+                            headerRaw, value));
+                    continue;
+                }
+
+                String headerLine = String.format(
+                        "              - name: %s%n                value: \"%s\"%n", headerRaw, value);
+                switch (op) {
+                    case "add"    -> addHeaders.append(headerLine);
+                    case "delete" -> removeHeaders.append(
+                            String.format("              - %s%n", headerRaw));
+                    default       -> setHeaders.append(headerLine);
+                }
+            }
+
+            boolean hasAny = setHeaders.length() > 0
+                    || addHeaders.length() > 0
+                    || removeHeaders.length() > 0;
+            if (!hasAny) {
+                continue;
+            }
+
+            String filterType  = "response".equals(direction)
+                    ? "ResponseHeaderModifier" : "RequestHeaderModifier";
+            String modifierKey = "response".equals(direction)
+                    ? "responseHeaderModifier" : "requestHeaderModifier";
+
+            StringBuilder modifier = new StringBuilder();
+            if (setHeaders.length() > 0) {
+                modifier.append("            set:\n").append(setHeaders);
+            }
+            if (addHeaders.length() > 0) {
+                modifier.append("            add:\n").append(addHeaders);
+            }
+            if (removeHeaders.length() > 0) {
+                modifier.append("            remove:\n").append(removeHeaders);
+            }
+
+            result.append(String.format(
+                    "        - type: %s%n          %s:%n%s",
+                    filterType, modifierKey, modifier));
+        }
+
+        return result.toString();
     }
 
     /**
@@ -391,13 +504,14 @@ spec:
     // AuthPolicy
     // ─────────────────────────────────────────────
 
-    private String generateAuthPolicy(String name, String namespace, ApiService service) {
+    private String generateAuthPolicy(String name, String namespace, ApiService service,
+            String anonymousTarget) {
         String authType = service.authentication != null ? service.authentication.type : "none";
 
         // Anonymous Access (default_credentials policy) — inject credentials as response headers
         Policy anonymousPolicy = findAnonymousPolicy(service);
         if (anonymousPolicy != null) {
-            return generateAnonymousAuthPolicy(name, namespace, anonymousPolicy);
+            return generateAnonymousAuthPolicy(name, namespace, anonymousPolicy, anonymousTarget);
         }
 
         if ("jwt".equals(authType)) {
@@ -508,7 +622,11 @@ spec:
         if (raw instanceof String str && !str.isBlank()) {
             try {
                 com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
-                return om.readValue(str, new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                com.fasterxml.jackson.databind.JavaType type = om.getTypeFactory()
+                        .constructCollectionType(java.util.List.class,
+                                om.getTypeFactory().constructMapType(
+                                        java.util.LinkedHashMap.class, String.class, Object.class));
+                return om.readValue(str, type);
             } catch (Exception e) {
                 LOG.warnf("Failed to parse json_object_config string: %s", e.getMessage());
             }
@@ -516,29 +634,13 @@ spec:
         return java.util.List.of();
     }
 
-    private String generateTelemetry(String name, String namespace, Policy policy) {
+    private String generateTelemetry(String name, String namespace, Policy policy, boolean isGateway) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
         boolean enableJson = Boolean.TRUE.equals(cfg.get("enable_json_logs"));
         boolean enableAccess = !Boolean.FALSE.equals(cfg.get("enable_access_logs"));
-
-        // Telemetry v1 API は format フィールドをスキーマに持たないため出力しない。
-        // json_object_config のフィールド情報は annotations に記録し、
-        // MeshConfig/EnvoyFilter での手動設定の参考情報とする。
-        java.util.List<Map<String, Object>> jsonCfg = parseJsonObjectConfig(cfg.get("json_object_config"));
-        StringBuilder jsonFieldsAnnotation = new StringBuilder();
-        for (Map<String, Object> entry : jsonCfg) {
-            String key        = String.valueOf(entry.getOrDefault("key", ""));
-            String value      = String.valueOf(entry.getOrDefault("value", ""));
-            String envoyValue = toEnvoyVar(value);
-            if (jsonFieldsAnnotation.length() > 0) {
-                jsonFieldsAnnotation.append(", ");
-            }
-            jsonFieldsAnnotation.append(key).append("=").append(envoyValue);
-        }
-
-        String jsonFieldsLine = jsonFieldsAnnotation.length() > 0
-                ? String.format("    3scale-migration/log-fields: \"%s\"%n", jsonFieldsAnnotation)
-                : "";
+        String selectorLabel = isGateway
+                ? "istio.io/gateway-name: " + name + "-gateway"
+                : "app: " + name;
 
         return """
 apiVersion: telemetry.istio.io/v1
@@ -553,17 +655,69 @@ metadata:
     3scale-migration/source: logging
     3scale-migration/enable-json: "%s"
     3scale-migration/enable-access: "%s"
-%sspec:
+spec:
   selector:
     matchLabels:
-      app: %s
+      %s
   accessLogging:
     - providers:
         - name: envoy
 """.formatted(name, namespace, name,
                 enableJson, enableAccess,
-                jsonFieldsLine,
-                name);
+                selectorLabel);
+    }
+
+    @SuppressWarnings("checkstyle:LineLength")
+    private String generateLoggingEnvoyFilter(String name, String namespace,
+            java.util.List<Map<String, Object>> jsonCfg, boolean isGateway) {
+        StringBuilder jsonFormat = new StringBuilder();
+        for (Map<String, Object> entry : jsonCfg) {
+            String key        = String.valueOf(entry.getOrDefault("key", ""));
+            String value      = String.valueOf(entry.getOrDefault("value", ""));
+            String envoyValue = toEnvoyVar(value);
+            jsonFormat.append(String.format("                      %s: \"%s\"%n", key, envoyValue));
+        }
+
+        String context = isGateway ? "GATEWAY" : "SIDECAR_INBOUND";
+        String selectorLabel = isGateway
+                ? "istio.io/gateway-name: " + name + "-gateway"
+                : "app: " + name;
+
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-logging-format
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: logging
+spec:
+  workloadSelector:
+    labels:
+      %s
+  configPatches:
+    - applyTo: NETWORK_FILTER
+      match:
+        context: %s
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+      patch:
+        operation: MERGE
+        value:
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+            access_log:
+              - name: envoy.access_loggers.stdout
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                  log_format:
+                    json_format:
+%s""".formatted(name, namespace, name, selectorLabel, context, jsonFormat.toString());
     }
 
     private Policy findAnonymousPolicy(ApiService service) {
@@ -577,7 +731,8 @@ metadata:
                 .orElse(null);
     }
 
-    private String generateAnonymousAuthPolicy(String name, String namespace, Policy policy) {
+    private String generateAnonymousAuthPolicy(String name, String namespace, Policy policy,
+            String anonymousTarget) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
         String authType = String.valueOf(cfg.getOrDefault("auth_type", "user_key"));
 
@@ -600,6 +755,10 @@ metadata:
                 ? "    response:\n      success:\n        headers:\n" + responseHeaders
                 : "";
 
+        boolean targetGateway = "gateway".equals(anonymousTarget);
+        String targetKind = targetGateway ? "Gateway" : "HTTPRoute";
+        String targetName = targetGateway ? name + "-gateway" : name + "-route";
+
         return """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
@@ -615,13 +774,13 @@ metadata:
 spec:
   targetRef:
     group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: %s-route
+    kind: %s
+    name: %s
   rules:
     authentication:
       anonymous:
         anonymous: {}
-%s""".formatted(name, namespace, name, authType, name, responseSection);
+%s""".formatted(name, namespace, name, authType, targetKind, targetName, responseSection);
     }
 
     // ─────────────────────────────────────────────
@@ -813,7 +972,7 @@ ServiceEntry・DestinationRule・URLRewrite フィルターは不要なため生
 
         boolean hasLogging = findLoggingPolicy(service) != null;
         String loggingFile = hasLogging
-                ? "| telemetry.yaml | Istio Telemetry リソース（アクセスログ設定） |\n" : "";
+                ? "| gateway.yaml | Gateway + Istio Telemetry / EnvoyFilter（アクセスログ設定） |\n" : "";
 
         String fileList = loggingFile
                 + (backendType == BackendType.EXTERNAL

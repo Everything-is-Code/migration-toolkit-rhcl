@@ -24,6 +24,8 @@ public class ValidationService {
             "networking.istio.io/v1alpha3",
             "networking.istio.io/v1beta1",
             "networking.istio.io/v1",
+            "telemetry.istio.io/v1",
+            "telemetry.istio.io/v1alpha1",
             "v1"
     );
 

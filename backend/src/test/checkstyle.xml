@@ -14,9 +14,10 @@
   <module name="NewlineAtEndOfFile"/>
   <module name="FileTabCharacter"/>
 
-  <!-- Line length (120 chars) -->
+  <!-- Line length (120 chars); ignore lines containing long URLs (e.g. googleapis.com protobuf type paths) -->
   <module name="LineLength">
     <property name="max" value="120"/>
+    <property name="ignorePattern" value="^.*googleapis\.com.*$"/>
   </module>
 
   <module name="TreeWalker">

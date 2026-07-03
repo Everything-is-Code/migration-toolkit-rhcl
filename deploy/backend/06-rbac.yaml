@@ -12,7 +12,8 @@ metadata:
 rules:
   - apiGroups: ["", "apps", "networking.k8s.io", "route.openshift.io",
                 "kuadrant.io", "gateway.networking.k8s.io",
-                "telemetry.istio.io"]
+                "telemetry.istio.io", "networking.istio.io",
+                "devportal.kuadrant.io"]
     resources: ["*"]
     verbs: ["get", "list", "create", "update", "patch", "apply"]
   - apiGroups: ["config.openshift.io"]

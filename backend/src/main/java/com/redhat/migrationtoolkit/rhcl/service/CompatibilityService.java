@@ -35,6 +35,7 @@ public class CompatibilityService {
         Map.entry("echo",                       "Echo"),
         Map.entry("edge_limiting",              "Edge Limiting"),
         Map.entry("header_modification",        "Header Modification"),
+        Map.entry("headers",                    "Header Modification"),
         Map.entry("ip_check",                   "IP Check"),
         Map.entry("jwt_claim_check",            "JWT Claim Check"),
         Map.entry("liquid_context_debug",       "Liquid Context Debug"),
