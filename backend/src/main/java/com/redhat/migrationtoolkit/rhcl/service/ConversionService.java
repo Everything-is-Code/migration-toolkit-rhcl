@@ -529,7 +529,7 @@ spec:
             String key        = String.valueOf(entry.getOrDefault("key", ""));
             String value      = String.valueOf(entry.getOrDefault("value", ""));
             String envoyValue = toEnvoyVar(value);
-            labelsBuilder.append(String.format("        %s: \"%s\"%n", key, envoyValue));
+            labelsBuilder.append(String.format("          %s: \"%s\"%n", key, envoyValue));
         }
 
         String formatSection = labelsBuilder.length() > 0
