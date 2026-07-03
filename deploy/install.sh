@@ -274,7 +274,7 @@ create_postgres_cluster() {
 deploy_backend() {
   log_section "$(msg 'バックエンド ビルド & デプロイ' 'Backend Build & Deploy')"
 
-  for f in 01-imagestream.yaml 02-buildconfig.yaml 03-deployment.yaml 04-service.yaml 05-route.yaml; do
+  for f in 01-imagestream.yaml 02-buildconfig.yaml 03-deployment.yaml 04-service.yaml 05-route.yaml 06-rbac.yaml; do
     sed "s/NAMESPACE_PLACEHOLDER/$NAMESPACE/g" \
       "$SCRIPT_DIR/backend/$f" | oc apply -f -
   done
