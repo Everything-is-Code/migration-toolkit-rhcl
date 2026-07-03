@@ -480,52 +480,71 @@ spec:
     }
 
     @SuppressWarnings("unchecked")
+    /**
+     * 3scale の nginx 変数を Envoy アクセスログ変数にマッピングする。
+     * 値に複数の変数が混在する場合（例: "uri$request_uri"）も対応。
+     */
+    private static String toEnvoyVar(String nginxValue) {
+        return nginxValue
+                .replace("$request_method",  "%REQ(:METHOD)%")
+                .replace("$request_uri",     "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%%QUERY_STRING%")
+                .replace("$uri",             "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%")
+                .replace("$status",          "%RESPONSE_CODE%")
+                .replace("$remote_addr",     "%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%")
+                .replace("$bytes_sent",      "%BYTES_SENT%")
+                .replace("$request_time",    "%DURATION%")
+                .replace("$http_user_agent", "%REQ(USER-AGENT)%")
+                .replace("$http_referer",    "%REQ(REFERER)%");
+    }
+
+    @SuppressWarnings("unchecked")
     private String generateTelemetry(String name, String namespace, Policy policy) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
         boolean enableJson = Boolean.TRUE.equals(cfg.get("enable_json_logs"));
         boolean enableAccess = !Boolean.FALSE.equals(cfg.get("enable_access_logs"));
 
-        // Build JSON log format from json_object_config if present
-        StringBuilder formatBuilder = new StringBuilder();
+        // json_object_config → Istio format.labels（Envoy変数にマッピング）
+        StringBuilder labelsBuilder = new StringBuilder();
         Object rawJsonCfg = cfg.get("json_object_config");
         if (enableJson && rawJsonCfg instanceof java.util.List) {
             java.util.List<Map<String, Object>> jsonCfg = (java.util.List<Map<String, Object>>) rawJsonCfg;
-            formatBuilder.append("{");
-            for (int i = 0; i < jsonCfg.size(); i++) {
-                Map<String, Object> entry = jsonCfg.get(i);
-                String key = String.valueOf(entry.getOrDefault("key", ""));
+            for (Map<String, Object> entry : jsonCfg) {
+                String key   = String.valueOf(entry.getOrDefault("key", ""));
                 String value = String.valueOf(entry.getOrDefault("value", ""));
-                if (i > 0) {
-                    formatBuilder.append(",");
-                }
-                formatBuilder.append(String.format("\\\"%s\\\":\\\"%s\\\"", key, value));
+                String envoyValue = toEnvoyVar(value);
+                labelsBuilder.append(String.format("        %s: \"%s\"%n", key, envoyValue));
             }
-            formatBuilder.append("}%n");
         }
 
-        String formatSection = (enableJson && formatBuilder.length() > 0)
-                ? String.format("""
-      filter:
-        expression: "true"
-      format:
-        text: |
-          %s
-""", formatBuilder)
+        String formatSection = labelsBuilder.length() > 0
+                ? "      format:\n        labels:\n" + labelsBuilder
                 : "";
 
-        String accessLoggingSection = enableAccess
-                ? String.format("""
-  accessLogging:
-    - providers:
-        - name: envoy
-%s""", formatSection)
-                : """
-  accessLogging:
-    - providers:
-        - name: envoy
-      filter:
-        expression: "false"
-""";
+        // enable_access_logs: false でもフォーマット定義は出力する
+        // (Istio 側ではアクセスログを有効化し、3scale のフォーマット設定を引き継ぐ)
+        String accessLoggingSection;
+        if (enableAccess) {
+            accessLoggingSection = "  accessLogging:\n"
+                    + "    - providers:\n"
+                    + "        - name: envoy\n"
+                    + formatSection;
+        } else {
+            // 3scale で無効化されていたが、ログフォーマット定義は保持して
+            // コメントで無効化の意図を明示する
+            accessLoggingSection = "  # enable_access_logs was false in 3scale — access logging disabled\n"
+                    + "  accessLogging:\n"
+                    + "    - providers:\n"
+                    + "        - name: envoy\n"
+                    + "      filter:\n"
+                    + "        expression: \"false\"\n"
+                    + (formatSection.isEmpty() ? "" :
+                        "      # Format preserved from 3scale json_object_config (uncomment to enable):\n"
+                        + "      # format:\n"
+                        + "      #   labels:\n"
+                        + labelsBuilder.toString().lines()
+                            .map(l -> "      #   " + l.stripLeading())
+                            .collect(java.util.stream.Collectors.joining("\n")) + "\n");
+        }
 
         return """
 apiVersion: telemetry.istio.io/v1
