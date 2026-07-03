@@ -129,12 +129,8 @@ public class CompatibilityService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     private boolean hasJsonObjectConfig(Policy policy) {
         if (policy.configuration == null) {
-            return false;
-        }
-        if (!Boolean.TRUE.equals(policy.configuration.get("enable_json_logs"))) {
             return false;
         }
         Object raw = policy.configuration.get("json_object_config");
