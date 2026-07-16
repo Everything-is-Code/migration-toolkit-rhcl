@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "migration-toolkit-rhcl.frontend" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "migration-toolkit-rhcl.frontend" . }}
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/name: {{ include "migration-toolkit-rhcl.frontend" . }}
+    app.openshift.io/runtime: nginx
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/runtime: nginx
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"{{ include "migration-toolkit-rhcl.backend" . }}"}]'
+spec:
+  replicas: {{ .Values.frontend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "migration-toolkit-rhcl.frontend" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "migration-toolkit-rhcl.frontend" . }}
+        app.openshift.io/runtime: nginx
+      annotations:
+        checksum/nginx: {{ include (print $.Template.BasePath "/frontend-nginx-configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: {{ include "migration-toolkit-rhcl.frontend" . }}-nginx

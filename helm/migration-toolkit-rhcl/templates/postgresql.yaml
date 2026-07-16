@@ -1,0 +1,78 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "migration-toolkit-rhcl.postgresql" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+    app.kubernetes.io/component: database
+    app.kubernetes.io/name: {{ include "migration-toolkit-rhcl.postgresql" . }}
+    app.openshift.io/runtime: postgresql
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/runtime: postgresql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+        app.openshift.io/runtime: postgresql
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: postgresql
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRESQL_USER
+              value: {{ .Values.postgresql.username | quote }}
+            - name: POSTGRESQL_PASSWORD
+              value: {{ .Values.postgresql.password | quote }}
+            - name: POSTGRESQL_DATABASE
+              value: {{ .Values.postgresql.database | quote }}
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/pgsql/data
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgresql.username | quote }}]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", {{ .Values.postgresql.username | quote }}]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      volumes:
+        - name: pgdata
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "migration-toolkit-rhcl.postgresql" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+  selector:
+    app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+{{- end }}

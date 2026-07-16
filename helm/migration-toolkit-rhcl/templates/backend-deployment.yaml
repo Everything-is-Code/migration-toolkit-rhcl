@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "migration-toolkit-rhcl.backend" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "migration-toolkit-rhcl.backend" . }}
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/name: {{ include "migration-toolkit-rhcl.backend" . }}
+    app.openshift.io/runtime: quarkus
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+  annotations:
+    app.openshift.io/runtime: quarkus
+    {{- if .Values.postgresql.enabled }}
+    app.openshift.io/connects-to: '[{"apiVersion":"apps/v1","kind":"Deployment","name":"{{ include "migration-toolkit-rhcl.postgresql" . }}"}]'
+    {{- end }}
+spec:
+  replicas: {{ .Values.backend.replicas }}
+  selector:
+    matchLabels:
+      app: {{ include "migration-toolkit-rhcl.backend" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "migration-toolkit-rhcl.backend" . }}
+        app.openshift.io/runtime: quarkus
+    spec:
+      serviceAccountName: {{ include "migration-toolkit-rhcl.backend" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: backend
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DB_HOST
+              value: {{ include "migration-toolkit-rhcl.dbHost" . | quote }}
+            - name: DB_PORT
+              value: {{ .Values.postgresql.port | quote }}
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "migration-toolkit-rhcl.fullname" . }}-config
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "migration-toolkit-rhcl.fullname" . }}-config
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "migration-toolkit-rhcl.fullname" . }}-config
+                  key: DB_PASSWORD
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
