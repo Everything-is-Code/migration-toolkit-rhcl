@@ -1,0 +1,7 @@
+target/
+.git/
+.idea/
+*.iml
+src/test/
+generate-report.sh
+.s2iignore
