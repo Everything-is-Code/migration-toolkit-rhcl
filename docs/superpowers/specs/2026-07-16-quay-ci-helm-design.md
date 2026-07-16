@@ -20,6 +20,7 @@ Add container build/push pipelines to Quay.io and a Helm chart that centralizes 
 | Helm publish | `helm package` → `docs/` + `index.yaml` + automated PR + GitHub Release |
 | Chart maintainer | **mushino only** |
 | Legacy `deploy/` | Leave S2I manifests untouched |
+| GitOps (provisional) | Consume chart **from git path** (Argo CD / OpenShift GitOps); Pages Helm repo is secondary |
 
 ## Architecture
 
@@ -163,6 +164,80 @@ Backend env mapping (must match `application.properties`):
 4. Tag `v0.1.0` (after Chart.yaml is `0.1.0`) runs release: images tagged, PR opens with `docs/*.tgz` + `index.yaml`, GitHub Release exists.
 5. On a cluster with Routes: `helm install` brings up postgres + backend + frontend; UI loads; `/api/` reaches backend health.
 
+## GitOps consumption (provisional)
+
+Day-1 install from **another GitOps repo** must work **without** GitHub Pages or a packaged `.tgz`. OpenShift GitOps / Argo CD points at this fork’s chart directory.
+
+### Chart requirements for GitOps
+
+- All resources use `{{ .Release.Namespace }}` (no `NAMESPACE_PLACEHOLDER`).
+- ClusterRoleBinding subject namespace = release namespace.
+- Nginx `/api/` upstream uses in-cluster DNS:  
+  `http://{{ include "…backend" . }}.{{ .Release.Namespace }}.svc:8080`  
+  (or short name if same namespace — prefer full for clarity).
+- Image tags default to `v0.1.0` / Chart `appVersion`; overridable via values from the GitOps repo.
+- Optional `imagePullSecrets` in values for private Quay (if repos are public, leave empty).
+- `route.host` empty → OpenShift assigns host; GitOps can set it per cluster.
+- No post-install Jobs that require interactive cluster login.
+
+### Artifact for the other repo
+
+Add `examples/gitops/application.yaml` (reference only; not applied by this chart) that the GitOps repo can copy/adapt:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: migration-toolkit-rhcl
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/maximilianoPizarro/migration-toolkit-rhcl
+    targetRevision: main
+    path: helm/migration-toolkit-rhcl
+    helm:
+      valueFiles:
+        - values.yaml
+      # Optional overlay from GitOps repo via multiple sources / valuesObject:
+      valuesObject:
+        route:
+          host: ""   # set per cluster if needed
+        backend:
+          image:
+            tag: latest   # provisional until first v* release
+        frontend:
+          image:
+            tag: latest
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: migration-toolkit
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+### Provisional vs release path
+
+| Path | When | How GitOps consumes |
+|------|------|---------------------|
+| **Provisional (git path)** | Before/without Pages | `source.path: helm/migration-toolkit-rhcl` + image tag `latest` or sha |
+| **Release (Helm repo)** | After `v*` + Pages | `helm repo add` / Argo `chart` + `repoURL` Pages URL + semver |
+
+### Acceptance for GitOps
+
+1. From a clone of the GitOps repo (or `oc apply`), Application syncs chart from this fork’s `main`.
+2. Pods pull Quay images (public **or** pull-secret wired in values).
+3. Frontend Route works; UI can call backend `/api/*` via nginx proxy; backend Ready probe hits `/q/health/ready` on the backend Service.
+4. No dependency on `docs/index.yaml` for this provisional path.
+
+### Quay visibility
+
+For provisional GitOps without cluster pull secrets, Quay repos should be **public**, or values must define `imagePullSecrets` and the GitOps repo must create that Secret in the target namespace.
+
 ## Replication note for mushino
 
 When copying to the canonical repo, update at minimum:
@@ -170,3 +245,4 @@ When copying to the canonical repo, update at minimum:
 - Quay namespace / image names
 - `HELM_REPO_URL` and Chart `home` / `sources`
 - Keep `maintainers: mushino` as the sole maintainer entry
+- Point the GitOps `Application` `repoURL` / image repos at the canonical locations
