@@ -43,18 +43,18 @@
 - Create: `backend/Dockerfile.jvm`, `backend/.dockerignore`
 - Create: `frontend/Dockerfile.ci`, `frontend/.dockerignore`
 
-- [ ] **Step 1: Backend Dockerfile** — multi-stage UBI openjdk-21 builder + runtime; `mvn package -DskipTests`; copy quarkus-app layers; EXPOSE 8080; USER 185.
-- [ ] **Step 2: Frontend Dockerfile** — Node 22 builder `npm ci` + `npm run build`; copy `build/` into UBI nginx-124; COPY `nginx/nginx.conf` to `${NGINX_CONF_PATH}` (default upstream can be localhost; Helm overrides via ConfigMap).
-- [ ] **Step 3: .dockerignore** for both (skip `target/`, `node_modules/`, tests noise).
-- [ ] **Step 4: Commit** `feat: add backend and frontend Dockerfiles for Quay builds`
+- [x] **Step 1: Backend Dockerfile** — multi-stage UBI openjdk-21 builder + runtime; `mvn package -DskipTests`; copy quarkus-app layers; EXPOSE 8080; USER 185.
+- [x] **Step 2: Frontend Dockerfile** — Node 22 builder `npm ci` + `npm run build`; copy `build/` into UBI nginx-124; COPY `nginx/nginx.conf` to `${NGINX_CONF_PATH}` (default upstream can be localhost; Helm overrides via ConfigMap).
+- [x] **Step 3: .dockerignore** for both (skip `target/`, `node_modules/`, tests noise).
+- [x] **Step 4: Commit** `feat: add backend and frontend Dockerfiles for Quay builds`
 
 ### Task 2: Version scripts
 
 **Files:**
 - Create: `scripts/lib/common.sh`, `scripts/lib/version.sh`, `scripts/lib/helm-repo-url.sh`
 
-- [ ] **Step 1: Implement scripts** reading `helm/migration-toolkit-rhcl/Chart.yaml` and exporting `HELM_REPO_URL=https://maximilianopizarro.github.io/migration-toolkit-rhcl/`
-- [ ] **Step 2: Commit** `chore: add version and helm-repo helper scripts`
+- [x] **Step 1: Implement scripts** reading `helm/migration-toolkit-rhcl/Chart.yaml` and exporting `HELM_REPO_URL=https://maximilianopizarro.github.io/migration-toolkit-rhcl/`
+- [x] **Step 2: Commit** `chore: add version and helm-repo helper scripts`
 
 ### Task 3: GitHub Actions workflows
 
@@ -62,9 +62,9 @@
 - Create: `.github/workflows/build-push-quay.yml`
 - Create: `.github/workflows/release.yml`
 
-- [ ] **Step 1: build-push-quay.yml** — matrix for both images; Quay + RH registry logins; tags latest / vVERSION / sha.
-- [ ] **Step 2: release.yml** — tag validation, image push, helm package to docs/, index merge, PR, GitHub Release.
-- [ ] **Step 3: Commit** `ci: add Quay build-push and release workflows`
+- [x] **Step 1: build-push-quay.yml** — matrix for both images; Quay + RH registry logins; tags latest / vVERSION / sha.
+- [x] **Step 2: release.yml** — tag validation, image push, helm package to docs/, index merge, PR, GitHub Release.
+- [x] **Step 3: Commit** `ci: add Quay build-push and release workflows`
 
 ### Task 4: Helm chart + GitOps example
 
@@ -74,16 +74,16 @@
 - Create: `docs/index.yaml` (empty apiVersion/entries seed)
 - Create: `examples/gitops/application.yaml`
 
-- [ ] **Step 1: Chart metadata + values** — maintainer mushino; Quay images; postgres migrationtool; route/rbac/imagePullSecrets.
-- [ ] **Step 2: Templates** — GitOps-safe namespaces; DB_* env; nginx ConfigMap with release DNS; RBAC from deploy/06; Route edge.
-- [ ] **Step 3: examples/gitops + docs/index.yaml seed**
-- [ ] **Step 4: Run** `helm lint helm/migration-toolkit-rhcl` and `helm template test helm/migration-toolkit-rhcl` — expect success.
-- [ ] **Step 5: Commit** `feat: add Helm chart and GitOps Application example`
+- [x] **Step 1: Chart metadata + values** — maintainer mushino; Quay images; postgres migrationtool; route/rbac/imagePullSecrets.
+- [x] **Step 2: Templates** — GitOps-safe namespaces; DB_* env; nginx ConfigMap with release DNS; RBAC from deploy/06; Route edge.
+- [x] **Step 3: examples/gitops + docs/index.yaml seed**
+- [x] **Step 4: Run** `helm lint helm/migration-toolkit-rhcl` and `helm template test helm/migration-toolkit-rhcl` — expect success.
+- [x] **Step 5: Commit** `feat: add Helm chart and GitOps Application example`
 
 ### Task 5: Verify and handoff
 
-- [ ] **Step 1:** Confirm `source scripts/lib/version.sh` prints `0.1.0` / `v0.1.0`
-- [ ] **Step 2:** Summarize for user: push main to trigger Quay build; copy `examples/gitops/application.yaml` into GitOps repo; ensure Quay public or pull secrets.
+- [x] **Step 1:** Confirm `source scripts/lib/version.sh` prints `0.1.0` / `v0.1.0`
+- [x] **Step 2:** Summarize for user: push main to trigger Quay build; copy `examples/gitops/application.yaml` into GitOps repo; ensure Quay public or pull secrets.
 
 ---
 
