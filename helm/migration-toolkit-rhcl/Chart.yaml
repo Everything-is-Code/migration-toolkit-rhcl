@@ -4,8 +4,9 @@ description: 3scale to Red Hat Connectivity Link migration toolkit
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
-home: https://github.com/maximilianoPizarro/migration-toolkit-rhcl
+home: https://github.com/nmushino/migration-toolkit-rhcl
 sources:
+  - https://github.com/nmushino/migration-toolkit-rhcl
   - https://github.com/maximilianoPizarro/migration-toolkit-rhcl
 maintainers:
   - name: mushino

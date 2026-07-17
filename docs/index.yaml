@@ -16,17 +16,18 @@ entries:
       artifacthub.io/operator: "false"
     apiVersion: v2
     appVersion: 0.1.0
-    created: "2026-07-16T20:33:23.6798885-03:00"
+    created: "2026-07-17T09:58:01.8685048-03:00"
     description: 3scale to Red Hat Connectivity Link migration toolkit
-    digest: f951e1397eac0d9f0c372d9d0d6aefae29bad557d3e37c158197112c4f3f179d
-    home: https://github.com/maximilianoPizarro/migration-toolkit-rhcl
+    digest: cad4aa2bc525b8d226bc627cd2909068a92bbbd627358867c0b3bdbcee6fef01
+    home: https://github.com/nmushino/migration-toolkit-rhcl
     maintainers:
     - name: mushino
     name: migration-toolkit-rhcl
     sources:
+    - https://github.com/nmushino/migration-toolkit-rhcl
     - https://github.com/maximilianoPizarro/migration-toolkit-rhcl
     type: application
     urls:
     - https://maximilianopizarro.github.io/migration-toolkit-rhcl/migration-toolkit-rhcl-0.1.0.tgz
     version: 0.1.0
-generated: "2026-07-16T20:33:23.6772576-03:00"
+generated: "2026-07-17T09:58:01.8643465-03:00"

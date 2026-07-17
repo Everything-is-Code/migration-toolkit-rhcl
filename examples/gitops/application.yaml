@@ -1,5 +1,6 @@
 # Reference Application for OpenShift GitOps / Argo CD.
 # Copy into your GitOps repo and adapt namespace, project, and image tags.
+# After merge upstream, set repoURL to https://github.com/nmushino/migration-toolkit-rhcl
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
