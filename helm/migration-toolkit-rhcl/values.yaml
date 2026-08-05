@@ -9,6 +9,9 @@ backend:
     tag: v0.1.0
     pullPolicy: Always
   replicas: 1
+  threescale:
+    defaultUrl: ""
+    defaultToken: ""
   resources:
     requests:
       cpu: 250m

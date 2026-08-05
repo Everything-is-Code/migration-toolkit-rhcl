@@ -22,7 +22,7 @@ import {
 } from '@patternfly/react-core';
 import { CheckCircleIcon, EyeIcon, EyeSlashIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import { connectionApi, clusterApi } from '../api/client';
+import { connectionApi, clusterApi, defaultsApi } from '../api/client';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 
@@ -45,8 +45,21 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [fetchingDomain, setFetchingDomain] = useState(false);
   const [domainError, setDomainError] = useState<string | null>(null);
   const [clusterDomain, setClusterDomain] = useState<string | null>(null);
+  const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
-  // Namespace が変わったら URL のプレフィックス部分を更新する
+  useEffect(() => {
+    if (defaultsLoaded || appState.connection.connected) return;
+    defaultsApi.get().then((res) => {
+      const cfg = res.data?.threescale;
+      if (cfg?.configured) {
+        if (cfg.url && !url) setUrl(cfg.url);
+        if (cfg.token && !accessToken) setAccessToken(cfg.token);
+      }
+    }).catch(() => {
+      // Defaults endpoint unavailable — fields stay empty
+    }).finally(() => setDefaultsLoaded(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const buildUrlFromNamespace = (ns: string, domain: string) =>
     `https://${ns}-admin.${domain}`;
 

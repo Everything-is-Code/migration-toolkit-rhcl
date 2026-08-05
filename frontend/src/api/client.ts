@@ -12,6 +12,17 @@ export const connectionApi = {
     api.post('/api/connection/test', data),
 };
 
+export const defaultsApi = {
+  get: () =>
+    api.get<{
+      threescale: {
+        url: string | null;
+        token: string | null;
+        configured: boolean;
+      };
+    }>('/api/defaults'),
+};
+
 export const servicesApi = {
   list: (url: string, accessToken: string) =>
     api.get('/api/services', { params: { url, accessToken } }),
