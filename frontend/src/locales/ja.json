@@ -108,6 +108,8 @@
     "externalNoteRoute": "<code>httproute.yaml</code> — <code>Host</code> ヘッダーを外部ホスト名に書き換えるフィルターを追加",
     "externalFileTitle": "外部サービス向けリソース",
     "externalFilesNote": "外部サービス向けリソースを含みます（EnvoyFilter + Host rewrite）",
+    "outputSettings": "出力設定",
+    "includeMigratedFromLabel": "migrated-from: 3scale ラベルを付与する",
     "policySettings": "ポリシー設定",
     "loggingTarget": "Logging ポリシー適用先",
     "loggingTargetGateway": "Gateway Pod（推奨）",

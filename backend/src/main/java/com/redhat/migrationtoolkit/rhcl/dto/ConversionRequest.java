@@ -17,4 +17,6 @@ public class ConversionRequest {
     public String loggingTarget;
     /** Anonymous Access ポリシーの targetRef: "httproute"（デフォルト）または "gateway" */
     public String anonymousTarget;
+    /** 生成リソースに "migrated-from: 3scale" ラベルを付与するかどうか（デフォルト: true）。 */
+    public Boolean includeMigratedFromLabel;
 }

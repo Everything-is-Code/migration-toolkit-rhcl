@@ -75,8 +75,10 @@ public class ConversionController {
                 CompatibilityResult compatibility = compatibilityService.check(service, supportedPolicies);
                 String loggingTarget = "workload".equals(request.loggingTarget) ? "workload" : "gateway";
                 String anonymousTarget = "gateway".equals(request.anonymousTarget) ? "gateway" : "httproute";
+                boolean includeMigratedFromLabel = !Boolean.FALSE.equals(request.includeMigratedFromLabel);
                 Map<String, String> yamlFiles = conversionService.convert(
-                        service, namespace, request.externalBackendUrl, loggingTarget, anonymousTarget);
+                        service, namespace, request.externalBackendUrl, loggingTarget, anonymousTarget,
+                        includeMigratedFromLabel);
 
                 String name = service.systemName != null ? service.systemName : service.name;
                 name = name.toLowerCase().replaceAll("[^a-z0-9]+", "-");

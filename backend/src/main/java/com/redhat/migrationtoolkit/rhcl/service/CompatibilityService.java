@@ -23,7 +23,7 @@ public class CompatibilityService {
     private static final Map<String, String> POLICY_DISPLAY_NAMES = Map.ofEntries(
         Map.entry("apicast",                    "3scale APIcast"),
         Map.entry("3scale_batcher",             "3scale Batcher"),
-        Map.entry("auth_caching",               "3scale Auth Caching"),
+        Map.entry("3scale_auth_caching",         "3scale Auth Caching"),
         Map.entry("referrer",                   "3scale Referrer"),
         Map.entry("anonymous_access",           "Anonymous Access"),
         Map.entry("default_credentials",        "Anonymous Access"),
