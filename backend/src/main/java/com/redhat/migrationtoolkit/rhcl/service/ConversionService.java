@@ -37,6 +37,12 @@ public class ConversionService {
 
     public Map<String, String> convert(ApiService service, String namespace,
             String backendUrl, String loggingTarget, String anonymousTarget) {
+        return convert(service, namespace, backendUrl, loggingTarget, anonymousTarget, true);
+    }
+
+    public Map<String, String> convert(ApiService service, String namespace,
+            String backendUrl, String loggingTarget, String anonymousTarget,
+            boolean includeMigratedFromLabel) {
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
@@ -110,7 +116,16 @@ public class ConversionService {
         }
 
         files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
+
+        if (!includeMigratedFromLabel) {
+            files.replaceAll((fileName, content) -> stripMigratedFromLabel(content));
+        }
         return files;
+    }
+
+    /** 生成 YAML から "migrated-from: 3scale" ラベル行を取り除く（チェックボックスで無効化された場合）。 */
+    private String stripMigratedFromLabel(String content) {
+        return content.replaceAll("(?m)^[ \\t]*migrated-from: 3scale\\R?", "");
     }
 
     // ─────────────────────────────────────────────

@@ -47,6 +47,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [externalBackendUrl, setExternalBackendUrl] = useState('');
   const [loggingTarget, setLoggingTarget] = useState<'gateway' | 'workload'>('gateway');
   const [anonymousTarget, setAnonymousTarget] = useState<'httproute' | 'gateway'>('httproute');
+  const [includeMigratedFromLabel, setIncludeMigratedFromLabel] = useState(true);
 
   // 選択中サービスのいずれかに Logging / Anonymous Access ポリシーが
   // 有効設定されている場合のみ、対応する適用先設定を表示する。
@@ -73,6 +74,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
         supportedPolicies,
         loggingTarget,
         anonymousTarget,
+        includeMigratedFromLabel,
       });
       setProgress(100);
       const convResults: ConversionResultItem[] = resp.data.results;
@@ -181,6 +183,23 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                         </div>
                       </>
                     )}
+                  </Form>
+                </div>
+
+                {/* 出力設定フォーム */}
+                <div style={{ marginTop: '16px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
+                  <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '16px', color: '#004080' }}>
+                    {t('conversion.outputSettings', '出力設定')}
+                  </div>
+                  <Form>
+                    <FormGroup>
+                      <Checkbox
+                        id="include-migrated-from-label"
+                        label={t('conversion.includeMigratedFromLabel', 'migrated-from: 3scale ラベルを付与する')}
+                        isChecked={includeMigratedFromLabel}
+                        onChange={(_e, checked) => setIncludeMigratedFromLabel(checked)}
+                      />
+                    </FormGroup>
                   </Form>
                 </div>
 

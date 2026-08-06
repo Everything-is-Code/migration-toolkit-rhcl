@@ -51,6 +51,7 @@ export const conversionApi = {
     supportedPolicies?: string[];
     loggingTarget?: 'gateway' | 'workload';
     anonymousTarget?: 'httproute' | 'gateway';
+    includeMigratedFromLabel?: boolean;
   }) => api.post('/api/convert', data),
 };
 

@@ -108,6 +108,8 @@
     "externalNoteRoute": "<code>httproute.yaml</code> — Adds a filter to rewrite the <code>Host</code> header to the external hostname",
     "externalFileTitle": "External service resource",
     "externalFilesNote": "Includes external service resources (EnvoyFilter + Host rewrite)",
+    "outputSettings": "Output Settings",
+    "includeMigratedFromLabel": "Add the \"migrated-from: 3scale\" label",
     "policySettings": "Policy Settings",
     "loggingTarget": "Logging Policy Target",
     "loggingTargetGateway": "Gateway Pod (recommended)",
