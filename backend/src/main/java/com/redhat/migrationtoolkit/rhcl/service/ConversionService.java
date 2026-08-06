@@ -98,6 +98,17 @@ public class ConversionService {
             }
         }
 
+        Policy urlRewritingPolicy = findUrlRewritingPolicy(service);
+        if (urlRewritingPolicy != null) {
+            java.util.List<Map<String, Object>> rewriteCommands = parseJsonObjectConfig(
+                    urlRewritingPolicy.configuration != null
+                            ? urlRewritingPolicy.configuration.get("commands") : null);
+            if (!rewriteCommands.isEmpty()) {
+                files.put("envoyfilter-url-rewriting.yaml",
+                        generateUrlRewritingEnvoyFilter(name, namespace, rewriteCommands));
+            }
+        }
+
         files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
         return files;
     }
@@ -264,9 +275,21 @@ metadata:
         String timeoutsBlock = buildTimeoutsBlock(service);
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
+            // "/" (catch-all) な Mapping Rule が既にある HTTP メソッドについては、
+            // それより後ろにある同メソッドのルールは常に "/" に包含され冗長なのでスキップする。
+            java.util.Set<String> catchAllMethods = new java.util.HashSet<>();
+            java.util.Set<String> emitted = new java.util.LinkedHashSet<>();
             for (MappingRule rule : service.mappingRules) {
-                String path   = rule.pattern != null ? rule.pattern.replaceAll("\\{\\?\\}", "*") : "/";
+                String path   = toGatewayApiPathPrefix(rule.pattern);
                 String method = rule.httpMethod != null ? rule.httpMethod : "GET";
+
+                if (catchAllMethods.contains(method) || !emitted.add(path + " " + method)) {
+                    continue;
+                }
+                if ("/".equals(path)) {
+                    catchAllMethods.add(method);
+                }
+
                 sb.append("""
     - matches:
         - path:
@@ -290,6 +313,26 @@ metadata:
 """.formatted(filtersBlock, timeoutsBlock, backendSvc, backendPort));
         }
         return sb.toString();
+    }
+
+    /**
+     * 3scale の Mapping Rule パターン（例: "/api/dashboard/{id}", "/foo/{?}"）を
+     * Gateway API の PathPrefix で使える値に変換する。
+     * Gateway API の path.value は `^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$`
+     * のみ許可され、`{`/`}` を含むテンプレート化されたパスパラメータは指定できない。
+     * そのため、最初のパスパラメータの直前までを PathPrefix として使用する
+     * （例: "/api/dashboard/{id}" → "/api/dashboard"）。
+     */
+    private String toGatewayApiPathPrefix(String pattern) {
+        if (pattern == null || pattern.isBlank()) {
+            return "/";
+        }
+        int braceIdx = pattern.indexOf('{');
+        String prefix = braceIdx >= 0 ? pattern.substring(0, braceIdx) : pattern;
+        if (prefix.length() > 1 && prefix.endsWith("/")) {
+            prefix = prefix.substring(0, prefix.length() - 1);
+        }
+        return prefix.isBlank() ? "/" : prefix;
     }
 
     @SuppressWarnings("unchecked")
@@ -546,6 +589,8 @@ spec:
             return generateAnonymousAuthPolicy(name, namespace, anonymousPolicy, anonymousTarget);
         }
 
+        String authCacheBlock = buildAuthCacheBlock(findAuthCachingPolicy(service));
+
         if ("jwt".equals(authType)) {
             String issuer = service.authentication.oidcIssuerEndpoint != null
                     ? service.authentication.oidcIssuerEndpoint
@@ -569,7 +614,7 @@ spec:
       jwt-auth:
         jwt:
           issuerUrl: %s
-""".formatted(name, namespace, name, name, issuer);
+%s""".formatted(name, namespace, name, name, issuer, authCacheBlock);
         } else if ("apiKey".equals(authType)) {
             return """
 apiVersion: kuadrant.io/v1
@@ -593,10 +638,10 @@ spec:
           selector:
             matchLabels:
               app: %s
-        credentials:
+%s        credentials:
           authorizationHeader:
             prefix: APIKEY
-""".formatted(name, namespace, name, name, name);
+""".formatted(name, namespace, name, name, name, authCacheBlock);
         }
 
         return """
@@ -626,6 +671,158 @@ spec:
                 .filter(p -> Boolean.TRUE.equals(p.enabled) && "logging".equals(p.name))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private Policy findAuthCachingPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled) && "3scale_auth_caching".equals(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * 3scale の Auth Caching ポリシー（caching_type: allow / strict / resilient）を
+     * Kuadrant AuthPolicy の認証ルール単位の cache（Authorino のキャッシュ）へ変換する。
+     * cache.key は認証情報そのもの（Authorization ヘッダー）をキーにして、
+     * 同一クレデンシャルからのリクエストに対する認証結果を再利用する。
+     * 3scale の caching_type は fail-open/fail-closed 等の詳細な意味論を持つが、
+     * Authorino 側は単純な TTL ベースのキャッシュしか持たないため、
+     * caching_type から TTL 目安へベストエフォートでマッピングする。
+     */
+    private String buildAuthCacheBlock(Policy authCachingPolicy) {
+        if (authCachingPolicy == null) {
+            return "";
+        }
+        String cachingType = authCachingPolicy.configuration != null
+                ? String.valueOf(authCachingPolicy.configuration.getOrDefault("caching_type", "strict"))
+                : "strict";
+        int ttl = switch (cachingType) {
+            case "allow" -> 300;
+            case "resilient" -> 600;
+            default -> 60;
+        };
+        return """
+        cache:
+          key:
+            selector: request.headers.authorization
+          ttl: %d
+""".formatted(ttl);
+    }
+
+    private Policy findUrlRewritingPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled) && "url_rewriting".equals(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    // ─────────────────────────────────────────────
+    // URL Rewriting (path) → EnvoyFilter (Lua)
+    // ─────────────────────────────────────────────
+
+    /**
+     * 3scale の URL Rewriting ポリシー（op: sub/gsub, regex, replace）を
+     * Gateway API の HTTPRoute では表現できない（サポートするのは静的な
+     * ReplaceFullPath / ReplacePrefixMatch のみ）ため、Istio EnvoyFilter で
+     * envoy.filters.http.lua フィルターを挿入し、リクエストパスを書き換える。
+     *
+     * 3scale の regex/replace は PCRE + ngx.re.sub 構文（\d, キャプチャ参照 $1）。
+     * Envoy Lua フィルターは Lua 標準の string.gsub（Lua パターン）しか使えないため、
+     * よく使われる記法をベストエフォートで変換する（\d → %d, \w → %w, $1/\1 → %1 等）。
+     * 複雑な PCRE 構文（先読み等）は変換できないため、生成された Lua パターンは
+     * 必ず目視確認すること。
+     */
+    private String generateUrlRewritingEnvoyFilter(String name, String namespace,
+            java.util.List<Map<String, Object>> commands) {
+        StringBuilder rules = new StringBuilder();
+        for (Map<String, Object> cmd : commands) {
+            String op = String.valueOf(cmd.getOrDefault("op", "sub"));
+            String regex = String.valueOf(cmd.getOrDefault("regex", ""));
+            String replace = String.valueOf(cmd.getOrDefault("replace", ""));
+            if (regex.isBlank()) {
+                continue;
+            }
+            String luaPattern = pcreToLuaPattern(regex);
+            String luaReplace = pcreReplaceToLua(replace);
+            boolean global = "gsub".equals(op);
+            rules.append(String.format(
+                "  path = string.gsub(path, \"%s\", \"%s\"%s)%n",
+                luaPattern, luaReplace, global ? "" : ", 1"));
+        }
+
+        String luaScript = """
+function envoy_on_request(request_handle)
+  local path = request_handle:headers():get(":path")
+  if path == nil then
+    return
+  end
+%s  request_handle:headers():replace(":path", path)
+end
+""".formatted(rules);
+
+        // インデント調整（YAML の inlineCode ブロックに合わせる）
+        String indentedScript = luaScript.lines()
+                .map(l -> "              " + l)
+                .reduce((a, b) -> a + "\n" + b)
+                .orElse("");
+
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-url-rewriting
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: url_rewriting
+    3scale-migration/note: "Auto-converted from PCRE to Lua patterns on a best-effort basis — verify before use"
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: %s-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+              subFilter:
+                name: "envoy.filters.http.router"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.lua
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+            inlineCode: |
+%s
+""".formatted(name, namespace, name, name, indentedScript);
+    }
+
+    /** PCRE の代表的な記法を Lua パターンへベストエフォートで変換する。 */
+    private String pcreToLuaPattern(String pcre) {
+        return pcre
+                .replace("\\d", "%d")
+                .replace("\\w", "%w")
+                .replace("\\s", "%s")
+                .replace("\\.", "%.");
+    }
+
+    /** 3scale の置換文字列（$1 / \\1）を Lua の %1 形式へ変換する。 */
+    private String pcreReplaceToLua(String replace) {
+        return replace
+                .replaceAll("\\$(\\d)", "%$1")
+                .replaceAll("\\\\(\\d)", "%$1");
     }
 
     @SuppressWarnings("unchecked")
@@ -671,7 +868,7 @@ spec:
         boolean enableJson = Boolean.TRUE.equals(cfg.get("enable_json_logs"));
         boolean enableAccess = !Boolean.FALSE.equals(cfg.get("enable_access_logs"));
         String selectorLabel = isGateway
-                ? "istio.io/gateway-name: " + name + "-gateway"
+                ? "gateway.networking.k8s.io/gateway-name: " + name + "-gateway"
                 : "app: " + name;
 
         return """
@@ -712,7 +909,7 @@ spec:
 
         String context = isGateway ? "GATEWAY" : "SIDECAR_INBOUND";
         String selectorLabel = isGateway
-                ? "istio.io/gateway-name: " + name + "-gateway"
+                ? "gateway.networking.k8s.io/gateway-name: " + name + "-gateway"
                 : "app: " + name;
 
         return """
@@ -1006,7 +1203,13 @@ ServiceEntry・DestinationRule・URLRewrite フィルターは不要なため生
         String loggingFile = hasLogging
                 ? "| gateway.yaml | Gateway + Istio Telemetry / EnvoyFilter（アクセスログ設定） |\n" : "";
 
+        boolean hasUrlRewriting = findUrlRewritingPolicy(service) != null;
+        String urlRewritingFile = hasUrlRewriting
+                ? "| envoyfilter-url-rewriting.yaml | 3scale URL Rewriting ポリシーを Lua フィルターで再現（PCRE→Lua パターンはベストエフォート変換のため要確認） |\n"
+                : "";
+
         String fileList = loggingFile
+                + urlRewritingFile
                 + (backendType == BackendType.EXTERNAL
                     ? "| serviceentry.yaml | Istio ServiceEntry + ExternalName Service for external backend |\n"
                     + "| destinationrule.yaml | TLS origination to external host |"
