@@ -1,10 +1,18 @@
 import axios from 'axios';
+import i18n from '../i18n';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const api = axios.create({
   baseURL: BASE_URL,
   headers: { 'Content-Type': 'application/json' },
+});
+
+// バックエンドのメッセージ (apply.success 等) をフロントエンドの表示言語と
+// 一致させるため、現在の i18n 言語を Accept-Language として送信する。
+api.interceptors.request.use((config) => {
+  config.headers['Accept-Language'] = i18n.language || 'en';
+  return config;
 });
 
 export const connectionApi = {

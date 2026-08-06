@@ -50,7 +50,7 @@ export const ALL_POLICIES = [
   'URL Rewriting with Captures',
 ];
 
-export const DEFAULT_SUPPORTED_POLICIES = ['3scale APIcast', 'Upstream Connection'];
+export const DEFAULT_SUPPORTED_POLICIES = ['3scale APIcast', 'Header Modification', 'Upstream Connection', 'Logging', 'Anonymous Access'];
 const SETTINGS_KEY = 'supportedPolicies';
 
 export async function loadSupportedPolicies(): Promise<string[]> {

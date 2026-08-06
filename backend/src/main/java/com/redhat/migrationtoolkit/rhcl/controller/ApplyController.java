@@ -23,8 +23,11 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.Locale;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
@@ -55,6 +58,9 @@ public class ApplyController {
     @Inject
     ObjectMapper objectMapper;
 
+    @Context
+    HttpHeaders httpHeaders;
+
     public record ApplyRequest(String namespace, Map<String, String> files, String source, String packageName) {}
 
     public record ApplyResult(String fileName, boolean success, String message) {}
@@ -68,9 +74,12 @@ public class ApplyController {
     @Transactional
     @Operation(summary = "Apply YAML files to a Kubernetes/OpenShift namespace")
     public Response applyFiles(ApplyRequest request) {
+        Locale locale = Messages.resolveLocale(
+                httpHeaders != null ? httpHeaders.getHeaderString("Accept-Language") : null);
+
         if (request == null || request.files() == null || request.files().isEmpty()) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("apply.error.noFiles")))
+                    .entity(Map.of("error", messages.get("apply.error.noFiles", locale)))
                     .build();
         }
 
@@ -150,7 +159,7 @@ public class ApplyController {
                 }
 
                 if (errors.isEmpty()) {
-                    fileResults.add(new ApplyResult(fileName, true, messages.get("apply.success")));
+                    fileResults.add(new ApplyResult(fileName, true, messages.get("apply.success", locale)));
                 } else {
                     fileResults.add(new ApplyResult(fileName, false, String.join("; ", errors)));
                 }

@@ -1,0 +1,17 @@
+# openshift-operators Namespace には OLM が作成したグローバル OperatorGroup が
+# 既に存在するため OperatorGroup は作成しない。
+#
+# Community 版 kuadrant-operator は devportal (APIKey/APIProduct) を持たず、
+# AuthPolicy も v1beta2 までしか提供しないため、Red Hat 製品版である
+# rhcl-operator (Red Hat Connectivity Link) を使用する。
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: rhcl-operator
+  namespace: openshift-operators
+spec:
+  channel: stable
+  name: rhcl-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic

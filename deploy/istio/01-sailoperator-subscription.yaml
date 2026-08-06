@@ -1,0 +1,13 @@
+# openshift-operators Namespace には OLM が作成したグローバル OperatorGroup が
+# 既に存在するため OperatorGroup は作成しない。
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: sailoperator
+  namespace: openshift-operators
+spec:
+  channel: stable
+  name: sailoperator
+  source: community-operators
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic

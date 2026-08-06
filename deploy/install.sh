@@ -6,9 +6,9 @@ set -euo pipefail
 # Migration Toolkit - OpenShift プロビジョニングスクリプト
 #
 # Language / 言語設定:
-#   LANG=ja  → Japanese messages (日本語)
-#   LANG=en  → English messages  (英語)
-#   Auto-detected from system locale if not set.
+#   INSTALL_LANG=ja  → Japanese messages (日本語)
+#   INSTALL_LANG=en  → English messages  (英語)
+#   Default is English (system locale is not consulted).
 # ============================================================
 
 NAMESPACE=${NAMESPACE:-migration-toolkit}
@@ -16,9 +16,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 
 # ── 言語判定 ──────────────────────────────────────────────
-# INSTALL_LANG 環境変数 → システムロケール → デフォルト英語
+# INSTALL_LANG 環境変数で明示指定した場合のみ日本語に切り替える。
+# システムロケール ($LANG) は見ない。デフォルトは常に英語。
 _detect_lang() {
-  local l="${INSTALL_LANG:-${LANG:-}}"
+  local l="${INSTALL_LANG:-}"
   case "$l" in
     ja*|JP*) echo "ja" ;;
     *)       echo "en" ;;
@@ -81,6 +82,75 @@ create_namespace() {
 # ============================================================
 setup_kuadrant_prerequisites() {
   log_section "$(msg 'Kuadrant / Istio 前提条件セットアップ' 'Kuadrant / Istio Prerequisites Setup')"
+
+  # 0a. Sail Operator (Istio) インストール
+  if oc get subscription sailoperator -n openshift-operators &>/dev/null; then
+    log_warn "$(msg 'Sail Operator は既にインストール済みです' 'Sail Operator is already installed')"
+  else
+    log_info "$(msg 'Sail Operator Subscription を作成しています...' 'Creating Sail Operator Subscription...')"
+    oc apply -f "$SCRIPT_DIR/istio/01-sailoperator-subscription.yaml"
+  fi
+
+  # 0b. Red Hat Connectivity Link (rhcl-operator) インストール
+  # Community 版 kuadrant-operator は devportal (APIKey/APIProduct) を持たず、
+  # AuthPolicy も v1 を提供しないため rhcl-operator を使用する。
+  if oc get subscription rhcl-operator -n openshift-operators &>/dev/null; then
+    log_warn "$(msg 'Red Hat Connectivity Link (rhcl-operator) は既にインストール済みです' 'Red Hat Connectivity Link (rhcl-operator) is already installed')"
+  else
+    log_info "$(msg 'Red Hat Connectivity Link (rhcl-operator) Subscription を作成しています...' 'Creating Red Hat Connectivity Link (rhcl-operator) Subscription...')"
+    oc apply -f "$SCRIPT_DIR/istio/02-kuadrant-operator-subscription.yaml"
+  fi
+
+  # 0c. CRD (istios.sailoperator.io) が利用可能になるまで待機（最大5分）
+  log_info "$(msg 'Sail Operator CRD の準備を待機中（最大5分）...' 'Waiting for Sail Operator CRD (up to 5 min)...')"
+  count=0
+  until oc get crd istios.sailoperator.io &>/dev/null; do
+    if [ $count -ge 30 ]; then
+      log_warn "$(msg 'CRD のタイムアウト。状態を確認してください: oc get csv -n openshift-operators' 'CRD timed out. Check: oc get csv -n openshift-operators')"
+      break
+    fi
+    echo -n "."
+    sleep 10
+    ((count++))
+  done
+  echo ""
+  if oc get crd istios.sailoperator.io &>/dev/null; then
+    log_ok "$(msg 'Sail Operator CRD が利用可能になりました' 'Sail Operator CRD is available')"
+  fi
+
+  # 0d. CRD (kuadrants.kuadrant.io) が利用可能になるまで待機（最大5分）
+  log_info "$(msg 'Kuadrant Operator CRD の準備を待機中（最大5分）...' 'Waiting for Kuadrant Operator CRD (up to 5 min)...')"
+  count=0
+  until oc get crd kuadrants.kuadrant.io &>/dev/null; do
+    if [ $count -ge 30 ]; then
+      log_warn "$(msg 'CRD のタイムアウト。状態を確認してください: oc get csv -n openshift-operators' 'CRD timed out. Check: oc get csv -n openshift-operators')"
+      break
+    fi
+    echo -n "."
+    sleep 10
+    ((count++))
+  done
+  echo ""
+  if oc get crd kuadrants.kuadrant.io &>/dev/null; then
+    log_ok "$(msg 'Kuadrant Operator CRD が利用可能になりました' 'Kuadrant Operator CRD is available')"
+  fi
+
+  # 0e. DevPortal CRD (apiproducts.devportal.kuadrant.io) が利用可能になるまで待機（最大5分）
+  log_info "$(msg 'DevPortal CRD の準備を待機中（最大5分）...' 'Waiting for DevPortal CRD (up to 5 min)...')"
+  count=0
+  until oc get crd apiproducts.devportal.kuadrant.io &>/dev/null; do
+    if [ $count -ge 30 ]; then
+      log_warn "$(msg 'CRD のタイムアウト。状態を確認してください: oc get csv -n openshift-operators' 'CRD timed out. Check: oc get csv -n openshift-operators')"
+      break
+    fi
+    echo -n "."
+    sleep 10
+    ((count++))
+  done
+  echo ""
+  if oc get crd apiproducts.devportal.kuadrant.io &>/dev/null; then
+    log_ok "$(msg 'DevPortal CRD が利用可能になりました' 'DevPortal CRD is available')"
+  fi
 
   # 1. istio-system namespace
   if oc get namespace istio-system &>/dev/null; then
@@ -294,6 +364,11 @@ deploy_backend() {
     -n "$NAMESPACE"
   log_ok "$(msg 'バックエンドビルド完了' 'Backend build complete')"
 
+  # Deployment に ImageChange トリガーがないため、同一タグへの新イメージ push だけでは
+  # 既存 Pod は再作成されない。明示的に rollout restart してビルド結果を反映する。
+  log_info "$(msg '新しいイメージを反映するため rollout restart しています...' 'Rolling out restart to pick up the newly built image...')"
+  oc rollout restart deployment/migration-tool-backend -n "$NAMESPACE"
+
   log_info "$(msg 'バックエンドデプロイを待機中...' 'Waiting for backend deployment...')"
   oc rollout status deployment/migration-tool-backend -n "$NAMESPACE" --timeout=5m
   log_ok "$(msg 'バックエンドデプロイ完了' 'Backend deployment complete')"
@@ -354,6 +429,11 @@ deploy_frontend() {
     --wait \
     -n "$NAMESPACE"
   log_ok "$(msg 'フロントエンドビルド完了' 'Frontend build complete')"
+
+  # Deployment に ImageChange トリガーがないため、同一タグへの新イメージ push だけでは
+  # 既存 Pod は再作成されない。明示的に rollout restart してビルド結果を反映する。
+  log_info "$(msg '新しいイメージを反映するため rollout restart しています...' 'Rolling out restart to pick up the newly built image...')"
+  oc rollout restart deployment/migration-tool-frontend -n "$NAMESPACE"
 
   log_info "$(msg 'フロントエンドデプロイを待機中...' 'Waiting for frontend deployment...')"
   oc rollout status deployment/migration-tool-frontend -n "$NAMESPACE" --timeout=3m
@@ -419,7 +499,7 @@ case "${1:-}" in
     echo ""
     echo "環境変数:"
     echo "  NAMESPACE      デプロイ先Namespace (デフォルト: migration-toolkit)"
-    echo "  INSTALL_LANG   表示言語: ja (日本語) / en (English) (デフォルト: 自動検出)"
+    echo "  INSTALL_LANG   表示言語: ja (日本語) / en (English) (デフォルト: en)"
     else
     echo "Options:"
     echo "  --help              Show this help"
@@ -430,7 +510,7 @@ case "${1:-}" in
     echo ""
     echo "Environment variables:"
     echo "  NAMESPACE      Target namespace (default: migration-toolkit)"
-    echo "  INSTALL_LANG   Language: ja (Japanese) / en (English) (default: auto-detect)"
+    echo "  INSTALL_LANG   Language: ja (Japanese) / en (English) (default: en)"
     fi
     exit 0
     ;;

@@ -53,6 +53,7 @@
     "title": "API一覧",
     "description": "変換対象のAPIを選択してください",
     "warningTitle": "先に3scale接続設定を行ってください",
+    "policyDefinitions": "ポリシー定義",
     "goToConnection": "接続設定へ",
     "searchPlaceholder": "API名で検索",
     "btnRefresh": "更新",
@@ -106,7 +107,18 @@
     "externalNoteEnvoy": "<code>envoyfilter.yaml</code> — Istio Gateway の Envoy に外部 HTTPS cluster を直接注入（STRICT_DNS + TLS SNI）",
     "externalNoteRoute": "<code>httproute.yaml</code> — <code>Host</code> ヘッダーを外部ホスト名に書き換えるフィルターを追加",
     "externalFileTitle": "外部サービス向けリソース",
-    "externalFilesNote": "外部サービス向けリソースを含みます（EnvoyFilter + Host rewrite）"
+    "externalFilesNote": "外部サービス向けリソースを含みます（EnvoyFilter + Host rewrite）",
+    "policySettings": "ポリシー設定",
+    "loggingTarget": "Logging ポリシー適用先",
+    "loggingTargetGateway": "Gateway Pod（推奨）",
+    "loggingTargetGatewayDesc": "context: GATEWAY / istio.io/gateway-name selector",
+    "loggingTargetWorkload": "Workload Pod",
+    "loggingTargetWorkloadDesc": "context: SIDECAR_INBOUND / app selector",
+    "anonymousTarget": "Anonymous Access ポリシー適用先",
+    "anonymousTargetGateway": "Gateway",
+    "anonymousTargetGatewayDesc": "targetRef.kind: Gateway — Gateway 経由の全ルートに適用",
+    "anonymousTargetHttpRoute": "HTTPRoute（推奨）",
+    "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — 特定ルートのみに適用"
   },
   "yamlViewer": {
     "title": "YAML プレビュー",

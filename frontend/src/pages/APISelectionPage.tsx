@@ -42,10 +42,11 @@ const renderConfigValue = (v: unknown): string => {
 };
 
 const PolicyPanel: React.FC<{ policies: Policy[] }> = ({ policies }) => {
+  const { t } = useTranslation();
   if (policies.length === 0) return null;
   return (
     <div style={{ marginTop: 10, padding: '10px 14px', background: '#f9f9f9', borderRadius: 4, border: '1px solid #e8e8e8' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#6a6e73', marginBottom: 6 }}>ポリシー定義</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: '#6a6e73', marginBottom: 6 }}>{t('apiSelection.policyDefinitions', 'Policy Definitions')}</div>
       {policies.map((p, i) => (
         <div key={i} style={{ marginBottom: i < policies.length - 1 ? 8 : 0, opacity: p.enabled ? 1 : 0.45 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>

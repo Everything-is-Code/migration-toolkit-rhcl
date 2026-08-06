@@ -40,18 +40,36 @@ public class ConversionService {
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
-        BackendType backendType = detectBackendType(backendUrl);
-        String externalHost = backendType == BackendType.EXTERNAL ? extractHostname(backendUrl) : null;
+        // ユーザーが明示的に URL を指定しなかった場合は、3scale に登録済みの
+        // 実際のバックエンド (privateEndpoint) を使ってタイプを自動判定する。
+        // configmap.yaml のフォールバックと一致させることで、
+        // 「バックエンド URL は ELB を指しているのに HTTPRoute は
+        //  存在しないクラスター内部 Service を指す」という不整合を防ぐ。
+        String effectiveBackendUrl = backendUrl;
+        if ((effectiveBackendUrl == null || effectiveBackendUrl.isBlank())
+                && service.backends != null && !service.backends.isEmpty()) {
+            effectiveBackendUrl = service.backends.get(0).privateEndpoint;
+        }
+
+        BackendType backendType = detectBackendType(effectiveBackendUrl);
+        String externalHost = backendType == BackendType.EXTERNAL ? extractHostname(effectiveBackendUrl) : null;
         String internalService = backendType == BackendType.INTERNAL
-                ? extractInternalService(backendUrl, name) : null;
-        int internalPort = backendType == BackendType.INTERNAL ? extractPort(backendUrl, 8080) : 8080;
+                ? extractInternalService(effectiveBackendUrl, name) : null;
+        int internalPort = backendType == BackendType.INTERNAL ? extractPort(effectiveBackendUrl, 8080) : 8080;
+        // 外部バックエンドのポートは URL のスキーム（http→80 / https→443）または
+        // 明示ポートから決定する。443 に固定すると、実際は HTTP のみで待ち受けている
+        // バックエンド（TLS 未設定の OpenShift Route など）に接続できなくなる。
+        int externalDefaultPort = effectiveBackendUrl != null && effectiveBackendUrl.trim().startsWith("http://")
+                ? 80 : 443;
+        int externalPort = backendType == BackendType.EXTERNAL
+                ? extractPort(effectiveBackendUrl, externalDefaultPort) : 443;
 
         files.put("gateway.yaml", generateGateway(name, namespace));
         files.put("httproute.yaml",  generateHttpRoute(
-                name, namespace, service, backendType, externalHost, internalService, internalPort));
+                name, namespace, service, backendType, externalHost, internalService, internalPort, externalPort));
         files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
-        files.put("configmap.yaml",  generateConfigMap(name, namespace, service, backendUrl));
+        files.put("configmap.yaml",  generateConfigMap(name, namespace, service, effectiveBackendUrl));
         files.put("apiproduct.yaml", generateApiProduct(name, namespace, service));
 
         String authType = service.authentication != null ? service.authentication.type : "none";
@@ -60,8 +78,11 @@ public class ConversionService {
         }
 
         if (backendType == BackendType.EXTERNAL) {
-            files.put("serviceentry.yaml",    generateServiceEntry(name, namespace, externalHost));
-            files.put("destinationrule.yaml", generateDestinationRule(name, namespace, externalHost));
+            boolean externalUsesTls = externalPort == 443;
+            files.put("serviceentry.yaml",
+                    generateServiceEntry(name, namespace, externalHost, externalPort, externalUsesTls));
+            files.put("destinationrule.yaml",
+                    generateDestinationRule(name, namespace, externalHost, externalUsesTls));
         }
 
         Policy loggingPolicy = findLoggingPolicy(service);
@@ -200,8 +221,8 @@ spec:
 
     private String generateHttpRoute(String name, String namespace, ApiService service,
                                      BackendType backendType, String externalHost,
-                                     String internalService, int internalPort) {
-        int backendPort   = backendType == BackendType.EXTERNAL ? 443 : internalPort;
+                                     String internalService, int internalPort, int externalPort) {
+        int backendPort   = backendType == BackendType.EXTERNAL ? externalPort : internalPort;
         String backendSvc = backendType == BackendType.EXTERNAL
                 ? (name + "-backend")
                 : (internalService != null ? internalService : name + "-backend");
@@ -438,8 +459,11 @@ metadata:
     // ServiceEntry（外部バックエンドのみ生成）
     // ─────────────────────────────────────────────
 
-    private String generateServiceEntry(String name, String namespace, String externalHost) {
+    private String generateServiceEntry(String name, String namespace, String externalHost,
+                                        int externalPort, boolean useTls) {
         String backendSvc = name + "-backend";
+        String portName = useTls ? "https" : "http";
+        String protocol = useTls ? "HTTPS" : "HTTP";
         return """
 apiVersion: networking.istio.io/v1alpha3
 kind: ServiceEntry
@@ -453,9 +477,9 @@ spec:
   hosts:
   - %s
   ports:
-  - number: 443
-    name: https
-    protocol: HTTPS
+  - number: %d
+    name: %s
+    protocol: %s
   resolution: DNS
   location: MESH_EXTERNAL
 ---
@@ -471,17 +495,29 @@ spec:
   type: ExternalName
   externalName: %s
   ports:
-  - name: https
-    port: 443
-""".formatted(name, namespace, name, externalHost,
-              backendSvc, namespace, name, externalHost);
+  - name: %s
+    port: %d
+""".formatted(name, namespace, name, externalHost, externalPort, portName, protocol,
+              backendSvc, namespace, name, externalHost, portName, externalPort);
     }
 
     // ─────────────────────────────────────────────
     // DestinationRule（外部バックエンドのみ生成）
     // ─────────────────────────────────────────────
 
-    private String generateDestinationRule(String name, String namespace, String externalHost) {
+    private String generateDestinationRule(String name, String namespace, String externalHost, boolean useTls) {
+        String trafficPolicy = useTls
+                ? """
+  trafficPolicy:
+    tls:
+      mode: SIMPLE
+      sni: %s
+""".formatted(externalHost)
+                : """
+  trafficPolicy:
+    tls:
+      mode: DISABLE
+""";
         return """
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
@@ -493,11 +529,7 @@ metadata:
     migrated-from: 3scale
 spec:
   host: %s
-  trafficPolicy:
-    tls:
-      mode: SIMPLE
-      sni: %s
-""".formatted(name, namespace, name, externalHost, externalHost);
+%s""".formatted(name, namespace, name, externalHost, trafficPolicy);
     }
 
     // ─────────────────────────────────────────────

@@ -53,6 +53,7 @@
     "title": "API List",
     "description": "Select the APIs to migrate",
     "warningTitle": "Please configure 3scale connection first",
+    "policyDefinitions": "Policy Definitions",
     "goToConnection": "Go to Connection",
     "searchPlaceholder": "Search by API name",
     "btnRefresh": "Refresh",
@@ -106,7 +107,18 @@
     "externalNoteEnvoy": "<code>envoyfilter.yaml</code> — Injects external HTTPS cluster directly into Istio Gateway Envoy (STRICT_DNS + TLS SNI)",
     "externalNoteRoute": "<code>httproute.yaml</code> — Adds a filter to rewrite the <code>Host</code> header to the external hostname",
     "externalFileTitle": "External service resource",
-    "externalFilesNote": "Includes external service resources (EnvoyFilter + Host rewrite)"
+    "externalFilesNote": "Includes external service resources (EnvoyFilter + Host rewrite)",
+    "policySettings": "Policy Settings",
+    "loggingTarget": "Logging Policy Target",
+    "loggingTargetGateway": "Gateway Pod (recommended)",
+    "loggingTargetGatewayDesc": "context: GATEWAY / istio.io/gateway-name selector",
+    "loggingTargetWorkload": "Workload Pod",
+    "loggingTargetWorkloadDesc": "context: SIDECAR_INBOUND / app selector",
+    "anonymousTarget": "Anonymous Access Policy Target",
+    "anonymousTargetGateway": "Gateway",
+    "anonymousTargetGatewayDesc": "targetRef.kind: Gateway — applies to all routes through the Gateway",
+    "anonymousTargetHttpRoute": "HTTPRoute (recommended)",
+    "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — applies only to the specific route"
   },
   "yamlViewer": {
     "title": "YAML Preview",

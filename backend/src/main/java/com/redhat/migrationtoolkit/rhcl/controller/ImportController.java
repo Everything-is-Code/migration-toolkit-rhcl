@@ -6,6 +6,8 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -17,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -28,15 +31,21 @@ public class ImportController {
     @Inject
     Messages messages;
 
+    @Context
+    HttpHeaders httpHeaders;
+
     @POST
     @Path("/zip")
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(summary = "Upload and extract a ZIP file, returning YAML contents")
     public Response uploadZip(@RestForm("file") FileUpload fileUpload) {
+        Locale locale = Messages.resolveLocale(
+                httpHeaders != null ? httpHeaders.getHeaderString("Accept-Language") : null);
+
         if (fileUpload == null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("import.error.noFile")))
+                    .entity(Map.of("error", messages.get("import.error.noFile", locale)))
                     .build();
         }
 
@@ -60,7 +69,7 @@ public class ImportController {
 
         } catch (IOException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("import.error.parseZip", e.getMessage())))
+                    .entity(Map.of("error", messages.get("import.error.parseZip", locale, e.getMessage())))
                     .build();
         }
 
@@ -68,7 +77,7 @@ public class ImportController {
                 .anyMatch(k -> k.endsWith(".yaml") || k.endsWith(".yml"));
         if (!hasYaml) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("import.error.noYaml")))
+                    .entity(Map.of("error", messages.get("import.error.noYaml", locale)))
                     .build();
         }
 

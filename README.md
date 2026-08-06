@@ -64,10 +64,17 @@ https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link
 | OpenShift Container Platform | 4.14+ | Target deployment cluster |
 | `oc` CLI | Matching cluster version | Cluster operations |
 | CrunchyData PostgreSQL Operator | Latest | Database management (pre-install from OperatorHub) |
-| Red Hat Connectivity Link (Kuadrant) | Latest | Migration target component |
+| Sail Operator (Istio) | Latest | Gateway API implementation — auto-installed by `install.sh` |
+| Red Hat Connectivity Link (`rhcl-operator`) | Latest | Migration target component — auto-installed by `install.sh` |
 
 > **Note**: Install the CrunchyData PostgreSQL Operator into the `openshift-operators`  
 > namespace **before** running the install script. The script detects it automatically.
+>
+> Sail Operator and Red Hat Connectivity Link (`rhcl-operator`, Red Hat Operators catalog)
+> are installed automatically by `install.sh` / `install.sh --kuadrant-only`. Use the
+> productized `rhcl-operator`, not the community `kuadrant-operator` — the community
+> build lacks the DevPortal CRDs (`APIKey` / `APIProduct`) and only serves `AuthPolicy`
+> as `v1beta2`, not `v1`.
 
 ### 3scale Environment
 
@@ -96,21 +103,36 @@ NAMESPACE=migration-toolkit ./deploy/install.sh --db-only
 The install script handles:
 
 1. Namespace creation
-2. Waiting for CrunchyData PostgreSQL Operator
-3. PostgreSQL cluster creation (including SCC)
-4. Backend Maven build → S2I → deployment
-5. Frontend npm build → S2I (nginx) → deployment
-6. Printing access URLs
+2. Sail Operator (Istio) + Red Hat Connectivity Link (`rhcl-operator`) install & wait for their CRDs
+3. Waiting for CrunchyData PostgreSQL Operator
+4. PostgreSQL cluster creation (including SCC)
+5. Backend Maven build → S2I → deployment
+6. Frontend npm build → S2I (nginx) → deployment
+7. Printing access URLs
+
+> **Rebuilding the frontend manually** (outside of `install.sh`): `npm run build` empties
+> `frontend/build/` (`vite.config.ts` → `emptyOutDir`), which deletes the copied
+> `nginx-default-cfg/` directory. Before running a binary S2I build
+> (`oc start-build ... --from-dir=frontend/build`), re-copy it — otherwise the deployed
+> image ships without the `/api/` reverse-proxy config and every backend call 404s:
+> ```bash
+> mkdir -p frontend/build/nginx-default-cfg
+> cp frontend/nginx-default-cfg/api-proxy.conf frontend/build/nginx-default-cfg/api-proxy.conf
+> ```
+> `install.sh`'s `deploy_frontend` already does this for you.
 
 ### Language Selection
 
 ```bash
-# Japanese (default)
+# English (default)
 ./deploy/install.sh
 
-# Run in English
-INSTALL_LANG=en ./deploy/install.sh
+# Run in Japanese
+INSTALL_LANG=ja ./deploy/install.sh
 ```
+
+> `install.sh` no longer inspects the system locale (`$LANG`). It is English by
+> default; pass `INSTALL_LANG=ja` explicitly to switch to Japanese.
 
 ### Local Development
 
@@ -262,6 +284,15 @@ Resources generated via the `from-3scale-to-connectivity-link` adapter:
 
 > Replace `REPLACE_ME` placeholders in `secret.yaml` with actual values before applying.
 
+**External backend detection**: If the "backend is an external service" checkbox is left
+unchecked, the backend type is no longer inferred only from that checkbox — it also falls
+back to the backend URL already registered in 3scale (`service.backends[0].privateEndpoint`),
+so `httproute.yaml` / `serviceentry.yaml` / `configmap.yaml` stay consistent even when the
+checkbox isn't used. The backend port and whether `DestinationRule` originates TLS are now
+derived from that URL's scheme (`http://` → port 80, no TLS / `https://` → port 443, TLS
+`SIMPLE`) instead of being hardcoded to `443` + TLS, which previously broke plain-HTTP
+external backends (e.g. an OpenShift Route without edge TLS).
+
 ### 5. YAML Preview
 
 View and edit all generated files in a code viewer inside the browser.
@@ -331,7 +362,7 @@ Automatically applies resources required for Connectivity Link to operate in the
 ```
 migration-toolkit-rhcl/
 ├── backend/                    # Quarkus backend (Java 21)
-│   └── src/main/java/com/example/migrationtool/
+│   └── src/main/java/com/redhat/migrationtoolkit/rhcl/
 │       ├── controller/         # REST endpoints
 │       │   ├── ConnectionController.java   # 3scale connection test
 │       │   ├── ExportController.java       # Service list & compatibility check
@@ -342,13 +373,18 @@ migration-toolkit-rhcl/
 │       │   ├── ImportController.java       # ZIP upload & parsing
 │       │   ├── HistoryController.java      # History CRUD, ZIP download, bulk delete
 │       │   ├── GatewayInfoController.java  # Gateway resource info
+│       │   ├── ClusterController.java      # Cluster base domain auto-detection
 │       │   └── SetupController.java        # Namespace setup
+│       ├── service/
+│       │   └── ConversionService.java  # 3scale → Connectivity Link YAML generation
 │       ├── entity/             # Panache entities (JPA)
 │       │   ├── ProjectEntity.java
 │       │   └── ConversionHistoryEntity.java
-│       ├── model/              # DTOs / domain models
+│       ├── dto/                # Request/response DTOs
+│       ├── model/              # Domain models
+│       ├── client/             # 3scale API client
 │       ├── util/
-│       │   └── Messages.java   # i18n ResourceBundle wrapper
+│       │   └── Messages.java   # i18n ResourceBundle wrapper (Accept-Language aware, default: English)
 │       └── resources/
 │           ├── application.properties
 │           ├── db/migration/
@@ -407,6 +443,7 @@ migration-toolkit-rhcl/
 | DELETE | `/api/history` | Bulk delete history entries by ID list |
 | GET | `/api/history/projects` | List projects |
 | GET | `/api/gateway/info` | Get Gateway resource info from cluster |
+| GET | `/api/cluster/domain` | Auto-detect the cluster's base domain from the backend's own Route (used by "Auto-detect URL") |
 | POST | `/api/setup/namespace` | Apply Namespace setup resources |
 | GET | `/api/setup/status` | Check Namespace setup status |
 
@@ -453,7 +490,7 @@ Flyway migrations:
 ### Frontend
 
 - Powered by `react-i18next`
-- Default language: **Japanese (ja)**
+- Default language: **English (en)**
 - Strings managed in `frontend/src/locales/ja.json` / `en.json`
 - Runtime language switch via the **JA / EN** toggle in the masthead
 
@@ -462,6 +499,13 @@ Flyway migrations:
 - Java standard `ResourceBundle`
 - `backend/src/main/resources/messages_ja.properties` / `messages_en.properties`
 - `Messages` bean (`@ApplicationScoped`) injected into controllers
+- Default locale: **English**. Controllers that return user-facing messages
+  (`ApplyController`, `ImportController`) resolve the locale from the request's
+  `Accept-Language` header via `Messages.resolveLocale(...)`, falling back to
+  English for anything other than `ja`.
+- The frontend's Axios client (`frontend/src/api/client.ts`) sends the current
+  `i18n.language` as `Accept-Language` on every request, so backend response
+  messages (e.g. `apply.success`) always match the UI language.
 
 ## Testing
 
@@ -548,10 +592,17 @@ https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link
 | OpenShift Container Platform | 4.14 以上 | デプロイ先クラスター |
 | `oc` CLI | クラスターに対応したバージョン | クラスター操作 |
 | CrunchyData PostgreSQL Operator | 最新版 | データベース管理（OperatorHub から事前インストール） |
-| Red Hat Connectivity Link (Kuadrant) | 最新版 | 移行対象コンポーネント |
+| Sail Operator (Istio) | 最新版 | Gateway API 実装 — `install.sh` が自動インストール |
+| Red Hat Connectivity Link (`rhcl-operator`) | 最新版 | 移行対象コンポーネント — `install.sh` が自動インストール |
 
 > **注意**: CrunchyData PostgreSQL Operator は `openshift-operators` Namespace へ  
 > 事前にインストールしてください。インストールスクリプトが自動検出します。
+>
+> Sail Operator と Red Hat Connectivity Link（`rhcl-operator`、Red Hat Operators カタログ）は
+> `install.sh` / `install.sh --kuadrant-only` が自動でインストールします。Community 版の
+> `kuadrant-operator` ではなく、製品版の `rhcl-operator` を使用してください。Community 版には
+> DevPortal CRD（`APIKey` / `APIProduct`）が含まれておらず、`AuthPolicy` も `v1beta2` までしか
+> 提供されません（`v1` が必要です）。
 
 ### 3scale 環境
 
@@ -580,21 +631,37 @@ NAMESPACE=migration-toolkit ./deploy/install.sh --db-only
 インストールスクリプトが以下を自動処理します:
 
 1. Namespace 作成
-2. CrunchyData PostgreSQL Operator インストール待機
-3. PostgreSQL クラスター作成（SCC 含む）
-4. バックエンド Maven ビルド → S2I → デプロイ
-5. フロントエンド npm ビルド → S2I (nginx) → デプロイ
-6. アクセス URL 表示
+2. Sail Operator (Istio) + Red Hat Connectivity Link (`rhcl-operator`) のインストールと CRD 準備待機
+3. CrunchyData PostgreSQL Operator インストール待機
+4. PostgreSQL クラスター作成（SCC 含む）
+5. バックエンド Maven ビルド → S2I → デプロイ
+6. フロントエンド npm ビルド → S2I (nginx) → デプロイ
+7. アクセス URL 表示
+
+> **フロントエンドを手動で再ビルドする場合**（`install.sh` を使わない場合）: `npm run build` は
+> `frontend/build/` を毎回空にするため（`vite.config.ts` の `emptyOutDir`）、コピーしていた
+> `nginx-default-cfg/` ディレクトリも削除されます。バイナリ S2I ビルド
+> （`oc start-build ... --from-dir=frontend/build`）を実行する前に、必ず再コピーしてください。
+> 忘れると `/api/` へのリバースプロキシ設定なしのイメージがデプロイされ、バックエンドへの
+> 全リクエストが 404 になります。
+> ```bash
+> mkdir -p frontend/build/nginx-default-cfg
+> cp frontend/nginx-default-cfg/api-proxy.conf frontend/build/nginx-default-cfg/api-proxy.conf
+> ```
+> `install.sh` の `deploy_frontend` はこの処理を自動的に行います。
 
 ### 言語切替
 
 ```bash
-# 日本語（デフォルト）
+# 英語（デフォルト）
 ./deploy/install.sh
 
-# 英語で実行
-INSTALL_LANG=en ./deploy/install.sh
+# 日本語で実行
+INSTALL_LANG=ja ./deploy/install.sh
 ```
+
+> `install.sh` はシステムロケール（`$LANG`）を参照しなくなりました。デフォルトは英語で、
+> 日本語に切り替えたい場合は明示的に `INSTALL_LANG=ja` を指定してください。
 
 ### ローカル開発
 
@@ -746,6 +813,15 @@ Migration Score (0–100%) でトータルの移行難易度を数値化しま�
 
 > `secret.yaml` 内の `REPLACE_ME` は手動で実際の値に置き換えてください。
 
+**外部バックエンドの自動判定**: 「バックエンドは外部サービス」チェックボックスをオフのままでも、
+バックエンドタイプの判定はチェックボックスの値だけでなく、3scale に登録済みのバックエンド URL
+（`service.backends[0].privateEndpoint`）へ自動フォールバックするようになりました。これにより
+`httproute.yaml` / `serviceentry.yaml` / `configmap.yaml` の内容が矛盾しなくなります。また、
+バックエンドのポートと `DestinationRule` の TLS 発信有無は、この URL のスキームから決定されます
+（`http://` → ポート 80・TLS なし / `https://` → ポート 443・TLS `SIMPLE`）。以前は常に `443` +
+TLS 固定だったため、TLS 未設定のプレーン HTTP な外部バックエンド（例: edge TLS 未設定の
+OpenShift Route）に接続できませんでした。
+
 ### 5. YAML プレビュー
 
 生成した全ファイルをブラウザ上でコードビューア形式で確認・編集できます。
@@ -815,7 +891,7 @@ ZIP Import を実行するたびに 1 件の履歴レコードを作成:
 ```
 migration-toolkit-rhcl/
 ├── backend/                    # Quarkus バックエンド (Java 21)
-│   └── src/main/java/com/example/migrationtool/
+│   └── src/main/java/com/redhat/migrationtoolkit/rhcl/
 │       ├── controller/         # REST エンドポイント
 │       │   ├── ConnectionController.java   # 3scale 接続テスト
 │       │   ├── ExportController.java       # サービス一覧・互換性チェック
@@ -826,13 +902,18 @@ migration-toolkit-rhcl/
 │       │   ├── ImportController.java       # ZIP アップロード・解析
 │       │   ├── HistoryController.java      # 変換履歴 CRUD・ZIP ダウンロード
 │       │   ├── GatewayInfoController.java  # Gateway リソース情報取得
+│       │   ├── ClusterController.java      # クラスタードメイン自動検出
 │       │   └── SetupController.java        # Namespace セットアップ
+│       ├── service/
+│       │   └── ConversionService.java  # 3scale → Connectivity Link YAML 生成ロジック
 │       ├── entity/             # Panache エンティティ (JPA)
 │       │   ├── ProjectEntity.java
 │       │   └── ConversionHistoryEntity.java
-│       ├── model/              # DTO / ドメインモデル
+│       ├── dto/                # リクエスト/レスポンス DTO
+│       ├── model/              # ドメインモデル
+│       ├── client/             # 3scale API クライアント
 │       ├── util/
-│       │   └── Messages.java   # i18n ResourceBundle ラッパー
+│       │   └── Messages.java   # i18n ResourceBundle ラッパー（Accept-Language 対応、デフォルト: 英語）
 │       └── resources/
 │           ├── application.properties
 │           ├── db/migration/
@@ -891,6 +972,7 @@ migration-toolkit-rhcl/
 | DELETE | `/api/history` | 変換履歴の一括削除（ID リスト指定） |
 | GET | `/api/history/projects` | プロジェクト一覧 |
 | GET | `/api/gateway/info` | Gateway リソース情報取得 |
+| GET | `/api/cluster/domain` | バックエンド自身の Route からクラスタードメインを自動検出（「Auto-detect URL」で使用） |
 | POST | `/api/setup/namespace` | Namespace セットアップ |
 | GET | `/api/setup/status` | Namespace セットアップ状態確認 |
 
@@ -937,7 +1019,7 @@ Flyway マイグレーション:
 ### フロントエンド
 
 - `react-i18next` を使用
-- デフォルト言語: **日本語 (ja)**
+- デフォルト言語: **英語 (en)**
 - `frontend/src/locales/ja.json` / `en.json` で文字列管理
 - マストヘッド右端の **JA / EN** タブで実行時に切り替え可能
 
@@ -946,6 +1028,12 @@ Flyway マイグレーション:
 - Java 標準 `ResourceBundle` を使用
 - `backend/src/main/resources/messages_ja.properties` / `messages_en.properties`
 - `Messages` Bean (`@ApplicationScoped`) が各コントローラに注入される
+- デフォルトロケール: **英語**。ユーザー向けメッセージを返すコントローラ
+  （`ApplyController`、`ImportController`）は、リクエストの `Accept-Language` ヘッダーから
+  `Messages.resolveLocale(...)` でロケールを解決し、`ja` 以外はすべて英語にフォールバックします。
+- フロントエンドの Axios クライアント（`frontend/src/api/client.ts`）が、リクエストごとに現在の
+  `i18n.language` を `Accept-Language` として送信するため、バックエンドの応答メッセージ
+  （例: `apply.success`）は常に UI の表示言語と一致します。
 
 ## テスト
 
