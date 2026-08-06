@@ -10,6 +10,8 @@ Built with a Quarkus backend and a React/PatternFly frontend.
 - [Screenshots](#screenshots)
 - [Prerequisites & Required Tools](#prerequisites--required-tools)
 - [Quick Start](#quick-start)
+  - [Install with Helm (any cluster)](#install-with-helm-any-cluster)
+  - [Full Deploy to OpenShift (S2I / legacy)](#full-deploy-to-openshift)
 - [Architecture](#architecture)
 - [Workflow](#workflow)
 - [Features](#features)
@@ -17,6 +19,7 @@ Built with a Quarkus backend and a React/PatternFly frontend.
 - [API Reference](#api-reference)
 - [Data Model](#data-model)
 - [Internationalization (i18n)](#internationalization-i18n)
+- [Maintainer: make this repository operational (post-merge)](#maintainer-make-this-repository-operational-post-merge)
 - [日本語ドキュメント](#日本語ドキュメント)
 
 ---
@@ -44,8 +47,12 @@ Built with a Quarkus backend and a React/PatternFly frontend.
 ## Prerequisites & Required Tools
 
 ### Required tools
-Use of the following tool is required:
-https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link
+
+The conversion adapter below is required for the migration workflow:
+
+- **[from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)** — 3scale → Connectivity Link / Developer Hub adapter (also present as a git submodule in this repository).
+
+Helm chart packaging, Quay container images, and GitHub Actions CI/CD were validated together with this adapter on the contribution fork [`maximilianoPizarro/migration-toolkit-rhcl`](https://github.com/maximilianoPizarro/migration-toolkit-rhcl).
 
 ### Local Development
 
@@ -84,12 +91,57 @@ https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link
 
 ## Quick Start
 
+### Install with Helm (any cluster)
+
+Preferred path for OpenShift (and Kubernetes with Routes available): install pre-built images via Helm. Default images are public on Quay:
+
+- `quay.io/maximilianopizarro/migration-toolkit-rhcl-backend:latest` (also tagged `v0.1.0`)
+- `quay.io/maximilianopizarro/migration-toolkit-rhcl-frontend:latest` (also tagged `v0.1.0`)
+
+**Prerequisites:** OpenShift 4.14+ (or compatible), `helm` 3.x, `oc`, and Red Hat Connectivity Link / Kuadrant as required by the toolkit. The chart deploys an embedded PostgreSQL (`registry.redhat.io/rhel9/postgresql-15`) unless you point at an external DB.
+
+From the published Helm repository (GitHub Pages):
+
+```bash
+helm repo add migration-toolkit-rhcl https://maximilianopizarro.github.io/migration-toolkit-rhcl/
+helm repo update
+helm install migration-toolkit-rhcl migration-toolkit-rhcl/migration-toolkit-rhcl \
+  -n migration-toolkit --create-namespace
+```
+
+From a local clone of this repository:
+
+```bash
+helm upgrade --install migration-toolkit-rhcl ./helm/migration-toolkit-rhcl \
+  -n migration-toolkit --create-namespace
+```
+
+Override image tags or repositories if needed:
+
+```bash
+helm upgrade --install migration-toolkit-rhcl ./helm/migration-toolkit-rhcl \
+  -n migration-toolkit --create-namespace \
+  --set backend.image.tag=latest \
+  --set frontend.image.tag=latest
+```
+
+After install, get the frontend Route:
+
+```bash
+oc -n migration-toolkit get route
+```
+
+For OpenShift GitOps / Argo CD, copy [`examples/gitops/application.yaml`](examples/gitops/application.yaml) into your GitOps repo and set `repoURL` to this repository (or upstream after merge) with `path: helm/migration-toolkit-rhcl`.
+
+> Until the upstream maintainer enables GitHub Pages on `/docs`, you can keep using the validated Pages Helm repo: `https://maximilianopizarro.github.io/migration-toolkit-rhcl/`.
+
 ### Full Deploy to OpenShift
+
+Legacy path: in-cluster S2I builds via `deploy/install.sh` (unchanged). Prefer Helm above for any-cluster installs with published images.
 
 ```bash
 # Deploy to a specific namespace (default: migration-toolkit)
 NAMESPACE=migration-toolkit ./deploy/install.sh
-
 # Backend only
 NAMESPACE=migration-toolkit ./deploy/install.sh --backend-only
 
@@ -520,6 +572,124 @@ mvn verify checkstyle:checkstyle pmd:pmd
 
 ---
 
+## Maintainer: make this repository operational (post-merge)
+
+This section is for the repository owner after merging the **Simplify Tool Installation** contribution (Helm chart, Dockerfiles, Quay CI/CD). Application source under `backend/src` / `frontend/src` is unchanged; this runbook activates packaging, Pages, and CI.
+
+### Phase 0 — Already available after merge (no action)
+
+- Dockerfiles, GitHub Actions workflows, Helm chart, and `docs/` with chart `0.1.0` packaged
+- Public images ready to install:
+  - [`quay.io/maximilianopizarro/migration-toolkit-rhcl-backend`](https://quay.io/repository/maximilianopizarro/migration-toolkit-rhcl-backend) (`latest`, `v0.1.0`)
+  - [`quay.io/maximilianopizarro/migration-toolkit-rhcl-frontend`](https://quay.io/repository/maximilianopizarro/migration-toolkit-rhcl-frontend) (`latest`, `v0.1.0`)
+- Integration validated on [`maximilianoPizarro/migration-toolkit-rhcl`](https://github.com/maximilianoPizarro/migration-toolkit-rhcl) with [from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)
+- **Gaps until you finish this runbook:** upstream CI cannot push to Quay without secrets; upstream `helm repo add` needs GitHub Pages on `/docs`
+
+### Phase 1 — Git submodule (avoid Pages / CI checkout failures)
+
+1. Confirm [`.gitmodules`](.gitmodules) maps `from-3scale-to-connectivity-link` → `https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link.git`
+2. Optionally locally: `git submodule update --init --recursive`
+3. **Done when:** checkout with submodules no longer fails with `No url found for submodule path 'from-3scale-to-connectivity-link'`
+
+### Phase 2 — Publish GitHub Pages from `/docs` (Helm chart repository)
+
+Required for `helm repo add` against this repository’s Pages URL.
+
+1. Open the repo → **Settings → Pages**
+2. **Build and deployment → Source:** Deploy from a branch
+3. **Branch:** `main` · **Folder:** `/docs` → **Save**
+4. On `main`, confirm these files exist: `docs/index.yaml`, `docs/migration-toolkit-rhcl-0.1.0.tgz`, `docs/.nojekyll`, `docs/index.html`
+5. Wait until Pages status is **built** (Settings → Pages shows the site URL)
+6. Smoke-test HTTP:
+   - `https://nmushino.github.io/migration-toolkit-rhcl/` → 200
+   - `https://nmushino.github.io/migration-toolkit-rhcl/index.yaml` → 200 and lists the chart
+   - `https://nmushino.github.io/migration-toolkit-rhcl/migration-toolkit-rhcl-0.1.0.tgz` → 200
+7. In a follow-up commit, update [`scripts/lib/helm-repo-url.sh`](scripts/lib/helm-repo-url.sh) to `https://nmushino.github.io/migration-toolkit-rhcl/` and align the `helm repo add` example in this README
+8. **Temporary bridge:** until upstream Pages is live, users can install from `https://maximilianopizarro.github.io/migration-toolkit-rhcl/`
+9. **Done when:** `helm repo add migration-toolkit-rhcl https://nmushino.github.io/migration-toolkit-rhcl/ && helm search repo migration-toolkit-rhcl` shows `0.1.0`
+
+### Phase 3 — Red Hat Container Registry secrets (required for CI image builds)
+
+CI Dockerfiles pull `registry.access.redhat.com/ubi9/...`. The chart PostgreSQL image uses `registry.redhat.io/rhel9/postgresql-15`. Without registry login, **Build and push to Quay.io** fails on base-image pull.
+
+1. Open [Red Hat Terms-based Registry / Token Generation](https://access.redhat.com/terms-based-registry/)
+2. Sign in with your Red Hat account
+3. Create or open a **Registry Service Account**
+4. Copy the service account **username** and **token** (password)
+5. GitHub → **Settings → Secrets and variables → Actions → New repository secret**:
+   - `REDHAT_REGISTRY_USERNAME` = service account username
+   - `REDHAT_REGISTRY_PASSWORD` = service account token
+6. **Done when:** both secrets appear in the Actions secrets list (values hidden)
+
+### Phase 4 — Quay.io secrets (required for CI to publish images)
+
+Workflows default to `QUAY_NAMESPACE: maximilianopizarro` and Helm values already point at those public images.
+
+**Path A — Day-0 operational (recommended):** keep using the published maximilianopizarro images. Helm install works **without** your own Quay push. Configure `QUAY_USERNAME` / `QUAY_PASSWORD` only if you have write access to that Quay namespace. Otherwise leave CI push disabled until Path B.
+
+**Path B — Maintainer-owned Quay (fully autonomous):**
+
+1. On [quay.io](https://quay.io) create repositories `migration-toolkit-rhcl-backend` and `migration-toolkit-rhcl-frontend` (public, or private + cluster pull secret)
+2. Create a **Robot Account** with write on both repos; copy robot username + token
+3. Add GitHub secrets `QUAY_USERNAME` and `QUAY_PASSWORD`
+4. Set `QUAY_NAMESPACE` in [`.github/workflows/build-push-quay.yml`](.github/workflows/build-push-quay.yml) and [`.github/workflows/release.yml`](.github/workflows/release.yml)
+5. Update `backend.image.repository` / `frontend.image.repository` in [`helm/migration-toolkit-rhcl/values.yaml`](helm/migration-toolkit-rhcl/values.yaml) and image annotations in [`helm/migration-toolkit-rhcl/Chart.yaml`](helm/migration-toolkit-rhcl/Chart.yaml)
+6. Bump chart version/tags if needed and republish `docs/` (release workflow or `helm package` + `helm repo index`)
+7. **Done when:** **Build and push to Quay.io** (`workflow_dispatch`) is green and tags appear on your Quay repos
+
+| Secret | Needed for | Source |
+|--------|------------|--------|
+| `REDHAT_REGISTRY_USERNAME` | CI pull of UBI / RH bases | [terms-based-registry](https://access.redhat.com/terms-based-registry/) service account |
+| `REDHAT_REGISTRY_PASSWORD` | CI pull | Same portal (token) |
+| `QUAY_USERNAME` | CI push to Quay | Quay robot account |
+| `QUAY_PASSWORD` | CI push to Quay | Quay robot token |
+
+### Phase 5 — Enable and verify GitHub Actions
+
+1. **Settings → Actions → General:** allow Actions / workflows if restricted
+2. **Actions** → **Build and push to Quay.io** → **Run workflow** on `main`
+3. RH login failures → Phase 3; Quay login/push failures → Phase 4
+4. Commits whose message contains `[skip build]` skip the push job
+5. **Done when:** the latest run is green, or you consciously stay on Path A without push
+
+### Phase 6 — Helm install smoke test (cluster)
+
+```bash
+helm repo add migration-toolkit-rhcl https://nmushino.github.io/migration-toolkit-rhcl/
+# If upstream Pages is not ready yet:
+# helm repo add migration-toolkit-rhcl https://maximilianopizarro.github.io/migration-toolkit-rhcl/
+helm repo update
+helm install migration-toolkit-rhcl migration-toolkit-rhcl/migration-toolkit-rhcl \
+  -n migration-toolkit --create-namespace
+oc -n migration-toolkit get pods,route
+```
+
+Confirm postgres/backend/frontend Ready, frontend Route opens the UI, and `/api/*` reaches the backend via nginx.
+
+GitOps: apply [`examples/gitops/application.yaml`](examples/gitops/application.yaml) with `repoURL` set to this upstream repo.
+
+**Done when:** the Route works and a basic migration UI flow is usable.
+
+### Phase 7 — Semver releases (optional)
+
+1. Bump `version` / `appVersion` in `Chart.yaml` (and image tags in values if needed)
+2. Push git tag `vX.Y.Z` matching `Chart.yaml` version exactly (`release.yml` enforces this)
+3. Release workflow rebuilds/pushes images, packages the chart into `docs/`, opens PR `chore/helm-chart-vX.Y.Z`, creates a GitHub Release
+4. Merge that PR so Pages serves the new chart version
+
+### Phase 8 — Operational checklist
+
+- [ ] Submodule `.gitmodules` OK
+- [ ] GitHub Pages `main` + `/docs` **built**; `index.yaml` returns 200
+- [ ] `helm-repo-url.sh` + README point at upstream Pages
+- [ ] Secrets `REDHAT_REGISTRY_*` configured
+- [ ] Secrets `QUAY_*` configured **or** documented Path A (use existing public images)
+- [ ] Quay workflow green (if Path B / push)
+- [ ] `helm install` smoke OK on a cluster
+- [ ] (Optional) GitOps Application syncs from upstream
+
+---
+
 *Maintained by Noriaki Mushino — nmushino@redhat.com*
 
 ---
@@ -540,6 +710,7 @@ Quarkus バックエンド + React/PatternFly フロントエンド で構成さ
 - [スクリーンショット](#スクリーンショット)
 - [前提条件・必要ツール](#前提条件必要ツール)
 - [クイックスタート](#クイックスタート)
+  - [Helm でのインストール](#helm-でのインストールany-cluster)
 - [アーキテクチャ](#アーキテクチャ)
 - [処理フロー](#処理フロー)
 - [機能一覧](#機能一覧)
@@ -611,6 +782,19 @@ https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link
 ---
 
 ## クイックスタート
+
+### Helm でのインストール（any cluster）
+
+公開済みコンテナイメージを Helm で導入する推奨手順です（詳細は英語版 [Install with Helm](#install-with-helm-any-cluster) およびメンテナ向け [post-merge runbook](#maintainer-make-this-repository-operational-post-merge) を参照）。
+
+```bash
+helm repo add migration-toolkit-rhcl https://maximilianopizarro.github.io/migration-toolkit-rhcl/
+helm repo update
+helm install migration-toolkit-rhcl migration-toolkit-rhcl/migration-toolkit-rhcl \
+  -n migration-toolkit --create-namespace
+```
+
+変換アダプタ: [from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)
 
 ### OpenShift へのフルデプロイ
 

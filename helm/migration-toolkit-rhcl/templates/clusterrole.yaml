@@ -1,0 +1,54 @@
+{{- if .Values.rbac.clusterAdmin }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "migration-toolkit-rhcl.fullname" . }}-cluster-admin
+  labels:
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "migration-toolkit-rhcl.backend" . }}
+    namespace: {{ .Release.Namespace }}
+{{- else }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "migration-toolkit-rhcl.fullname" . }}-applier
+  labels:
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - ""
+      - apps
+      - networking.k8s.io
+      - route.openshift.io
+      - kuadrant.io
+      - gateway.networking.k8s.io
+      - telemetry.istio.io
+      - networking.istio.io
+      - devportal.kuadrant.io
+    resources: ["*"]
+    verbs: ["get", "list", "create", "update", "patch", "apply"]
+  - apiGroups: ["config.openshift.io"]
+    resources: ["ingresses"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "migration-toolkit-rhcl.fullname" . }}-applier
+  labels:
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "migration-toolkit-rhcl.fullname" . }}-applier
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "migration-toolkit-rhcl.backend" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

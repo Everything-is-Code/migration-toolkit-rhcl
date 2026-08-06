@@ -1,0 +1,24 @@
+{{- if .Values.route.enabled }}
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ include "migration-toolkit-rhcl.frontend" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "migration-toolkit-rhcl.frontend" . }}
+    app.kubernetes.io/component: frontend
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+spec:
+  {{- if .Values.route.host }}
+  host: {{ .Values.route.host }}
+  {{- end }}
+  to:
+    kind: Service
+    name: {{ include "migration-toolkit-rhcl.frontend" . }}
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: {{ .Values.route.tls.termination | default "edge" }}
+    insecureEdgeTerminationPolicy: Redirect
+{{- end }}

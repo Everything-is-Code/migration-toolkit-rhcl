@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>migration-toolkit-rhcl Helm repository</title>
+  <style>
+    :root { color-scheme: light; }
+    body { font-family: Georgia, "Times New Roman", serif; margin: 3rem auto; max-width: 42rem; padding: 0 1.25rem; line-height: 1.5; color: #1a1a1a; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+    pre { background: #f4f4f1; padding: 1rem; overflow-x: auto; }
+    a { color: #0b5fff; }
+  </style>
+</head>
+<body>
+  <h1>migration-toolkit-rhcl</h1>
+  <p>Helm chart repository for the Migration Toolkit (maintainer: mushino).</p>
+  <pre>helm repo add migration-toolkit-rhcl https://maximilianopizarro.github.io/migration-toolkit-rhcl/
+helm repo update
+helm install migration-toolkit-rhcl migration-toolkit-rhcl/migration-toolkit-rhcl \
+  -n migration-toolkit --create-namespace</pre>
+  <p>
+    <a href="./index.yaml">index.yaml</a> ·
+    <a href="./migration-toolkit-rhcl-0.1.0.tgz">migration-toolkit-rhcl-0.1.0.tgz</a> ·
+    <a href="https://github.com/maximilianoPizarro/migration-toolkit-rhcl">source</a>
+  </p>
+</body>
+</html>
