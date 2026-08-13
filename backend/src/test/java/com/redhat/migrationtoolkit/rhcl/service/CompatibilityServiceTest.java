@@ -117,6 +117,59 @@ class CompatibilityServiceTest {
     }
 
     @Test
+    void check_headersAlias_supportedWhenHeaderModificationInList() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("headers"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification"));
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Header Modification".equals(i.name)));
+    }
+
+    /**
+     * After PR1 converters land, fresh DEFAULT_SUPPORTED includes CORS + Header Modification.
+     * Compatibility must mark those policies SUPPORTED when the default set is used.
+     */
+    @Test
+    void check_pr1DefaultSupportedPolicies_corsAndHeaderModificationSupported() {
+        // Mirrors frontend DEFAULT_SUPPORTED_POLICIES after PR1 land (CORS added).
+        Set<String> pr1Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling");
+
+        ApiService corsSvc = basicService();
+        corsSvc.authentication = auth("jwt");
+        corsSvc.policies = List.of(enabledPolicy("cors"));
+        CompatibilityResult corsResult = service.check(corsSvc, pr1Defaults);
+        assertTrue(corsResult.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "CORS Request Handling".equals(i.name)));
+
+        ApiService headerSvc = basicService();
+        headerSvc.authentication = auth("jwt");
+        headerSvc.policies = List.of(enabledPolicy("header_modification"));
+        CompatibilityResult headerResult = service.check(headerSvc, pr1Defaults);
+        assertTrue(headerResult.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Header Modification".equals(i.name)));
+    }
+
+    @Test
+    void check_customSupportedListWithoutCors_stillWarns() {
+        // User override / saved custom list without CORS must keep WARNING until reset.
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "CORS Request Handling".equals(i.name)));
+    }
+
+    @Test
     void check_disabledPoliciesIgnored() {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
