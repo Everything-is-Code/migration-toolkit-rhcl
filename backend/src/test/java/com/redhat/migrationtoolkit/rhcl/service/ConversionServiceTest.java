@@ -227,10 +227,10 @@ class ConversionServiceTest {
                 "When both names present, first enabled policy in list order wins");
     }
 
-    // ── CORS policy → HTTPRoute CORS filter + OPTIONS preflight ───────────────
+    // ── CORS policy → ResponseHeaderModifier (OCP 4.19 / GAPI 1.2.1) + OPTIONS ─
 
     @Test
-    void convert_corsPolicy_emitsCorsFilterAndOptions() {
+    void convert_corsPolicy_emitsResponseHeaderModifierAndOptions() {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
         MappingRule rule = new MappingRule();
@@ -246,12 +246,20 @@ class ConversionServiceTest {
 
         String httproute = service.convert(svc, "ns").get("httproute.yaml");
 
-        assertTrue(httproute.contains("type: CORS") || httproute.contains("ResponseHeaderModifier"),
-                "cors must emit CORS filter or ResponseHeaderModifier");
-        assertTrue(httproute.contains("https://app.example.com")
-                        || httproute.contains("Access-Control-Allow-Origin"),
-                "cors origins must appear in HTTPRoute");
-        assertTrue(httproute.contains("Authorization") || httproute.contains("Access-Control-Allow-Headers"));
+        // Must NOT use native type: CORS (unsupported on OCP 4.19 Gateway API 1.2.1)
+        assertFalse(httproute.contains("type: CORS"),
+                "type: CORS requires Gateway API ≥ 1.3; OCP 4.19 ships 1.2.1");
+        assertFalse(httproute.contains("\n          cors:"),
+                "native cors: block must not appear under OCP 4.19 / RHCL 1.4 minimum");
+
+        // migration-pilot pattern: ResponseHeaderModifier + Access-Control-* + OPTIONS
+        assertTrue(httproute.contains("type: ResponseHeaderModifier"));
+        assertTrue(httproute.contains("Access-Control-Allow-Origin"));
+        assertTrue(httproute.contains("https://app.example.com"));
+        assertTrue(httproute.contains("Access-Control-Allow-Methods"));
+        assertTrue(httproute.contains("GET, POST") || httproute.contains("GET,POST"));
+        assertTrue(httproute.contains("Access-Control-Allow-Headers"));
+        assertTrue(httproute.contains("Authorization"));
         assertTrue(httproute.contains("method: OPTIONS"),
                 "cors must add OPTIONS preflight on product path(s)");
         assertTrue(httproute.contains("/api/users"));
@@ -269,11 +277,12 @@ class ConversionServiceTest {
                 86400));
 
         String httproute = service.convert(svc, "ns").get("httproute.yaml");
-        assertTrue(httproute.contains("allowCredentials: true")
-                        || httproute.contains("Access-Control-Allow-Credentials"),
-                "credentials must be mapped when configured");
-        assertTrue(httproute.contains("86400") || httproute.contains("maxAge"),
-                "max-age must be mapped when configured");
+        assertFalse(httproute.contains("type: CORS"));
+        assertTrue(httproute.contains("Access-Control-Allow-Credentials"),
+                "credentials must map to Access-Control-Allow-Credentials header");
+        assertTrue(httproute.contains("Access-Control-Max-Age"));
+        assertTrue(httproute.contains("86400"),
+                "max-age must map to Access-Control-Max-Age header value");
     }
 
     @Test

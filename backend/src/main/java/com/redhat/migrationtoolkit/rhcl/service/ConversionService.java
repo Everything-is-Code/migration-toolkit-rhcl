@@ -493,10 +493,13 @@ metadata:
     }
 
     /**
-     * Maps 3scale {@code cors} policy configuration to a Gateway API CORS HTTPRoute filter.
-     * Origins/methods/headers/credentials/max-age are best-effort from allow_* keys.
+     * Maps 3scale {@code cors} to HTTPRoute {@code ResponseHeaderModifier} (+ OPTIONS rules elsewhere).
+     * <p>
+     * Does <strong>not</strong> emit Gateway API {@code type: CORS}: that filter needs Gateway API ≥ 1.3
+     * and is unsupported on OpenShift 4.19 (Gateway API 1.2.1) / RHCL 1.4 minimum. Aligns with
+     * migration-pilot {@code pilot_cors_ip} ({@code Access-Control-*} via ResponseHeaderModifier).
+     * Static headers carry one Allow-Origin: {@code *} wins if present, otherwise the first origin.
      */
-    @SuppressWarnings("unchecked")
     private String buildCorsFilters(ApiService service) {
         Policy cors = findCorsPolicy(service);
         if (cors == null || cors.configuration == null) {
@@ -504,27 +507,18 @@ metadata:
         }
         Map<String, Object> cfg = cors.configuration;
 
-        StringBuilder origins = new StringBuilder();
-        for (String origin : toStringList(cfg.get("allow_origin"))) {
-            if (origin.isBlank()) {
-                continue;
-            }
-            origins.append(String.format("              - \"%s\"%n", origin));
-        }
-        StringBuilder methods = new StringBuilder();
-        for (String method : toStringList(cfg.get("allow_methods"))) {
-            if (method.isBlank()) {
-                continue;
-            }
-            methods.append(String.format("              - %s%n", method.trim().toUpperCase()));
-        }
-        StringBuilder headers = new StringBuilder();
-        for (String header : toStringList(cfg.get("allow_headers"))) {
-            if (header.isBlank()) {
-                continue;
-            }
-            headers.append(String.format("              - %s%n", header.trim()));
-        }
+        java.util.List<String> originList = toStringList(cfg.get("allow_origin")).stream()
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+        java.util.List<String> methodList = toStringList(cfg.get("allow_methods")).stream()
+                .map(s -> s.trim().toUpperCase())
+                .filter(s -> !s.isBlank())
+                .toList();
+        java.util.List<String> headerList = toStringList(cfg.get("allow_headers")).stream()
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
 
         boolean credentials = Boolean.TRUE.equals(cfg.get("allow_credentials"))
                 || "true".equalsIgnoreCase(String.valueOf(cfg.getOrDefault("allow_credentials", "false")));
@@ -540,30 +534,41 @@ metadata:
             }
         }
 
-        if (origins.length() == 0 && methods.length() == 0 && headers.length() == 0
-                && !credentials && maxAge == null) {
-            // Still emit a minimal CORS filter so OPTIONS preflight path is paired with a filter.
-            origins.append("              - \"*\"\n");
+        String allowOrigin = "*";
+        if (!originList.isEmpty()) {
+            allowOrigin = originList.stream().anyMatch("*"::equals) ? "*" : originList.get(0);
         }
 
-        StringBuilder corsBlock = new StringBuilder();
-        if (origins.length() > 0) {
-            corsBlock.append("            allowOrigins:\n").append(origins);
+        StringBuilder setHeaders = new StringBuilder();
+        setHeaders.append(String.format(
+                "              - name: Access-Control-Allow-Origin%n                value: %s%n",
+                allowOrigin));
+        if (!methodList.isEmpty()) {
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Allow-Methods%n                value: %s%n",
+                    String.join(", ", methodList)));
         }
-        if (methods.length() > 0) {
-            corsBlock.append("            allowMethods:\n").append(methods);
-        }
-        if (headers.length() > 0) {
-            corsBlock.append("            allowHeaders:\n").append(headers);
+        if (!headerList.isEmpty()) {
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Allow-Headers%n                value: %s%n",
+                    String.join(", ", headerList)));
         }
         if (credentials) {
-            corsBlock.append("            allowCredentials: true\n");
+            setHeaders.append("""
+                              - name: Access-Control-Allow-Credentials
+                                value: "true"
+            """);
         }
         if (maxAge != null) {
-            corsBlock.append(String.format("            maxAge: %d%n", maxAge));
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Max-Age%n                value: \"%d\"%n",
+                    maxAge));
         }
 
-        return String.format("        - type: CORS%n          cors:%n%s", corsBlock);
+        return "        - type: ResponseHeaderModifier\n"
+                + "          responseHeaderModifier:\n"
+                + "            set:\n"
+                + setHeaders;
     }
 
     private static java.util.List<String> toStringList(Object raw) {
