@@ -37,9 +37,9 @@ public class SetupController {
     public record SetupResponse(List<StepResult> steps, boolean allSuccess) {}
 
     /**
-     * 対象 namespace への istio-injection ラベル付けと
-     * Gateway への kuadrant.io/namespace アノテーション付与を一括実行する。
-     * Istio / Kuadrant 本体のインストールはインストールシェルで行う。
+     * Applies the istio-injection label to the target namespace and
+     * adds the kuadrant.io/namespace annotation to Gateway(s) in one batch.
+     * The installation of Istio / Kuadrant itself is handled by the installation shell.
      */
     @POST
     @Path("/namespace")
@@ -52,10 +52,10 @@ public class SetupController {
 
         List<StepResult> steps = new ArrayList<>();
 
-        // Step 1: namespace に istio-injection=enabled ラベルを付与
+        // Step 1: Apply the istio-injection=enabled label to the namespace
         steps.add(labelNamespace(namespace));
 
-        // Step 2: namespace 内の全 Gateway に kuadrant アノテーションを付与
+        // Step 2: Add kuadrant annotation to all Gateways in the namespace
         steps.add(annotateGateways(namespace));
 
         boolean allSuccess = steps.stream().allMatch(StepResult::success);

@@ -28,8 +28,8 @@ public class GatewayInfoController {
     KubernetesClient client;
 
     /**
-     * Gateway の外部アクセス URL（LoadBalancer hostname / IP）を返す。
-     * フロントエンドが適用後にテスト用 curl コマンドを生成するために使用する。
+     * Returns the external access URL (LoadBalancer hostname / IP) of a Gateway.
+     * Used by the frontend to generate test curl commands after apply.
      *
      * GET /api/gateway/info?namespace={ns}&name={gatewayName}
      */
@@ -87,7 +87,7 @@ public class GatewayInfoController {
         }
     }
 
-    /** ELB ホスト名が DNS で解決できるか確認する。 */
+    /** Check whether the ELB hostname is DNS-resolvable. */
     private boolean isDnsResolvable(String hostname) {
         try {
             InetAddress.getByName(hostname);
@@ -97,7 +97,7 @@ public class GatewayInfoController {
         }
     }
 
-    /** Gateway status.addresses[0].value を取得する。 */
+    /** Retrieve Gateway status.addresses[0].value. */
     @SuppressWarnings("unchecked")
     private String extractHostname(GenericKubernetesResource gw) {
         try {

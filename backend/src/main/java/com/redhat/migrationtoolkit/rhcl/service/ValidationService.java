@@ -51,7 +51,7 @@ public class ValidationService {
         return result;
     }
 
-    /** YAML を --- で分割して各ドキュメントをリストで返す。loadAll() でマルチドキュメントを処理。 */
+    /** Split YAML by --- and return each document as a list. Handles multi-document YAML via loadAll(). */
     private List<Map<String, Object>> loadAllDocs(String content) {
         Yaml yaml = new Yaml();
         List<Map<String, Object>> docs = new ArrayList<>();

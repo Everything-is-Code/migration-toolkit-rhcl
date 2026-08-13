@@ -110,9 +110,9 @@ public class CompatibilityService {
             String systemName = policy.name != null ? policy.name.toLowerCase() : "";
             String displayName = POLICY_DISPLAY_NAMES.getOrDefault(systemName, policy.name);
 
-            // Logging ポリシーで enable_json_logs=true かつ json_object_config に
-            // 1件以上設定がある場合、対応ポリシーリストに含まれていても WARNING にする。
-            // Envoy 変数へのマッピング内容を目視確認してほしいため。
+            // When the Logging policy has enable_json_logs=true with one or more entries
+            // in json_object_config, mark as WARNING even if it is in the supported policy list,
+            // because the Envoy variable mapping should be visually verified.
             if ("logging".equals(systemName) && hasJsonObjectConfig(policy)) {
                 items.add(new CompatibilityItem(displayName, "WARNING",
                         "JSON log format (json_object_config) will be mapped to Istio Telemetry format.labels"

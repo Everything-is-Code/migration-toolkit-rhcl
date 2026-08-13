@@ -33,7 +33,7 @@ interface YamlFile { name: string; content: string; }
 type EditMap = Record<string, string>;
 interface ApplyResult { fileName: string; success: boolean; message: string; }
 
-/* ── YAML パーサーユーティリティ ── */
+/* ── YAML parser utility ── */
 interface RouteInfo { path: string; method: string; }
 interface AuthInfo {
   type: 'apiKey' | 'jwt' | 'none';
@@ -48,19 +48,19 @@ interface TestInfo {
 }
 
 /**
- * YAML ファイル群からテスト情報（Gateway 名・ルート・認証方式）を抽出する。
- * SnakeYAML は使えないため正規表現による簡易パースを行う。
+ * Extract test info (Gateway name, routes, auth method) from YAML files.
+ * Uses regex-based simple parsing since SnakeYAML is not available.
  */
 function parseTestInfo(edits: EditMap): TestInfo {
   const gatewayYaml  = edits['gateway.yaml']  ?? '';
   const routeYaml    = edits['httproute.yaml'] ?? '';
   const policyYaml   = edits['policy.yaml']   ?? '';
 
-  // Gateway 名
+  // Gateway name
   const gwNameMatch = gatewayYaml.match(/^  name:\s*(.+)$/m);
   const gatewayName = gwNameMatch ? gwNameMatch[1].trim() : '';
 
-  // HTTPRoute からパスとメソッドを抽出
+  // Extract path and method from HTTPRoute
   const routes: RouteInfo[] = [];
   const pathMatches   = Array.from(routeYaml.matchAll(/value:\s*"([^"]+)"/g));
   const methodMatches = Array.from(routeYaml.matchAll(/method:\s*(\w+)/g));
@@ -72,7 +72,7 @@ function parseTestInfo(edits: EditMap): TestInfo {
   });
   if (routes.length === 0) routes.push({ path: '/', method: 'GET' });
 
-  // AuthPolicy から認証方式を判定
+  // Determine auth method from AuthPolicy
   let auth: AuthInfo = { type: 'none' };
   if (policyYaml.includes('jwt:') || policyYaml.includes('jwt-auth:')) {
     auth = { type: 'jwt', headerName: 'Authorization' };
@@ -85,7 +85,7 @@ function parseTestInfo(edits: EditMap): TestInfo {
     };
   }
 
-  // secret.yaml から api_key 値を抽出（stringData または data）
+  // Extract api_key value from secret.yaml (stringData or data)
   const secretYaml = edits['secret.yaml'] ?? '';
   const apiKeyMatch = secretYaml.match(/api_key:\s*"?([a-zA-Z0-9+/=_-]{8,})"?/);
   const apiKey = apiKeyMatch ? apiKeyMatch[1] : undefined;
@@ -93,7 +93,7 @@ function parseTestInfo(edits: EditMap): TestInfo {
   return { gatewayName, routes, auth, apiKey };
 }
 
-/* ── テスト情報パネル ── */
+/* ── Test info panel ── */
 interface TestInfoPanelProps {
   testInfo: TestInfo;
   namespace: string;
@@ -108,7 +108,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
   const [apiKeyValue, setApiKeyValue] = useState(testInfo.apiKey ?? 'your-api-key');
   const [jwtValue, setJwtValue]       = useState('your-jwt-token');
 
-  // secret.yaml の api_key が変わったら追随する（ただし手動入力済みの場合は上書きしない）
+  // Follow secret.yaml api_key changes (but don't overwrite if manually entered)
   React.useEffect(() => {
     if (testInfo.apiKey) setApiKeyValue(testInfo.apiKey);
   }, [testInfo.apiKey]);
@@ -118,13 +118,13 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
     if (!testInfo.gatewayName || !namespace) return;
     setGwLoading(true); setGwError(null); setGwPhase('lb');
 
-    // Phase 1: LB アドレス割り当て待ち（最大 60 秒）
+    // Phase 1: Wait for LB address assignment (max 60 seconds)
     let hostname = '';
     for (let i = 0; i < 12; i++) {
       try {
         const res = await gatewayApi.getInfo(namespace, testInfo.gatewayName);
         if (res.data.ready) { hostname = res.data.hostname; break; }
-      } catch (_e) { /* Gateway 未作成 — retry */ }
+      } catch (_e) { /* Gateway not yet created — retry */ }
       if (i < 11) await new Promise(r => setTimeout(r, 5000));
     }
     if (!hostname) {
@@ -133,7 +133,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
       return;
     }
 
-    // Phase 2: DNS 伝播待ち（最大 5 分、10 秒間隔）
+    // Phase 2: Wait for DNS propagation (max 5 min, 10s interval)
     setGwPhase('dns');
     for (let i = 0; i < 30; i++) {
       try {
@@ -147,13 +147,13 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
       } catch (_e) { /* retry */ }
       if (i < 29) await new Promise(r => setTimeout(r, 10000));
     }
-    // タイムアウト — DNS は解決できていないが URL は表示する
+    // Timeout — DNS not resolved yet but display URL anyway
     setGatewayUrl(`http://${hostname}`);
     setGwPhase('done');
     setGwLoading(false);
   }, [testInfo.gatewayName, namespace]);
 
-  // マウント時に自動取得
+  // Auto-fetch on mount
   React.useEffect(() => { fetchGatewayUrl(); }, [fetchGatewayUrl]);
 
   const buildAuthHeader = (): string => {
@@ -199,7 +199,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
         <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff', borderRadius: 6, border: '1px solid #d2d2d2' }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Gateway URL</div>
 
-          {/* フェーズ別ステータス表示 */}
+          {/* Phase-based status display */}
           {gwLoading && gwPhase === 'lb' && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#6a6e73', marginBottom: 8 }}>
               <Spinner size="sm" /> {t('import.testPanel.gwWaitingLb')}
@@ -237,7 +237,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
           {infoRow('Namespace', <code style={{ fontSize: 12 }}>{namespace}</code>)}
         </div>
 
-        {/* 認証情報 */}
+        {/* Authentication info */}
         <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff', borderRadius: 6, border: '1px solid #d2d2d2' }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{t('import.testPanel.authTitle')}</div>
           {testInfo.auth.type === 'apiKey' && (
@@ -273,7 +273,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
           {testInfo.auth.type === 'none' && infoRow(t('import.testPanel.type'), <Label isCompact color="grey">{t('import.testPanel.authNone')}</Label>)}
         </div>
 
-        {/* curl コマンド — DNS 解決完了後のみ表示 */}
+        {/* curl command — shown only after DNS resolution */}
         <div style={{ padding: '12px 16px', background: '#fff', borderRadius: 6, border: '1px solid #d2d2d2' }}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('import.testPanel.curlTitle')}</div>
           {(gwLoading || !gatewayUrl) ? (
@@ -351,15 +351,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
   }
 }
 
-/* ── シンプルなタブ（Tabs コンポーネントを使わない） ── */
-// ── シンプルなライン差分 ────────────────────────────────────────────────────
+/* ── Simple tabs (without Tabs component) ── */
+// ── Simple line diff ────────────────────────────────────────────────────
 type DiffLine = { type: 'same' | 'add' | 'remove'; text: string };
 
 function computeDiff(original: string, current: string): DiffLine[] {
   const oldLines = original.split('\n');
   const newLines = current.split('\n');
 
-  // LCS DP テーブル
+  // LCS DP table
   const m = oldLines.length;
   const n = newLines.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
@@ -409,7 +409,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
 
   return (
     <div>
-      {/* タブヘッダー */}
+      {/* Tab header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, borderBottom: '2px solid #d2d2d2', marginBottom: 12 }}>
         {files.map((f, i) => {
           const changed = edits[f.name] !== undefined && edits[f.name] !== f.content;
@@ -439,7 +439,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
         })}
       </div>
 
-      {/* モード切替ボタン */}
+      {/* Mode toggle buttons */}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginBottom: 8 }}>
         <button
           onClick={() => setMode('view')}
@@ -477,7 +477,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
         </button>
       </div>
 
-      {/* コンテンツ */}
+      {/* Content */}
       {mode === 'edit' ? (
         <textarea
           value={content}
@@ -528,7 +528,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
   );
 };
 
-/* ── メインコンポーネント ── */
+/* ── Main component ── */
 const ImportPageInner: React.FC = () => {
   const { t } = useTranslation();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -556,9 +556,9 @@ const ImportPageInner: React.FC = () => {
   };
 
   /**
-   * 外部バックエンド検出:
-   *   serviceentry.yaml が含まれている、または
-   *   いずれかの YAML に type: ExternalName / kind: ServiceEntry が含まれる場合 true
+   * External backend detection:
+   *   Returns true if serviceentry.yaml is included, or
+   *   any YAML contains type: ExternalName / kind: ServiceEntry
    */
   const detectExternalBackend = (editMap: EditMap): boolean => {
     if ('serviceentry.yaml' in editMap) return true;
@@ -568,11 +568,11 @@ const ImportPageInner: React.FC = () => {
   };
 
   /**
-   * HTTPRoute の backendRefs.port 8080 → 443 変換。
-   * backendRefs ブロック内のみを対象とし、Gateway リスナーポート等は変更しない。
+   * HTTPRoute backendRefs.port 8080 → 443 conversion.
+   * Only targets the backendRefs block; does not change Gateway listener ports etc.
    */
   const fixHttpRoutePort = (yaml: string): string => {
-    // backendRefs ブロックを見つけ、その中の port: 8080 を port: 443 に変換
+    // Find the backendRefs block and convert port: 8080 to port: 443 within it
     return yaml.replace(
       /([ \t]*backendRefs:[\s\S]*?)([ \t]+port:[ \t]*)8080([ \t]*(?:\n|$))/g,
       '$1$2443$3'
@@ -620,7 +620,7 @@ const ImportPageInner: React.FC = () => {
     .replace(/apiVersion: kuadrant\.io\/v1beta1/g, 'apiVersion: kuadrant.io/v1')
     .replace(/apiVersion: gateway\.networking\.k8s\.io\/v1beta1/g, 'apiVersion: gateway.networking.k8s.io/v1');
 
-  // パッケージ名で YAML 内の "api" プレフィックスを置換する
+  // Replace "api" prefix in YAML with package name
   const applyPkgToYaml = (yaml: string, pkg: string): string => {
     if (!pkg) return yaml;
     return yaml
@@ -632,7 +632,7 @@ const ImportPageInner: React.FC = () => {
       .replace(/^(\s+service-name:\s*)["']?API["']?/gm, `$1"${pkg.toUpperCase()}"`);
   };
 
-  // baseEdits からネームスペース＋パッケージ名を一括適用して edits を再生成
+  // Regenerate edits by applying namespace + package name to baseEdits
   const deriveEdits = useCallback((base: EditMap, pkg: string, ns: string): EditMap => {
     const updated: EditMap = {};
     for (const [name, content] of Object.entries(base)) {
@@ -654,7 +654,7 @@ const ImportPageInner: React.FC = () => {
       let yaml = normalizeApiVersions(edits[f.name] ?? f.content)
         .replace(/^(\s*namespace:\s*).+$/gm, `$1${namespace}`);
 
-      // 外部バックエンドが検出された場合、HTTPRoute の backendRefs.port を 443 に変換
+      // If external backend detected, convert HTTPRoute backendRefs.port to 443
       if (isExternal && f.name === 'httproute.yaml') {
         const fixed = fixHttpRoutePort(yaml);
         if (fixed !== yaml) { portConverted = true; yaml = fixed; }
@@ -704,7 +704,7 @@ const ImportPageInner: React.FC = () => {
       const res = await applyApi.apply(namespace, yamlFiles, 'IMPORT', packageName || undefined);
       const results: ApplyResult[] = res.data?.results ?? [];
       setApplyResults(results);
-      // 1件以上成功した場合にテスト情報パネルを表示
+      // Show test info panel if at least one apply succeeded
       if (results.some(r => r.success)) {
         setTestInfo(parseTestInfo(edits));
       }
@@ -741,7 +741,7 @@ const ImportPageInner: React.FC = () => {
             </StackItem>
           )}
 
-          {/* ── アップロードゾーン ── */}
+          {/* ── Upload zone ── */}
           {files.length === 0 && (
             <StackItem>
               <Card>
@@ -781,10 +781,10 @@ const ImportPageInner: React.FC = () => {
             </StackItem>
           )}
 
-          {/* ── ファイル読み込み後 ── */}
+          {/* ── After file load ── */}
           {files.length > 0 && (
             <>
-              {/* ファイル情報バー */}
+              {/* File info bar */}
               <StackItem>
                 <Card>
                   <CardBody>
@@ -802,7 +802,7 @@ const ImportPageInner: React.FC = () => {
                 </Card>
               </StackItem>
 
-              {/* Namespace & 適用 */}
+              {/* Namespace & Apply */}
               <StackItem>
                 <Card>
                   <CardBody>
@@ -875,7 +875,7 @@ const ImportPageInner: React.FC = () => {
                 </Card>
               </StackItem>
 
-              {/* 適用結果 */}
+              {/* Apply results */}
               {applyResults && (
                 <StackItem>
                   <Card>
@@ -923,14 +923,14 @@ const ImportPageInner: React.FC = () => {
                 </StackItem>
               )}
 
-              {/* テスト情報パネル（適用成功後に表示） */}
+              {/* Test info panel (shown after successful apply) */}
               {testInfo && (
                 <StackItem>
                   <TestInfoPanel testInfo={testInfo} namespace={namespace} />
                 </StackItem>
               )}
 
-              {/* YAML ビューア（カスタムタブ） */}
+              {/* YAML viewer (custom tabs) */}
               <StackItem>
                 <Card>
                   <CardBody>
@@ -945,7 +945,7 @@ const ImportPageInner: React.FC = () => {
                 </Card>
               </StackItem>
 
-              {/* 手動適用手順 */}
+              {/* Manual apply steps */}
               <StackItem>
                 <Card>
                   <CardBody>

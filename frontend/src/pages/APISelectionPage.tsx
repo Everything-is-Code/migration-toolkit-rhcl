@@ -54,7 +54,7 @@ const PolicyPanel: React.FC<{ policies: Policy[] }> = ({ policies }) => {
               {p.name}
             </code>
             {p.version && <span style={{ fontSize: 11, color: '#8a8d90' }}>{p.version}</span>}
-            {!p.enabled && <span style={{ fontSize: 11, color: '#8a8d90' }}>(無効)</span>}
+            {!p.enabled && <span style={{ fontSize: 11, color: '#8a8d90' }}>(disabled)</span>}
           </div>
           {p.configuration && Object.keys(p.configuration).length > 0 && (
             <div style={{ paddingLeft: 12 }}>

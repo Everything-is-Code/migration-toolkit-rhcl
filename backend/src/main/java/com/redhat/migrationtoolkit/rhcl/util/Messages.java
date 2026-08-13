@@ -9,15 +9,15 @@ import java.util.ResourceBundle;
 public class Messages {
 
     private static final String BASE_NAME = "messages";
-    // フロントエンドのデフォルト言語 (i18n.ts) と合わせ、デフォルトは英語。
+    // Default is English, matching the frontend default language (i18n.ts).
     private static final Locale DEFAULT_LOCALE = Locale.ENGLISH;
 
-    /** デフォルトロケール（英語）でメッセージを取得する。 */
+    /** Get a message using the default locale (English). */
     public String get(String key, Object... args) {
         return get(key, DEFAULT_LOCALE, args);
     }
 
-    /** 指定ロケールでメッセージを取得する。日本語以外は常に英語にフォールバックする。 */
+    /** Get a message for the specified locale. Falls back to English for any locale other than Japanese. */
     public String get(String key, Locale locale, Object... args) {
         Locale resolved = (locale != null && "ja".equals(locale.getLanguage()))
                 ? Locale.JAPANESE : DEFAULT_LOCALE;
@@ -30,7 +30,7 @@ public class Messages {
         }
     }
 
-    /** Accept-Language ヘッダーの値からロケールを解決する。 */
+    /** Resolve the locale from the Accept-Language header value. */
     public static Locale resolveLocale(String acceptLanguageHeader) {
         if (acceptLanguageHeader != null && acceptLanguageHeader.toLowerCase().startsWith("ja")) {
             return Locale.JAPANESE;

@@ -185,7 +185,7 @@ if os.path.exists(arch_xml):
 surefire_suites = parse_test_dir_filtered(
     os.path.join(TARGET, "surefire-reports"), exclude_fqn=_ARCH_CLASS)
 
-# failsafe-reports から E2E テスト（クラス名が E2ETest / E2E / IT で終わるもの）だけを抽出
+# Extract only E2E tests from failsafe-reports (class names ending with E2ETest / E2E / IT)
 _E2E_RE = re.compile(r"(E2ETest|E2E|IT)$")
 failsafe_suites = [
     s for s in parse_test_dir(os.path.join(TARGET, "failsafe-reports"))
@@ -306,7 +306,7 @@ if os.path.exists(PMD_XML):
 
 pmd_status = "pass" if pmd_total == 0 else "fail"
 
-PRIORITY_LABEL = {"1": "高", "2": "中高", "3": "中", "4": "低", "5": "最低"}
+PRIORITY_LABEL = {"1": "High", "2": "Medium-High", "3": "Medium", "4": "Low", "5": "Lowest"}
 PRIORITY_COLOR = {
     "1": "var(--fail)", "2": "#e67e22",
     "3": "#f39c12",     "4": "var(--accent)", "5": "var(--text-light)",
@@ -419,13 +419,13 @@ def _parse_trivy_json(content):
         for v in vulns:
             # Column order must match _TRIVY_COL_HEADS and _trivy_sev(cols[2])
             items.append([
-                v.get("PkgName", ""),           # 0: ライブラリ
-                v.get("VulnerabilityID", ""),    # 1: 脆弱性 ID
-                v.get("Severity", ""),           # 2: 深刻度  ← _trivy_sev uses index 2
-                v.get("Status", ""),             # 3: ステータス
-                v.get("InstalledVersion", ""),   # 4: インストール版
-                v.get("FixedVersion", ""),       # 5: 修正版
-                v.get("Title", ""),              # 6: タイトル
+                v.get("PkgName", ""),           # 0: Library
+                v.get("VulnerabilityID", ""),    # 1: Vulnerability ID
+                v.get("Severity", ""),           # 2: Severity  ← _trivy_sev uses index 2
+                v.get("Status", ""),             # 3: Status
+                v.get("InstalledVersion", ""),   # 4: Installed Version
+                v.get("FixedVersion", ""),       # 5: Fixed Version
+                v.get("Title", ""),              # 6: Title
             ])
         for s in secrets:
             items.append([
@@ -489,7 +489,7 @@ if os.path.exists(WAPITI_JSON):
 wapiti_total  = len(wapiti_items)
 wapiti_status = "pass" if wapiti_total == 0 else "fail"
 
-WAPITI_LEVEL_LABEL = {"0": "情報", "1": "低", "2": "中", "3": "高"}
+WAPITI_LEVEL_LABEL = {"0": "Info", "1": "Low", "2": "Medium", "3": "High"}
 WAPITI_LEVEL_COLOR = {
     "0": "var(--accent)", "1": "#f39c12",
     "2": "#e67e22",       "3": "var(--fail)",
@@ -497,7 +497,7 @@ WAPITI_LEVEL_COLOR = {
 
 
 # ── Release Gate ──────────────────────────────────────────────────────────────
-# PMD: count high-priority (1=高, 2=中高) violations
+# PMD: count high-priority (1=High, 2=Medium-High) violations
 pmd_high = sum(
     1 for f in pmd_files for i in f["items"] if i["priority"] in ("1", "2")
 )
@@ -517,77 +517,77 @@ _line_cov_pct = float(line_pct)
 GATES = [
     {
         "key":   "unit",
-        "label": "ユニットテスト",
-        "desc":  f"失敗 {su_fail} 件",
+        "label": "Unit Tests",
+        "desc":  f"{su_fail} failed",
         "ok":    su_fail == 0,
-        "cond":  "エラー 0 件",
+        "cond":  "0 errors",
     },
     {
         "key":   "e2e",
-        "label": "統合テスト (E2E)",
-        "desc":  f"失敗 {fa_fail} 件",
+        "label": "Integration Tests (E2E)",
+        "desc":  f"{fa_fail} failed",
         "ok":    fa_fail == 0,
-        "cond":  "エラー 0 件",
+        "cond":  "0 errors",
     },
     {
         "key":   "arch",
-        "label": "アーキテクチャ (ArchUnit)",
-        "desc":  f"失敗 {ar_fail} 件 / 全 {ar_total} ルール",
+        "label": "Architecture (ArchUnit)",
+        "desc":  f"{ar_fail} failed / {ar_total} total rules",
         "ok":    ar_fail == 0,
-        "cond":  "アーキテクチャ違反 0 件",
+        "cond":  "0 architecture violations",
     },
     {
         "key":   "coverage",
-        "label": "カバレッジ (行)",
-        "desc":  f"現在 {line_pct}%",
+        "label": "Coverage (Line)",
+        "desc":  f"Current {line_pct}%",
         "ok":    _line_cov_pct >= 80.0,
-        "cond":  "80% 以上",
+        "cond":  "80% or above",
     },
     {
         "key":   "checkstyle",
         "label": "Checkstyle",
-        "desc":  "スキップ / 評価できません" if cs_skipped else f"違反 {cs_total} 件",
+        "desc":  "Skipped / Unable to evaluate" if cs_skipped else f"{cs_total} violations",
         "ok":    cs_skipped or cs_total == 0,
-        "cond":  "違反 0 件",
+        "cond":  "0 violations",
     },
     {
         "key":   "pmd",
         "label": "PMD",
-        "desc":  f"高優先度 {pmd_high} 件 (全 {pmd_total} 件)",
+        "desc":  f"{pmd_high} high-priority ({pmd_total} total)",
         "ok":    pmd_high == 0,
-        "cond":  "高優先度 (P1/P2) 0 件",
+        "cond":  "0 high-priority (P1/P2)",
     },
     {
         "key":   "semgrep",
         "label": "Semgrep (SAST)",
         "desc":  (
-            "スキップ / 評価できません" if semgrep_skipped else
-            f"ブロッキング {semgrep_blocking} 件 / 全 {semgrep_total} 件"
-            + (f" / パースエラー {semgrep_parse_errors} 件" if semgrep_parse_errors else "")
+            "Skipped / Unable to evaluate" if semgrep_skipped else
+            f"{semgrep_blocking} blocking / {semgrep_total} total"
+            + (f" / {semgrep_parse_errors} parse errors" if semgrep_parse_errors else "")
         ),
         "ok":    semgrep_skipped or semgrep_blocking == 0,
-        "cond":  "ERROR/HIGH 0 件 (WARNING・LOW は合格)",
+        "cond":  "0 ERROR/HIGH (WARNING/LOW pass)",
     },
     {
         "key":   "gitleaks",
         "label": "Gitleaks",
-        "desc":  f"漏洩 {gitleaks_total} 件",
+        "desc":  f"{gitleaks_total} leaks",
         "ok":    gitleaks_total == 0,
-        "cond":  "シークレット漏洩なし",
+        "cond":  "No secret leaks",
     },
     {
         "key":   "trivy",
         "label": "Trivy",
-        "desc":  f"CRITICAL/HIGH {trivy_critical_high} 件 (全 {trivy_total} 件)",
+        "desc":  f"{trivy_critical_high} CRITICAL/HIGH ({trivy_total} total)",
         "ok":    trivy_critical_high == 0,
-        "cond":  "CRITICAL / HIGH 0 件",
+        "cond":  "0 CRITICAL / HIGH",
     },
     {
         "key":   "wapiti",
         "label": "Wapiti (DAST)",
-        "desc":  f"脆弱性 {wapiti_total} 件",
+        "desc":  f"{wapiti_total} vulnerabilities",
         "ok":    wapiti_total == 0,
-        "cond":  "脆弱性なし",
+        "cond":  "No vulnerabilities",
     },
 ]
 
@@ -607,8 +607,8 @@ def release_gate_html():
           <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
           <polyline points="22 4 12 14.01 9 11.01"/>
         </svg>"""
-        verdict_text   = "リリース可能"
-        verdict_sub    = f"全 {GATES_TOTAL} 件の条件をすべてクリアしています"
+        verdict_text   = "Ready for Release"
+        verdict_sub    = f"All {GATES_TOTAL} conditions have been met"
     else:
         verdict_color  = "var(--fail)"
         verdict_bg     = "#fdedec"
@@ -620,10 +620,10 @@ def release_gate_html():
           <line x1="9" y1="9" x2="15" y2="15"/>
         </svg>"""
         ng_count       = GATES_TOTAL - GATES_PASSED
-        verdict_text   = "リリース不可"
+        verdict_text   = "Not Ready for Release"
         verdict_sub    = (
-            f"{GATES_TOTAL} 件中 {ng_count} 件の条件が未達です"
-            f"（{GATES_PASSED} 件クリア済み）"
+            f"{ng_count} of {GATES_TOTAL} conditions not met"
+            f" ({GATES_PASSED} passed)"
         )
 
     # progress bar
@@ -664,7 +664,7 @@ def release_gate_html():
         <div style="margin-left:auto;text-align:right">
           <div style="font-size:32px;font-weight:800;color:{bar_color}">{bar_pct}%</div>
           <div style="font-size:11px;color:var(--text-light)">
-            {GATES_PASSED} / {GATES_TOTAL} 条件クリア</div>
+            {GATES_PASSED} / {GATES_TOTAL} conditions met</div>
         </div>
       </div>
       <div style="height:6px;background:rgba(0,0,0,.08);border-radius:3px;
@@ -679,13 +679,13 @@ def release_gate_html():
             <th style="width:28px"></th>
             <th style="text-align:left;font-size:11px;font-weight:700;
               color:var(--text-light);padding:7px 10px;text-transform:uppercase;
-              letter-spacing:.5px">チェック項目</th>
+              letter-spacing:.5px">Check Item</th>
             <th style="text-align:left;font-size:11px;font-weight:700;
               color:var(--text-light);padding:7px 10px;text-transform:uppercase;
-              letter-spacing:.5px">合格条件</th>
+              letter-spacing:.5px">Pass Condition</th>
             <th style="text-align:left;font-size:11px;font-weight:700;
               color:var(--text-light);padding:7px 14px 7px 10px;
-              text-transform:uppercase;letter-spacing:.5px">現在の状態</th>
+              text-transform:uppercase;letter-spacing:.5px">Current Status</th>
           </tr>
         </thead>
         <tbody>{rows}</tbody>
@@ -712,7 +712,7 @@ def donut_svg(pct_val, color):
       <text x="70" y="65" text-anchor="middle" font-size="22"
         font-weight="700" fill="{color}">{pct_val}%</text>
       <text x="70" y="83" text-anchor="middle" font-size="11"
-        fill="#7f8c8d">成功率</text>
+        fill="#7f8c8d">Pass Rate</text>
     </svg>"""
 
 
@@ -814,11 +814,11 @@ def checkstyle_html():
             '<line x1="12" y1="16" x2="12.01" y2="16"/>'
             '</svg>'
             '<span style="color:var(--text-light);font-size:14px;">'
-            'スキップ / 評価できません — Checkstyle の結果ファイルが見つかりませんでした'
+            'Skipped / Unable to evaluate — Checkstyle result file not found'
             '</span></div>'
         )
     if cs_total == 0:
-        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ 違反なし</div>'
+        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ No violations</div>'
     html = ""
     for f in cs_files:
         html += f"""<div class="pkg-group">
@@ -830,15 +830,15 @@ def checkstyle_html():
             </svg>
             {f['path']}
             <span class="pkg-badge badge fail"
-              style="margin-left:auto;">{len(f['items'])} 件</span>
+              style="margin-left:auto;">{len(f['items'])} findings</span>
           </div>
           <div class="pkg-body">
             <table style="width:100%;border-collapse:collapse;font-size:12px;">
               <thead><tr>
-                <th style="width:60px">行</th>
-                <th style="width:80px">種別</th>
-                <th>ルール</th>
-                <th>メッセージ</th>
+                <th style="width:60px">Line</th>
+                <th style="width:80px">Type</th>
+                <th>Rule</th>
+                <th>Message</th>
               </tr></thead><tbody>"""
         for item in f['items']:
             sev_color = "var(--fail)" if item['severity'] == "error" else "#e67e22"
@@ -855,7 +855,7 @@ def checkstyle_html():
 
 def pmd_html():
     if pmd_total == 0:
-        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ 違反なし</div>'
+        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ No violations</div>'
     html = ""
     for f in pmd_files:
         html += f"""<div class="pkg-group">
@@ -867,16 +867,16 @@ def pmd_html():
             </svg>
             {f['path']}
             <span class="pkg-badge badge fail"
-              style="margin-left:auto;">{len(f['items'])} 件</span>
+              style="margin-left:auto;">{len(f['items'])} findings</span>
           </div>
           <div class="pkg-body">
             <table style="width:100%;border-collapse:collapse;font-size:12px;">
               <thead><tr>
-                <th style="width:60px">行</th>
-                <th style="width:60px">優先度</th>
-                <th style="width:120px">ルール</th>
-                <th style="width:100px">カテゴリ</th>
-                <th>メッセージ</th>
+                <th style="width:60px">Line</th>
+                <th style="width:60px">Priority</th>
+                <th style="width:120px">Rule</th>
+                <th style="width:100px">Category</th>
+                <th>Message</th>
               </tr></thead><tbody>"""
         for item in f['items']:
             p_label = PRIORITY_LABEL.get(item['priority'], item['priority'])
@@ -950,7 +950,7 @@ def semgrep_html():
             '<line x1="12" y1="16" x2="12.01" y2="16"/>'
             '</svg>'
             '<span style="color:var(--text-light);font-size:14px;">'
-            'スキップ / 評価できません — Semgrep の結果ファイルが見つかりませんでした'
+            'Skipped / Unable to evaluate — Semgrep result file not found'
             '</span></div>'
         )
 
@@ -976,7 +976,7 @@ def semgrep_html():
         f'<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>'
         f'<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
         f'</svg>'
-        f'パースエラー {semgrep_parse_errors} 件 — 一部のファイルはスキャンできませんでした'
+        f'{semgrep_parse_errors} parse errors — some files could not be scanned'
         f'</div>'
         if semgrep_parse_errors > 0 else ""
     )
@@ -984,7 +984,7 @@ def semgrep_html():
         f'<div style="border:1px solid var(--border);border-radius:10px;'
         f'overflow:hidden;margin-bottom:20px;">'
         f'<div style="padding:12px 16px;background:#f8f9fb;border-bottom:1px solid var(--border);'
-        f'font-size:13px;font-weight:600;">スキャン結果サマリ</div>'
+        f'font-size:13px;font-weight:600;">Scan Results Summary</div>'
         f'<div style="display:flex;border-bottom:1px solid var(--border)">{sev_cells}</div>'
         f'{parse_warn_html}'
         f'</div>'
@@ -993,7 +993,7 @@ def semgrep_html():
     if not semgrep_items:
         return (
             summary_block +
-            '<div style="padding:20px 16px;color:var(--pass);font-weight:600;">✔ 検出なし</div>'
+            '<div style="padding:20px 16px;color:var(--pass);font-weight:600;">✔ No findings</div>'
         )
 
     by_path: dict = {}
@@ -1009,15 +1009,15 @@ def semgrep_html():
               <polyline points="14 2 14 8 20 8"/>
             </svg>{path}
             <span class="pkg-badge badge fail"
-              style="margin-left:auto">{len(items)} 件</span>
+              style="margin-left:auto">{len(items)} findings</span>
           </div>
           <div class="pkg-body">
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <thead><tr>
-                <th style="width:60px">行</th>
-                <th style="width:80px">深刻度</th>
-                <th style="width:160px">ルール</th>
-                <th>メッセージ</th>
+                <th style="width:60px">Line</th>
+                <th style="width:80px">Severity</th>
+                <th style="width:160px">Rule</th>
+                <th>Message</th>
                 <th style="width:200px">CWE / OWASP</th>
               </tr></thead><tbody>"""
         for item in items:
@@ -1042,11 +1042,11 @@ def semgrep_html():
 
 def gitleaks_html():
     if not gitleaks_items:
-        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ シークレット漏洩なし</div>'
+        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ No secret leaks</div>'
     html = """<table style="width:100%;border-collapse:collapse;font-size:12px">
       <thead><tr>
-        <th>ルール</th><th>ファイル</th><th>行</th>
-        <th>コミット</th><th>作成者</th><th>マッチ</th>
+        <th>Rule</th><th>File</th><th>Line</th>
+        <th>Commit</th><th>Author</th><th>Match</th>
       </tr></thead><tbody>"""
     for item in gitleaks_items:
         secret_display = item['secret'][:40] + "…" if len(item['secret']) > 40 \
@@ -1064,17 +1064,17 @@ def gitleaks_html():
     return html
 
 
-_TRIVY_COL_HEADS = ["ライブラリ", "脆弱性 ID", "深刻度", "ステータス", "インストール版", "修正版", "タイトル"]
+_TRIVY_COL_HEADS = ["Library", "Vulnerability ID", "Severity", "Status", "Installed Version", "Fixed Version", "Title"]
 
 
 def trivy_html():
     if not trivy_sections:
-        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ 脆弱性なし</div>'
+        return '<div style="padding:24px;color:var(--pass);font-weight:600;">✔ No vulnerabilities</div>'
     html = ""
     for sec in trivy_sections:
         item_cnt  = len(sec["items"])
         badge_cls = "fail" if item_cnt > 0 else "pass"
-        badge_lbl = f"{item_cnt} 件" if item_cnt > 0 else "✔ なし"
+        badge_lbl = f"{item_cnt} findings" if item_cnt > 0 else "✔ None"
         total_html = (
             f'<div style="font-size:11px;color:var(--text-light);padding:6px 14px;'
             f'border-bottom:1px solid var(--border);background:#fafbfc">'
@@ -1152,9 +1152,9 @@ def wapiti_scan_info_html():
         cls   = classify.get(cat, {})
         desc  = cls.get("desc", "")[:100] + ("…" if len(cls.get("desc","")) > 100 else "")
         badge_html = (
-            f'<span style="color:var(--fail);font-weight:700">{cnt} 件</span>'
+            f'<span style="color:var(--fail);font-weight:700">{cnt} findings</span>'
             if cnt > 0 else
-            f'<span style="color:var(--pass);font-weight:600">✔ クリア</span>'
+            f'<span style="color:var(--pass);font-weight:600">✔ Clear</span>'
         )
         cat_rows += f"""<tr>
           <td style="font-weight:600;font-size:12px">{cat}</td>
@@ -1164,32 +1164,32 @@ def wapiti_scan_info_html():
 
     return f"""<div style="background:#f8f9fb;border:1px solid var(--border);
       border-radius:10px;padding:20px;margin-bottom:20px;">
-      <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">スキャン情報</h3>
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:14px">Scan Information</h3>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
         margin-bottom:16px">
-        <div><div style="font-size:11px;color:var(--text-light)">ツール</div>
+        <div><div style="font-size:11px;color:var(--text-light)">Tool</div>
           <div style="font-size:13px;font-weight:600">{version}</div></div>
-        <div><div style="font-size:11px;color:var(--text-light)">対象 URL</div>
+        <div><div style="font-size:11px;color:var(--text-light)">Target URL</div>
           <div style="font-size:13px;font-weight:600;word-break:break-all">{target}</div></div>
-        <div><div style="font-size:11px;color:var(--text-light)">スキャン日時</div>
+        <div><div style="font-size:11px;color:var(--text-light)">Scan Date</div>
           <div style="font-size:13px;font-weight:600">{date_s}</div></div>
-        <div><div style="font-size:11px;color:var(--text-light)">スコープ</div>
+        <div><div style="font-size:11px;color:var(--text-light)">Scope</div>
           <div style="font-size:13px;font-weight:600">{scope}</div></div>
-        <div><div style="font-size:11px;color:var(--text-light)">クロールページ数</div>
+        <div><div style="font-size:11px;color:var(--text-light)">Crawled Pages</div>
           <div style="font-size:13px;font-weight:600">{pages_n}</div></div>
-        <div><div style="font-size:11px;color:var(--text-light)">発見脆弱性数</div>
+        <div><div style="font-size:11px;color:var(--text-light)">Vulnerabilities Found</div>
           <div style="font-size:13px;font-weight:600;
             color:{'var(--fail)' if wapiti_total > 0 else 'var(--pass)'}">{wapiti_total}</div>
         </div>
       </div>
       <h4 style="font-size:12px;font-weight:600;color:var(--text-light);
         text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
-        チェックモジュール一覧</h4>
+        Check Modules</h4>
       <table style="width:100%;border-collapse:collapse;font-size:12px">
         <thead><tr style="background:rgba(0,0,0,.04)">
-          <th style="text-align:left;padding:6px 10px">カテゴリ</th>
-          <th style="text-align:center;padding:6px 10px;width:100px">検出結果</th>
-          <th style="text-align:left;padding:6px 10px">説明</th>
+          <th style="text-align:left;padding:6px 10px">Category</th>
+          <th style="text-align:center;padding:6px 10px;width:100px">Result</th>
+          <th style="text-align:left;padding:6px 10px">Description</th>
         </tr></thead>
         <tbody>{cat_rows}</tbody>
       </table>
@@ -1203,7 +1203,7 @@ def wapiti_html():
         return (
             scan_block +
             '<div style="padding:24px;color:var(--pass);font-weight:600;">'
-            '✔ 脆弱性なし</div>'
+            '✔ No vulnerabilities</div>'
         )
     by_cat: dict = {}
     for item in wapiti_items:
@@ -1220,14 +1220,14 @@ def wapiti_html():
               <line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>{cat}
             <span class="pkg-badge badge fail"
-              style="margin-left:auto">{len(items)} 件</span>
+              style="margin-left:auto">{len(items)} findings</span>
           </div>
           <div class="pkg-body">
             <table style="width:100%;border-collapse:collapse;font-size:12px">
               <thead><tr>
-                <th>パス</th><th style="width:70px">メソッド</th>
-                <th style="width:100px">パラメータ</th>
-                <th style="width:60px">レベル</th><th>詳細</th>
+                <th>Path</th><th style="width:70px">Method</th>
+                <th style="width:100px">Parameter</th>
+                <th style="width:60px">Level</th><th>Details</th>
               </tr></thead><tbody>"""
         for item in items:
             lc = WAPITI_LEVEL_COLOR.get(item["level"], "var(--text)")
@@ -1263,19 +1263,19 @@ _wapiti_nav = (
 _wapiti_page = (
     f'<div id="page-wapiti" class="page">'
     f'<div class="page-header">'
-    f'<h1>Wapiti — DAST 動的スキャン</h1>'
-    f'<p>{wapiti_total} 件の検出</p>'
+    f'<h1>Wapiti — DAST Dynamic Scan</h1>'
+    f'<p>{wapiti_total} findings</p>'
     f'</div>'
     f'<div class="content"><div class="card">{wapiti_html()}</div></div>'
     f'</div>'
 ) if wapiti_total > 0 else ""
 
 html = f"""<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{PROJECT_NAME} — テスト結果レポート</title>
+<title>{PROJECT_NAME} — Test Results Report</title>
 <style>
   :root {{
     --pass:#27ae60; --fail:#e74c3c; --skip:#f39c12;
@@ -1386,20 +1386,20 @@ html = f"""<!DOCTYPE html>
     <div class="date">{now_str}</div>
   </div>
   <nav>
-    <div class="nav-section">概要</div>
+    <div class="nav-section">Overview</div>
     <div class="nav-item active" onclick="showPage('overview',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
         <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-      </svg>ダッシュボード
+      </svg>Dashboard
     </div>
 
-    <div class="nav-section">テスト</div>
+    <div class="nav-section">Tests</div>
     <div class="nav-item" onclick="showPage('surefire',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M9 11l3 3L22 4"/>
         <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
-      </svg>ユニットテスト
+      </svg>Unit Tests
       <span class="nav-badge {'ok' if su_fail==0 else 'ng'}">{su_pass}/{su_total}</span>
     </div>
     <div class="nav-item" onclick="showPage('failsafe',this)">
@@ -1407,23 +1407,23 @@ html = f"""<!DOCTYPE html>
         <circle cx="12" cy="12" r="10"/>
         <path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/>
         <line x1="15" y1="9" x2="15.01" y2="9"/>
-      </svg>統合テスト (E2E)
+      </svg>Integration Tests (E2E)
       <span class="nav-badge {'ok' if fa_fail==0 else 'ng'}">{fa_pass}/{fa_total}</span>
     </div>
 
-    <div class="nav-section">品質</div>
+    <div class="nav-section">Quality</div>
     <div class="nav-item" onclick="showPage('archunit',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="2" y="3" width="6" height="6"/><rect x="16" y="3" width="6" height="6"/>
         <rect x="9" y="15" width="6" height="6"/>
         <line x1="5" y1="9" x2="12" y2="15"/><line x1="19" y1="9" x2="12" y2="15"/>
-      </svg>アーキテクチャ (ArchUnit)
+      </svg>Architecture (ArchUnit)
       <span class="nav-badge {'ok' if ar_fail==0 else 'ng'}">{ar_pass}/{ar_total}</span>
     </div>
     <div class="nav-item" onclick="showPage('coverage',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-      </svg>カバレッジ (JaCoCo)
+      </svg>Coverage (JaCoCo)
     </div>
     <div class="nav-item" onclick="showPage('checkstyle',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1441,7 +1441,7 @@ html = f"""<!DOCTYPE html>
       <span class="nav-badge {'ok' if pmd_total==0 else 'ng'}">{pmd_total}</span>
     </div>
 
-    <div class="nav-section">セキュリティ</div>
+    <div class="nav-section">Security</div>
     <div class="nav-item" onclick="showPage('semgrep',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="11" cy="11" r="8"/>
@@ -1453,13 +1453,13 @@ html = f"""<!DOCTYPE html>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
         <path d="M7 11V7a5 5 0 0110 0v4"/>
-      </svg>Gitleaks (シークレット)
+      </svg>Gitleaks (Secrets)
       <span class="nav-badge {'ok' if gitleaks_total==0 else 'ng'}">{gitleaks_total}</span>
     </div>
     <div class="nav-item" onclick="showPage('trivy',this)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>Trivy (依存関係)
+      </svg>Trivy (Dependencies)
       <span class="nav-badge {'ok' if trivy_total==0 else 'ng'}">{trivy_total}</span>
     </div>
     {_wapiti_nav}
@@ -1472,60 +1472,60 @@ html = f"""<!DOCTYPE html>
   <!-- ── Overview ── -->
   <div id="page-overview" class="page active">
     <div class="page-header">
-      <h1>ダッシュボード</h1>
-      <p>Maven テスト結果 &nbsp;·&nbsp; {now_str}</p>
+      <h1>Dashboard</h1>
+      <p>Maven Test Results &nbsp;·&nbsp; {now_str}</p>
     </div>
     <div class="content">
       {release_gate_html()}
       <div class="summary-strip">
         <div class="strip-card total"><div class="val">{all_total}</div>
-          <div class="lbl">総テスト数</div></div>
+          <div class="lbl">Total Tests</div></div>
         <div class="strip-card pass"><div class="val">{all_passed}</div>
-          <div class="lbl">成功</div></div>
+          <div class="lbl">Passed</div></div>
         <div class="strip-card fail"><div class="val">{all_failed}</div>
-          <div class="lbl">失敗</div></div>
+          <div class="lbl">Failed</div></div>
         <div class="strip-card skip"><div class="val">{all_skipped}</div>
-          <div class="lbl">スキップ</div></div>
+          <div class="lbl">Skipped</div></div>
         <div class="strip-card time"><div class="val">{fmt_time(all_elapsed)}</div>
-          <div class="lbl">実行時間</div></div>
+          <div class="lbl">Elapsed Time</div></div>
       </div>
 
       <div class="two-col">
         <div class="chart-card">
-          <h3>ユニットテスト (Surefire)</h3>
+          <h3>Unit Tests (Surefire)</h3>
           <div class="donut-wrap" style="flex-wrap:wrap;gap:16px">
             {donut_svg(su_pct, su_color)}
             <div class="donut-legend">
               <div class="legend-item">
                 <div class="legend-dot" style="background:var(--pass)"></div>
-                成功: {su_pass}</div>
+                Passed: {su_pass}</div>
               <div class="legend-item">
                 <div class="legend-dot" style="background:var(--fail)"></div>
-                失敗: {su_fail}</div>
+                Failed: {su_fail}</div>
               <div class="legend-item">
                 <div class="legend-dot" style="background:var(--skip)"></div>
-                スキップ: {su_skip}</div>
+                Skipped: {su_skip}</div>
               <div class="legend-item" style="font-size:11px;color:var(--text-light)">
-                計: {su_total} / {fmt_time(su_time)}</div>
+                Total: {su_total} / {fmt_time(su_time)}</div>
             </div>
           </div>
         </div>
         <div class="chart-card">
-          <h3>統合テスト / E2E (Failsafe)</h3>
+          <h3>Integration Tests / E2E (Failsafe)</h3>
           <div class="donut-wrap">
             {donut_svg(fa_pct, fa_color)}
             <div class="donut-legend">
               <div class="legend-item">
                 <div class="legend-dot" style="background:var(--pass)"></div>
-                成功: {fa_pass}</div>
+                Passed: {fa_pass}</div>
               <div class="legend-item">
                 <div class="legend-dot" style="background:var(--fail)"></div>
-                失敗: {fa_fail}</div>
+                Failed: {fa_fail}</div>
               <div class="legend-item">
                 <div class="legend-dot" style="background:var(--skip)"></div>
-                スキップ: {fa_skip}</div>
+                Skipped: {fa_skip}</div>
               <div class="legend-item" style="font-size:11px;color:var(--text-light)">
-                計: {fa_total} / {fmt_time(fa_time)}</div>
+                Total: {fa_total} / {fmt_time(fa_time)}</div>
             </div>
           </div>
         </div>
@@ -1533,10 +1533,10 @@ html = f"""<!DOCTYPE html>
 
       <div class="two-col">
         <div class="chart-card">
-          <h3>コードカバレッジ (JaCoCo)</h3>
+          <h3>Code Coverage (JaCoCo)</h3>
           <div class="cov-bars">
             <div class="cov-item">
-              <label><span>命令</span>
+              <label><span>Instructions</span>
                 <span>{total_inst_c}/{total_inst_m + total_inst_c}</span></label>
               <div class="bar-track">
                 <div class="bar-fill"
@@ -1545,7 +1545,7 @@ html = f"""<!DOCTYPE html>
                 font-weight:600">{inst_pct}%</div>
             </div>
             <div class="cov-item">
-              <label><span>行</span>
+              <label><span>Lines</span>
                 <span>{total_line_c}/{total_line_m + total_line_c}</span></label>
               <div class="bar-track">
                 <div class="bar-fill"
@@ -1554,7 +1554,7 @@ html = f"""<!DOCTYPE html>
                 font-weight:600">{line_pct}%</div>
             </div>
             <div class="cov-item">
-              <label><span>分岐</span>
+              <label><span>Branches</span>
                 <span>{total_br_c}/{total_br_m + total_br_c}</span></label>
               <div class="bar-track">
                 <div class="bar-fill"
@@ -1565,27 +1565,27 @@ html = f"""<!DOCTYPE html>
           </div>
         </div>
         <div class="chart-card">
-          <h3>静的解析サマリ</h3>
+          <h3>Static Analysis Summary</h3>
           <table style="font-size:13px">
             <tbody>
               <tr><td style="padding:10px 8px;font-weight:600">Checkstyle</td>
                 <td>{badge(cs_status)}</td>
-                <td style="color:var(--text-light)">{cs_total} 件の違反</td></tr>
+                <td style="color:var(--text-light)">{cs_total} violations</td></tr>
               <tr><td style="padding:10px 8px;font-weight:600">PMD</td>
                 <td>{badge(pmd_status)}</td>
-                <td style="color:var(--text-light)">{pmd_total} 件の違反</td></tr>
+                <td style="color:var(--text-light)">{pmd_total} violations</td></tr>
               <tr><td style="padding:10px 8px;font-weight:600">Semgrep</td>
                 <td>{badge(semgrep_status)}</td>
-                <td style="color:var(--text-light)">{semgrep_total} 件の検出</td></tr>
+                <td style="color:var(--text-light)">{semgrep_total} findings</td></tr>
               <tr><td style="padding:10px 8px;font-weight:600">Gitleaks</td>
                 <td>{badge(gitleaks_status)}</td>
-                <td style="color:var(--text-light)">{gitleaks_total} 件のシークレット</td></tr>
+                <td style="color:var(--text-light)">{gitleaks_total} secrets</td></tr>
               <tr><td style="padding:10px 8px;font-weight:600">Trivy</td>
                 <td>{badge(trivy_status)}</td>
-                <td style="color:var(--text-light)">{trivy_total} 件の脆弱性</td></tr>
+                <td style="color:var(--text-light)">{trivy_total} vulnerabilities</td></tr>
               <tr><td style="padding:10px 8px;font-weight:600">Wapiti</td>
                 <td>{badge(wapiti_status)}</td>
-                <td style="color:var(--text-light)">{wapiti_total} 件の脆弱性</td></tr>
+                <td style="color:var(--text-light)">{wapiti_total} vulnerabilities</td></tr>
             </tbody>
           </table>
         </div>
@@ -1596,23 +1596,23 @@ html = f"""<!DOCTYPE html>
   <!-- ── Surefire ── -->
   <div id="page-surefire" class="page">
     <div class="page-header">
-      <h1>ユニットテスト (Surefire)</h1>
-      <p>{su_total} テスト &nbsp;·&nbsp; 成功 {su_pass} &nbsp;·&nbsp;
-        失敗 {su_fail} &nbsp;·&nbsp; {fmt_time(su_time)}</p>
+      <h1>Unit Tests (Surefire)</h1>
+      <p>{su_total} tests &nbsp;·&nbsp; {su_pass} passed &nbsp;·&nbsp;
+        {su_fail} failed &nbsp;·&nbsp; {fmt_time(su_time)}</p>
     </div>
     <div class="content">
       <div class="card">
-        <div class="card-head"><h3>スイート別サマリ</h3></div>
+        <div class="card-head"><h3>Summary by Suite</h3></div>
         <table>
           <thead><tr>
-            <th>テストスイート</th><th>テスト数</th>
-            <th>成功</th><th>失敗</th><th>実行時間</th><th>進捗</th>
+            <th>Test Suite</th><th>Tests</th>
+            <th>Passed</th><th>Failed</th><th>Elapsed Time</th><th>Progress</th>
           </tr></thead>
           <tbody>{suite_table_rows(surefire_suites)}</tbody>
         </table>
       </div>
       <div class="card">
-        <div class="card-head"><h3>テスト詳細</h3></div>
+        <div class="card-head"><h3>Test Details</h3></div>
         {suite_detail_html(surefire_suites)}
       </div>
     </div>
@@ -1621,23 +1621,23 @@ html = f"""<!DOCTYPE html>
   <!-- ── Failsafe ── -->
   <div id="page-failsafe" class="page">
     <div class="page-header">
-      <h1>統合テスト / E2E (Failsafe)</h1>
-      <p>{fa_total} テスト &nbsp;·&nbsp; 成功 {fa_pass} &nbsp;·&nbsp;
-        失敗 {fa_fail} &nbsp;·&nbsp; {fmt_time(fa_time)}</p>
+      <h1>Integration Tests / E2E (Failsafe)</h1>
+      <p>{fa_total} tests &nbsp;·&nbsp; {fa_pass} passed &nbsp;·&nbsp;
+        {fa_fail} failed &nbsp;·&nbsp; {fmt_time(fa_time)}</p>
     </div>
     <div class="content">
       <div class="card">
-        <div class="card-head"><h3>スイート別サマリ</h3></div>
+        <div class="card-head"><h3>Summary by Suite</h3></div>
         <table>
           <thead><tr>
-            <th>テストスイート</th><th>テスト数</th>
-            <th>成功</th><th>失敗</th><th>実行時間</th><th>進捗</th>
+            <th>Test Suite</th><th>Tests</th>
+            <th>Passed</th><th>Failed</th><th>Elapsed Time</th><th>Progress</th>
           </tr></thead>
           <tbody>{suite_table_rows(failsafe_suites)}</tbody>
         </table>
       </div>
       <div class="card">
-        <div class="card-head"><h3>テスト詳細</h3></div>
+        <div class="card-head"><h3>Test Details</h3></div>
         {suite_detail_html(failsafe_suites)}
       </div>
     </div>
@@ -1646,14 +1646,14 @@ html = f"""<!DOCTYPE html>
   <!-- ── Coverage ── -->
   <div id="page-coverage" class="page">
     <div class="page-header">
-      <h1>カバレッジ詳細 (JaCoCo)</h1>
-      <p>命令 {inst_pct}% &nbsp;·&nbsp; 行 {line_pct}% &nbsp;·&nbsp; 分岐 {branch_pct}%</p>
+      <h1>Coverage Details (JaCoCo)</h1>
+      <p>Instructions {inst_pct}% &nbsp;·&nbsp; Lines {line_pct}% &nbsp;·&nbsp; Branches {branch_pct}%</p>
     </div>
     <div class="content">
       <div class="card">
         <table>
           <thead><tr>
-            <th>パッケージ</th><th>クラス</th><th>命令</th><th>行</th><th>分岐</th>
+            <th>Package</th><th>Classes</th><th>Instructions</th><th>Lines</th><th>Branches</th>
           </tr></thead>
           <tbody>{coverage_rows()}</tbody>
         </table>
@@ -1665,7 +1665,7 @@ html = f"""<!DOCTYPE html>
   <div id="page-checkstyle" class="page">
     <div class="page-header">
       <h1>Checkstyle</h1>
-      <p>{cs_total} 件の違反</p>
+      <p>{cs_total} violations</p>
     </div>
     <div class="content">
       <div class="card">{checkstyle_html()}</div>
@@ -1675,8 +1675,8 @@ html = f"""<!DOCTYPE html>
   <!-- ── PMD ── -->
   <div id="page-pmd" class="page">
     <div class="page-header">
-      <h1>PMD 静的解析</h1>
-      <p>{pmd_total} 件の違反</p>
+      <h1>PMD Static Analysis</h1>
+      <p>{pmd_total} violations</p>
     </div>
     <div class="content">
       <div class="card">{pmd_html()}</div>
@@ -1686,13 +1686,13 @@ html = f"""<!DOCTYPE html>
   <!-- ── ArchUnit ── -->
   <div id="page-archunit" class="page">
     <div class="page-header">
-      <h1>アーキテクチャテスト (ArchUnit)</h1>
-      <p>{ar_total} ルール &nbsp;·&nbsp; 合格 {ar_pass} &nbsp;·&nbsp;
-        違反 {ar_fail} &nbsp;·&nbsp; {fmt_time(ar_time)}</p>
+      <h1>Architecture Tests (ArchUnit)</h1>
+      <p>{ar_total} rules &nbsp;·&nbsp; {ar_pass} passed &nbsp;·&nbsp;
+        {ar_fail} violations &nbsp;·&nbsp; {fmt_time(ar_time)}</p>
     </div>
     <div class="content">
       <div class="card">
-        <div class="card-head"><h3>ルール一覧</h3></div>
+        <div class="card-head"><h3>Rule List</h3></div>
         {suite_detail_html(arch_suites)}
       </div>
     </div>
@@ -1701,8 +1701,8 @@ html = f"""<!DOCTYPE html>
   <!-- ── Semgrep ── -->
   <div id="page-semgrep" class="page">
     <div class="page-header">
-      <h1>Semgrep — SAST 静的解析</h1>
-      <p>{semgrep_total} 件の検出</p>
+      <h1>Semgrep — SAST Static Analysis</h1>
+      <p>{semgrep_total} findings</p>
     </div>
     <div class="content">
       <div class="card">{semgrep_html()}</div>
@@ -1712,8 +1712,8 @@ html = f"""<!DOCTYPE html>
   <!-- ── Gitleaks ── -->
   <div id="page-gitleaks" class="page">
     <div class="page-header">
-      <h1>Gitleaks — シークレット漏洩スキャン</h1>
-      <p>{gitleaks_total} 件の検出</p>
+      <h1>Gitleaks — Secret Leak Scan</h1>
+      <p>{gitleaks_total} findings</p>
     </div>
     <div class="content">
       <div class="card">{gitleaks_html()}</div>
@@ -1723,8 +1723,8 @@ html = f"""<!DOCTYPE html>
   <!-- ── Trivy ── -->
   <div id="page-trivy" class="page">
     <div class="page-header">
-      <h1>Trivy — 依存関係・設定スキャン</h1>
-      <p>{trivy_total} 件の検出</p>
+      <h1>Trivy — Dependency &amp; Config Scan</h1>
+      <p>{trivy_total} findings</p>
     </div>
     <div class="content">
       <div class="card">{trivy_html()}</div>
@@ -1758,7 +1758,7 @@ function toggleCases(el) {{
 with open(OUT_FILE, "w", encoding="utf-8") as f:
     f.write(html)
 
-release_label = "✔ リリース可能" if RELEASE_OK else f"✖ リリース不可 ({GATES_PASSED}/{GATES_TOTAL})"
+release_label = "✔ Ready for Release" if RELEASE_OK else f"✖ Not Ready for Release ({GATES_PASSED}/{GATES_TOTAL})"
 print(
     f"[test-report] Generated: {OUT_FILE}\n"
     f"  Tests  — unit:{su_total}({su_pass}✔/{su_fail}✗)"

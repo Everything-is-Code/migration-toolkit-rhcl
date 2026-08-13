@@ -21,19 +21,19 @@ public class ClusterController {
 
     private static final Logger LOG = Logger.getLogger(ClusterController.class);
 
-    /** バックエンドの Route 名（deploy/backend/05-route.yaml と一致させること） */
+    /** Backend Route name (must match deploy/backend/05-route.yaml) */
     private static final String BACKEND_ROUTE_NAME = "migration-tool-backend";
 
     @Inject
     KubernetesClient client;
 
     /**
-     * バックエンド自身の OpenShift Route のホスト名からクラスタードメインを取得する。
-     * Route ホストは "{name}-{namespace}.apps.{cluster-domain}" の形式なので、
-     * "apps." 以降を domain として返す。
+     * Obtains the cluster domain from the hostname of the backend's own OpenShift Route.
+     * The Route host follows the format "{name}-{namespace}.apps.{cluster-domain}",
+     * so everything after "apps." is returned as the domain.
      *
-     * この方法は config.openshift.io 権限が不要で、既存の route.openshift.io
-     * 権限（06-rbac.yaml）で動作する。
+     * This approach does not require config.openshift.io permissions and works
+     * with the existing route.openshift.io permissions (06-rbac.yaml).
      */
     @GET
     @Path("/domain")
@@ -49,7 +49,7 @@ public class ClusterController {
                     .withNamespaced(true)
                     .build();
 
-            // まず全 namespace から検索してバックエンド Route を探す
+            // Search across all namespaces to find the backend Route
             var allRoutes = client.genericKubernetesResources(rdc).inAnyNamespace().list();
             LOG.debugf("Found %d routes in cluster", allRoutes.getItems().size());
 
@@ -75,9 +75,9 @@ public class ClusterController {
 
             LOG.debugf("Backend route host: %s (namespace: %s)", routeHost, routeNamespace);
 
-            // ホスト名から "apps." 以降をドメインとして抽出
-            // 例: migration-tool-backend-myns.apps.cluster-abc.example.com
-            //  → apps.cluster-abc.example.com
+            // Extract the domain as everything after "apps." in the hostname
+            // e.g.: migration-tool-backend-myns.apps.cluster-abc.example.com
+            //  -> apps.cluster-abc.example.com
             int appsIdx = routeHost.indexOf(".apps.");
             if (appsIdx < 0) {
                 LOG.warnf("Cannot extract cluster domain from route host: %s", routeHost);
@@ -111,7 +111,7 @@ public class ClusterController {
                     return host.toString();
                 }
             }
-            // status.ingress[0].host にもある場合
+            // Also check status.ingress[0].host as a fallback
             Map<String, Object> status = (Map<String, Object>) route.getAdditionalProperties().get("status");
             if (status != null) {
                 var ingresses = (java.util.List<Map<String, Object>>) status.get("ingress");

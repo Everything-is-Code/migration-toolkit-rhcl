@@ -49,8 +49,8 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [anonymousTarget, setAnonymousTarget] = useState<'httproute' | 'gateway'>('httproute');
   const [includeMigratedFromLabel, setIncludeMigratedFromLabel] = useState(true);
 
-  // 選択中サービスのいずれかに Logging / Anonymous Access ポリシーが
-  // 有効設定されている場合のみ、対応する適用先設定を表示する。
+  // Show the corresponding target setting only when any selected service
+  // has a Logging / Anonymous Access policy enabled.
   const hasLoggingPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'logging'));
   const hasAnonymousPolicy = appState.selectedServices.some(svc =>
@@ -137,13 +137,13 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
 
                 <div style={{ marginTop: '20px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
                   <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '12px', color: '#004080' }}>
-                    {t('conversion.backendType', 'バックエンド設定')}
+                    {t('conversion.backendType', 'Backend Settings')}
                   </div>
                   <Form>
                     <FormGroup>
                       <Checkbox
                         id="external-backend"
-                        label={t('conversion.externalBackend', 'バックエンドはクラスター外部のサービス (AWS ECS / 外部 HTTPS エンドポイント)')}
+                        label={t('conversion.externalBackend', 'Backend is an external service (AWS ECS / external HTTPS endpoint)')}
                         isChecked={isExternal}
                         onChange={(_e, checked) => setIsExternal(checked)}
                       />
@@ -151,10 +151,10 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     {isExternal && (
                       <>
                         <FormGroup
-                          label={t('conversion.externalBackendUrl', '外部バックエンド URL')}
+                          label={t('conversion.externalBackendUrl', 'External Backend URL')}
                           fieldId="external-backend-url"
                           isRequired
-                          helperText={t('conversion.externalBackendUrlHelp', '例: https://foo.ecs.us-east-2.on.aws')}
+                          helperText={t('conversion.externalBackendUrlHelp', 'e.g.: https://foo.ecs.us-east-2.on.aws')}
                         >
                           <TextInput
                             id="external-backend-url"
@@ -174,7 +174,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                           color: '#795600',
                         }}>
                           <div style={{ fontWeight: 600, marginBottom: '6px' }}>
-                            {t('conversion.externalNote', '外部サービス向けに以下のリソースが追加生成されます：')}
+                            {t('conversion.externalNote', 'The following resources will be additionally generated for external services:')}
                           </div>
                           <ul style={{ margin: 0, paddingLeft: '18px', lineHeight: '1.8' }}>
                             <li dangerouslySetInnerHTML={{ __html: t('conversion.externalNoteEnvoy') }} />
@@ -186,16 +186,16 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   </Form>
                 </div>
 
-                {/* 出力設定フォーム */}
+                {/* Output settings form */}
                 <div style={{ marginTop: '16px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
                   <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '16px', color: '#004080' }}>
-                    {t('conversion.outputSettings', '出力設定')}
+                    {t('conversion.outputSettings', 'Output Settings')}
                   </div>
                   <Form>
                     <FormGroup>
                       <Checkbox
                         id="include-migrated-from-label"
-                        label={t('conversion.includeMigratedFromLabel', 'migrated-from: 3scale ラベルを付与する')}
+                        label={t('conversion.includeMigratedFromLabel', 'Add migrated-from: 3scale label')}
                         isChecked={includeMigratedFromLabel}
                         onChange={(_e, checked) => setIncludeMigratedFromLabel(checked)}
                       />
@@ -203,23 +203,23 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   </Form>
                 </div>
 
-                {/* ポリシー設定フォーム（Logging / Anonymous Access が設定されている場合のみ表示） */}
+                {/* Policy settings form (shown only when Logging / Anonymous Access policies are configured) */}
                 {(hasLoggingPolicy || hasAnonymousPolicy) && (
                   <div style={{ marginTop: '16px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
                     <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '16px', color: '#004080' }}>
-                      {t('conversion.policySettings', 'ポリシー設定')}
+                      {t('conversion.policySettings', 'Policy Settings')}
                     </div>
 
                     {hasLoggingPolicy && (
                       <div style={{ marginBottom: hasAnonymousPolicy ? '16px' : 0 }}>
                         <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
-                          {t('conversion.loggingTarget', 'Logging ポリシー適用先')}
+                          {t('conversion.loggingTarget', 'Logging Policy Target')}
                         </div>
                         <div style={{ display: 'flex', gap: '24px' }}>
                           <Radio
                             id="logging-target-gateway"
                             name="loggingTarget"
-                            label={t('conversion.loggingTargetGateway', 'Gateway Pod（推奨）')}
+                            label={t('conversion.loggingTargetGateway', 'Gateway Pod (recommended)')}
                             isChecked={loggingTarget === 'gateway'}
                             onChange={() => setLoggingTarget('gateway')}
                             description={t('conversion.loggingTargetGatewayDesc', 'context: GATEWAY / istio.io/gateway-name selector')}
@@ -239,7 +239,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     {hasAnonymousPolicy && (
                       <div>
                         <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
-                          {t('conversion.anonymousTarget', 'Anonymous Access ポリシー適用先')}
+                          {t('conversion.anonymousTarget', 'Anonymous Access Policy Target')}
                         </div>
                         <div style={{ display: 'flex', gap: '24px' }}>
                           <Radio
@@ -248,15 +248,15 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                             label={t('conversion.anonymousTargetGateway', 'Gateway')}
                             isChecked={anonymousTarget === 'gateway'}
                             onChange={() => setAnonymousTarget('gateway')}
-                            description={t('conversion.anonymousTargetGatewayDesc', 'targetRef.kind: Gateway — Gateway 経由の全ルートに適用')}
+                            description={t('conversion.anonymousTargetGatewayDesc', 'targetRef.kind: Gateway — Applies to all routes via Gateway')}
                           />
                           <Radio
                             id="anonymous-target-httproute"
                             name="anonymousTarget"
-                            label={t('conversion.anonymousTargetHttpRoute', 'HTTPRoute（推奨）')}
+                            label={t('conversion.anonymousTargetHttpRoute', 'HTTPRoute (recommended)')}
                             isChecked={anonymousTarget === 'httproute'}
                             onChange={() => setAnonymousTarget('httproute')}
-                            description={t('conversion.anonymousTargetHttpRouteDesc', 'targetRef.kind: HTTPRoute — 特定ルートのみに適用')}
+                            description={t('conversion.anonymousTargetHttpRouteDesc', 'targetRef.kind: HTTPRoute — Applies to specific routes only')}
                           />
                         </div>
                       </div>
@@ -339,7 +339,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                                         gap: '4px',
                                       }}>
                                         <span style={{ color: '#f0ab00' }}>●</span>
-                                        {t('conversion.externalFilesNote', '外部サービス向けリソースを含みます（EnvoyFilter + Host rewrite）')}
+                                        {t('conversion.externalFilesNote', 'Includes resources for external services (EnvoyFilter + Host rewrite)')}
                                       </div>
                                     )}
                                   </div>
