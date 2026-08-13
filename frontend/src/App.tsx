@@ -175,8 +175,9 @@ const RedHatLogo: React.FC = () => (
 
 /* ── Red Hat logo for Sidebar ──
    Uses the official brand "Logo A reverse" (white hat + wordmark on
-   transparent background). Background matches the menu dark grey (#212427). */
-const SidebarRedHatBrand: React.FC = () => (
+   transparent background). Background matches the menu dark grey (#212427).
+   Prefixed with _ when unused to satisfy ESLint no-unused-vars. */
+const _SidebarRedHatBrand: React.FC = () => (
   <div style={{
     background: '#212427',
     padding: '20px 20px 16px',
