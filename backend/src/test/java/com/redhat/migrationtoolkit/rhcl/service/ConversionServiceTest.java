@@ -4,12 +4,14 @@ import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
+import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -148,6 +150,148 @@ class ConversionServiceTest {
         Map<String, String> files = service.convert(svc, "ns", "https://api.external.com");
         String httproute = files.get("httproute.yaml");
         assertTrue(httproute.contains("URLRewrite") || httproute.contains("urlRewrite"));
+    }
+
+    // ── Header modification alias (header_modification ≡ headers) ─────────────
+
+    @Test
+    void convert_headersPolicy_emitsResponseHeaderModifier() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(headerPolicy("headers", "X-From-Headers", "headers-value"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("ResponseHeaderModifier"));
+        assertTrue(httproute.contains("X-From-Headers"));
+        assertTrue(httproute.contains("headers-value"));
+    }
+
+    @Test
+    void convert_headerModificationAlias_matchesHeadersOutput() {
+        ApiService withHeaders = basicService("my-api", "my-api");
+        withHeaders.authentication = auth("jwt");
+        withHeaders.policies = List.of(headerPolicy("headers", "X-Alias-Test", "same-value"));
+
+        ApiService withAlias = basicService("my-api", "my-api");
+        withAlias.authentication = auth("jwt");
+        withAlias.policies = List.of(headerPolicy("header_modification", "X-Alias-Test", "same-value"));
+
+        String headersRoute = service.convert(withHeaders, "ns").get("httproute.yaml");
+        String aliasRoute = service.convert(withAlias, "ns").get("httproute.yaml");
+
+        assertTrue(aliasRoute.contains("ResponseHeaderModifier"),
+                "header_modification must emit HeaderModifier like headers");
+        assertTrue(aliasRoute.contains("X-Alias-Test"));
+        assertEquals(headersRoute, aliasRoute,
+                "header_modification must produce identical HeaderModifier YAML to headers");
+    }
+
+    @Test
+    void convert_headerModification_caseInsensitive() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(headerPolicy("Header_Modification", "X-Case", "ok"));
+
+        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        assertTrue(httproute.contains("ResponseHeaderModifier"));
+        assertTrue(httproute.contains("X-Case"));
+    }
+
+    @Test
+    void convert_bothHeadersAndHeaderModification_usesFirstEnabledDeterministically() {
+        // Order: headers first, then header_modification — first match wins (documented).
+        ApiService headersFirst = basicService("my-api", "my-api");
+        headersFirst.authentication = auth("jwt");
+        headersFirst.policies = List.of(
+                headerPolicy("headers", "X-First", "from-headers"),
+                headerPolicy("header_modification", "X-Second", "from-alias"));
+
+        ApiService aliasFirst = basicService("my-api", "my-api");
+        aliasFirst.authentication = auth("jwt");
+        aliasFirst.policies = List.of(
+                headerPolicy("header_modification", "X-First", "from-alias"),
+                headerPolicy("headers", "X-Second", "from-headers"));
+
+        String headersFirstRoute = service.convert(headersFirst, "ns").get("httproute.yaml");
+        String aliasFirstRoute = service.convert(aliasFirst, "ns").get("httproute.yaml");
+
+        assertTrue(headersFirstRoute.contains("X-First"));
+        assertTrue(headersFirstRoute.contains("from-headers"));
+        assertFalse(headersFirstRoute.contains("from-alias"),
+                "When both names present, first enabled policy in list order wins");
+
+        assertTrue(aliasFirstRoute.contains("X-First"));
+        assertTrue(aliasFirstRoute.contains("from-alias"));
+        assertFalse(aliasFirstRoute.contains("from-headers"),
+                "When both names present, first enabled policy in list order wins");
+    }
+
+    // ── CORS policy → HTTPRoute CORS filter + OPTIONS preflight ───────────────
+
+    @Test
+    void convert_corsPolicy_emitsCorsFilterAndOptions() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        MappingRule rule = new MappingRule();
+        rule.httpMethod = "GET";
+        rule.pattern = "/api/users";
+        svc.mappingRules = List.of(rule);
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"),
+                List.of("GET", "POST"),
+                List.of("Authorization", "Content-Type"),
+                true,
+                600));
+
+        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+
+        assertTrue(httproute.contains("type: CORS") || httproute.contains("ResponseHeaderModifier"),
+                "cors must emit CORS filter or ResponseHeaderModifier");
+        assertTrue(httproute.contains("https://app.example.com")
+                        || httproute.contains("Access-Control-Allow-Origin"),
+                "cors origins must appear in HTTPRoute");
+        assertTrue(httproute.contains("Authorization") || httproute.contains("Access-Control-Allow-Headers"));
+        assertTrue(httproute.contains("method: OPTIONS"),
+                "cors must add OPTIONS preflight on product path(s)");
+        assertTrue(httproute.contains("/api/users"));
+    }
+
+    @Test
+    void convert_corsPolicy_includesCredentialsAndMaxAge() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("*"),
+                List.of("GET"),
+                List.of(),
+                true,
+                86400));
+
+        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        assertTrue(httproute.contains("allowCredentials: true")
+                        || httproute.contains("Access-Control-Allow-Credentials"),
+                "credentials must be mapped when configured");
+        assertTrue(httproute.contains("86400") || httproute.contains("maxAge"),
+                "max-age must be mapped when configured");
+    }
+
+    @Test
+    void convert_noCorsPolicy_noCorsFiltersOrOptions() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        MappingRule rule = new MappingRule();
+        rule.httpMethod = "GET";
+        rule.pattern = "/api/users";
+        svc.mappingRules = List.of(rule);
+        svc.policies = List.of(headerPolicy("headers", "X-Only", "v"));
+
+        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        assertFalse(httproute.contains("type: CORS"));
+        assertFalse(httproute.contains("Access-Control-Allow-Origin"));
+        assertFalse(httproute.contains("method: OPTIONS"),
+                "without cors, no CORS-only OPTIONS match should be added");
+        assertTrue(httproute.contains("ResponseHeaderModifier"));
     }
 
     // ── AuthPolicy YAML content ───────────────────────────────────────────────
@@ -360,5 +504,35 @@ class ConversionServiceTest {
         Authentication a = new Authentication();
         a.type = type;
         return a;
+    }
+
+    private Policy headerPolicy(String name, String header, String value) {
+        Policy p = new Policy();
+        p.name = name;
+        p.enabled = true;
+        Map<String, Object> entry = new HashMap<>();
+        entry.put("header", header);
+        entry.put("value", value);
+        entry.put("op", "set");
+        entry.put("value_type", "plain");
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("response", List.of(entry));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy corsPolicy(List<String> origins, List<String> methods, List<String> headers,
+                              boolean credentials, int maxAge) {
+        Policy p = new Policy();
+        p.name = "cors";
+        p.enabled = true;
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("allow_origin", origins);
+        cfg.put("allow_methods", methods);
+        cfg.put("allow_headers", headers);
+        cfg.put("allow_credentials", credentials);
+        cfg.put("max_age", maxAge);
+        p.configuration = cfg;
+        return p;
     }
 }

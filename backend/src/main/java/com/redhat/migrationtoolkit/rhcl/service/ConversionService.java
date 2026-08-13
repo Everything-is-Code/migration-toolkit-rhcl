@@ -253,7 +253,7 @@ spec:
                 ? (name + "-backend")
                 : (internalService != null ? internalService : name + "-backend");
 
-        // Build the filters block (combining URLRewrite + Header Modification)
+        // Build the filters block (combining URLRewrite + Header Modification + CORS)
         StringBuilder filterItems = new StringBuilder();
         if (backendType == BackendType.EXTERNAL) {
             filterItems.append("""
@@ -263,6 +263,7 @@ spec:
 """.formatted(externalHost));
         }
         filterItems.append(buildHeaderModificationFilters(service));
+        filterItems.append(buildCorsFilters(service));
 
         String filtersBlock = filterItems.length() > 0
                 ? "      filters:\n" + filterItems
@@ -288,6 +289,8 @@ metadata:
 """.formatted(name, namespace, name, annotations, name, namespace));
 
         String timeoutsBlock = buildTimeoutsBlock(service);
+        boolean hasCors = findCorsPolicy(service) != null;
+        java.util.LinkedHashSet<String> pathsForOptions = new java.util.LinkedHashSet<>();
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             // For HTTP methods that already have a "/" (catch-all) Mapping Rule,
@@ -304,6 +307,7 @@ metadata:
                 if ("/".equals(path)) {
                     catchAllMethods.add(method);
                 }
+                pathsForOptions.add(path);
 
                 sb.append("""
     - matches:
@@ -317,6 +321,7 @@ metadata:
 """.formatted(path, method, filtersBlock, timeoutsBlock, backendSvc, backendPort));
             }
         } else {
+            pathsForOptions.add("/");
             sb.append("""
     - matches:
         - path:
@@ -326,6 +331,33 @@ metadata:
         - name: %s
           port: %d
 """.formatted(filtersBlock, timeoutsBlock, backendSvc, backendPort));
+        }
+
+        // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
+        if (hasCors) {
+            java.util.Set<String> emittedOptions = new java.util.HashSet<>();
+            if (service.mappingRules != null) {
+                for (MappingRule rule : service.mappingRules) {
+                    if (rule.httpMethod != null && "OPTIONS".equalsIgnoreCase(rule.httpMethod)) {
+                        emittedOptions.add(toGatewayApiPathPrefix(rule.pattern));
+                    }
+                }
+            }
+            for (String path : pathsForOptions) {
+                if (!emittedOptions.add(path)) {
+                    continue;
+                }
+                sb.append("""
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "%s"
+          method: OPTIONS
+%s%s      backendRefs:
+        - name: %s
+          port: %d
+""".formatted(path, filtersBlock, timeoutsBlock, backendSvc, backendPort));
+            }
         }
         return sb.toString();
     }
@@ -356,7 +388,7 @@ metadata:
             return "";
         }
         Policy policy = service.policies.stream()
-                .filter(p -> Boolean.TRUE.equals(p.enabled) && "headers".equals(p.name))
+                .filter(p -> Boolean.TRUE.equals(p.enabled) && isHeaderModificationPolicy(p.name))
                 .findFirst().orElse(null);
         if (policy == null || policy.configuration == null) {
             return "";
@@ -437,6 +469,127 @@ metadata:
         }
 
         return result.toString();
+    }
+
+    /** True when policy name is {@code headers} or alias {@code header_modification} (case-insensitive). */
+    private static boolean isHeaderModificationPolicy(String name) {
+        if (name == null) {
+            return false;
+        }
+        String n = name.toLowerCase();
+        return "headers".equals(n) || "header_modification".equals(n);
+    }
+
+    private Policy findCorsPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "cors".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Maps 3scale {@code cors} policy configuration to a Gateway API CORS HTTPRoute filter.
+     * Origins/methods/headers/credentials/max-age are best-effort from allow_* keys.
+     */
+    @SuppressWarnings("unchecked")
+    private String buildCorsFilters(ApiService service) {
+        Policy cors = findCorsPolicy(service);
+        if (cors == null || cors.configuration == null) {
+            return "";
+        }
+        Map<String, Object> cfg = cors.configuration;
+
+        StringBuilder origins = new StringBuilder();
+        for (String origin : toStringList(cfg.get("allow_origin"))) {
+            if (origin.isBlank()) {
+                continue;
+            }
+            origins.append(String.format("              - \"%s\"%n", origin));
+        }
+        StringBuilder methods = new StringBuilder();
+        for (String method : toStringList(cfg.get("allow_methods"))) {
+            if (method.isBlank()) {
+                continue;
+            }
+            methods.append(String.format("              - %s%n", method.trim().toUpperCase()));
+        }
+        StringBuilder headers = new StringBuilder();
+        for (String header : toStringList(cfg.get("allow_headers"))) {
+            if (header.isBlank()) {
+                continue;
+            }
+            headers.append(String.format("              - %s%n", header.trim()));
+        }
+
+        boolean credentials = Boolean.TRUE.equals(cfg.get("allow_credentials"))
+                || "true".equalsIgnoreCase(String.valueOf(cfg.getOrDefault("allow_credentials", "false")));
+        Object maxAgeRaw = cfg.get("max_age");
+        Integer maxAge = null;
+        if (maxAgeRaw instanceof Number n) {
+            maxAge = n.intValue();
+        } else if (maxAgeRaw != null) {
+            try {
+                maxAge = Integer.parseInt(maxAgeRaw.toString().trim());
+            } catch (NumberFormatException ignored) {
+                maxAge = null;
+            }
+        }
+
+        if (origins.length() == 0 && methods.length() == 0 && headers.length() == 0
+                && !credentials && maxAge == null) {
+            // Still emit a minimal CORS filter so OPTIONS preflight path is paired with a filter.
+            origins.append("              - \"*\"\n");
+        }
+
+        StringBuilder corsBlock = new StringBuilder();
+        if (origins.length() > 0) {
+            corsBlock.append("            allowOrigins:\n").append(origins);
+        }
+        if (methods.length() > 0) {
+            corsBlock.append("            allowMethods:\n").append(methods);
+        }
+        if (headers.length() > 0) {
+            corsBlock.append("            allowHeaders:\n").append(headers);
+        }
+        if (credentials) {
+            corsBlock.append("            allowCredentials: true\n");
+        }
+        if (maxAge != null) {
+            corsBlock.append(String.format("            maxAge: %d%n", maxAge));
+        }
+
+        return String.format("        - type: CORS%n          cors:%n%s", corsBlock);
+    }
+
+    private static java.util.List<String> toStringList(Object raw) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (raw == null) {
+            return out;
+        }
+        if (raw instanceof java.util.List<?> list) {
+            for (Object item : list) {
+                if (item != null) {
+                    out.add(item.toString());
+                }
+            }
+            return out;
+        }
+        String s = raw.toString().trim();
+        if (s.isEmpty()) {
+            return out;
+        }
+        // 3scale sometimes stores space/comma/newline separated origins
+        for (String part : s.split("[,\\s]+")) {
+            if (!part.isBlank()) {
+                out.add(part.trim());
+            }
+        }
+        return out;
     }
 
     /**
