@@ -222,7 +222,7 @@
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
-        <version>0.8.12</version>
+        <version>0.8.15</version>
         <executions>
           <!-- JaCoCo ランタイム初期化のみ目的 (クラス計測は quarkus-jacoco が担う)
                includes で存在しないパターンを指定して実際の計測はさせない。
