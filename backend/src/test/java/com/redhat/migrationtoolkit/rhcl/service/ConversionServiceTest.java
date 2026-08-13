@@ -1,6 +1,8 @@
 package com.redhat.migrationtoolkit.rhcl.service;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
@@ -499,6 +501,180 @@ class ConversionServiceTest {
         assertNotNull(files.get("gateway.yaml"));
     }
 
+    // ── ConversionOptions bag (PR2) ───────────────────────────────────────────
+
+    @Test
+    void convert_withOptions_defaultsMatchPositionalOverload() {
+        ApiService svc = basicService("Opts API", "opts-api");
+        svc.authentication = auth("jwt");
+
+        Map<String, String> viaOverload = service.convert(svc, "ns");
+        Map<String, String> viaOptions = service.convert(svc, "ns", null, new ConversionOptions());
+
+        assertEquals(viaOverload.keySet(), viaOptions.keySet());
+        assertEquals(viaOverload.get("gateway.yaml"), viaOptions.get("gateway.yaml"));
+        assertEquals(viaOverload.get("policy.yaml"), viaOptions.get("policy.yaml"));
+    }
+
+    @Test
+    void convert_withOptions_loggingTargetWorkload() {
+        ApiService svc = basicService("Log API", "log-api");
+        svc.authentication = auth("jwt");
+        Policy logging = new Policy();
+        logging.name = "logging";
+        logging.enabled = true;
+        logging.configuration = Map.of("enable_access_logs", true);
+        svc.policies = List.of(logging);
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.loggingTarget = "workload";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+        String telemetry = files.get("telemetry.yaml");
+        assertNotNull(telemetry);
+        assertTrue(telemetry.contains("SIDECAR_INBOUND") || telemetry.contains("workload")
+                        || !telemetry.contains("GATEWAY"),
+                "workload loggingTarget must not use GATEWAY-only selector");
+    }
+
+    // ── ip_check → AuthorizationPolicy / AuthPolicy OPA (PR2) ─────────────────
+
+    @Test
+    void convert_ipCheck_authorizationPolicyMode_emitsAuthzPolicy() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("203.0.113.10", "198.51.100.0/24")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authorizationPolicy";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertTrue(files.containsKey("authorizationpolicy.yaml"),
+                "authorizationPolicy mode must emit authorizationpolicy.yaml");
+        String authz = files.get("authorizationpolicy.yaml");
+        assertTrue(authz.contains("kind: AuthorizationPolicy"));
+        assertTrue(authz.contains("203.0.113.10") || authz.contains("203.0.113.10/32"));
+        assertTrue(authz.contains("198.51.100.0/24"));
+        assertFalse(authz.toLowerCase().contains("opa"),
+                "Authz mode must not embed OPA in AuthorizationPolicy");
+        String policy = files.get("policy.yaml");
+        assertFalse(policy != null && policy.contains("ip-check") && policy.contains("opa"),
+                "authorizationPolicy mode must not emit OPA ip-check in AuthPolicy");
+    }
+
+    @Test
+    void convert_ipCheck_defaultModeWhenUnset_isAuthorizationPolicy() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("blacklist", List.of("10.0.0.1")));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("authorizationpolicy.yaml"),
+                "Default (unset) ipCheckMode must be authorizationPolicy");
+        String authz = files.get("authorizationpolicy.yaml");
+        assertTrue(authz.contains("DENY") || authz.contains("deny"),
+                "blacklist check_type should map to DENY action");
+        assertTrue(authz.contains("10.0.0.1") || authz.contains("10.0.0.1/32"));
+    }
+
+    @Test
+    void convert_ipCheck_authPolicyOpaMode_emitsOpaOnly() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertFalse(files.containsKey("authorizationpolicy.yaml"),
+                "authPolicyOpa mode must NOT emit authorizationpolicy.yaml");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("opa") || policy.contains("rego"),
+                "authPolicyOpa must encode IP allow/deny in AuthPolicy OPA");
+        assertTrue(policy.contains("192.0.2.1"));
+    }
+
+    @Test
+    void convert_noIpCheck_noAuthorizationPolicyFile() {
+        ApiService svc = basicService("No IP", "no-ip");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of();
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertFalse(files.containsKey("authorizationpolicy.yaml"));
+    }
+
+    // ── App ID/App Key AuthPolicy + real Secret (PR2) ─────────────────────────
+
+    @Test
+    void convert_appIdKey_withRealCredentials_emitsAuthPolicyAndSecret() {
+        ApiService svc = basicService("App ID API", "app-id-api");
+        svc.authentication = auth("appIdKey");
+        Application app = new Application();
+        app.id = "42";
+        app.name = "Demo App";
+        app.appId = "real-app-id-abc";
+        app.keys = List.of("real-app-key-xyz");
+        svc.applications = List.of(app);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("AuthPolicy"));
+        assertTrue(policy.contains("app-id") || policy.contains("appId") || policy.contains("app_id")
+                        || policy.contains("api-key-auth") || policy.contains("app-id-key"),
+                "App ID auth must emit AuthPolicy authentication block");
+
+        String secret = files.get("secret.yaml");
+        assertNotNull(secret);
+        assertTrue(secret.contains("real-app-id-abc"), "Secret must contain real app id");
+        assertTrue(secret.contains("real-app-key-xyz"), "Secret must contain real app key");
+        assertTrue(secret.contains("app_id_1") || secret.contains("app_id:"),
+                "Secret keys should use app_id_N naming");
+        assertFalse(secret.contains("REPLACE_ME"), "Must not invent placeholder keys when creds exist");
+    }
+
+    @Test
+    void convert_appIdKey_missingCredentials_warnsWithoutInventingKeys() {
+        ApiService svc = basicService("App ID API", "app-id-api");
+        svc.authentication = auth("appIdKey");
+        svc.applications = null;
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String secret = files.get("secret.yaml");
+        assertNotNull(secret);
+        assertTrue(secret.contains("WARNING") || secret.toLowerCase().contains("warn")
+                        || files.get("README.md").toLowerCase().contains("warn"),
+                "Missing App ID credentials must produce a warning");
+        assertFalse(secret.contains("fake-") || secret.contains("invented"),
+                "Must not invent credential values");
+        // Must not invent REPLACE_ME app keys for appIdKey path
+        assertFalse(secret.contains("app_key: \"REPLACE_ME\"")
+                || secret.contains("app_id: \"REPLACE_ME\""));
+    }
+
+    @Test
+    void convert_appIdKey_multipleApps_oneSecretWithIndexedKeys() {
+        ApiService svc = basicService("Multi App", "multi-app");
+        svc.authentication = auth("appIdKey");
+        Application a1 = new Application();
+        a1.id = "1";
+        a1.appId = "id-one";
+        a1.keys = List.of("key-one");
+        Application a2 = new Application();
+        a2.id = "2";
+        a2.appId = "id-two";
+        a2.keys = List.of("key-two");
+        svc.applications = List.of(a1, a2);
+
+        String secret = service.convert(svc, "ns").get("secret.yaml");
+        assertTrue(secret.contains("app_id_1") && secret.contains("id-one"));
+        assertTrue(secret.contains("app_key_1") && secret.contains("key-one"));
+        assertTrue(secret.contains("app_id_2") && secret.contains("id-two"));
+        assertTrue(secret.contains("app_key_2") && secret.contains("key-two"));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService(String name, String systemName) {
@@ -541,6 +717,19 @@ class ConversionServiceTest {
         cfg.put("allow_headers", headers);
         cfg.put("allow_credentials", credentials);
         cfg.put("max_age", maxAge);
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy ipCheckPolicy(String checkType, List<String> ips) {
+        Policy p = new Policy();
+        p.name = "ip_check";
+        p.enabled = true;
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("check_type", checkType);
+        cfg.put("ips", ips);
+        cfg.put("error_msg", "IP not allowed");
+        cfg.put("client_ip_sources", List.of("X-Forwarded-For", "X-Real-IP"));
         p.configuration = cfg;
         return p;
     }

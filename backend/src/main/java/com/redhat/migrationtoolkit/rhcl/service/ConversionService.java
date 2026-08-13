@@ -1,6 +1,8 @@
 package com.redhat.migrationtoolkit.rhcl.service;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -8,6 +10,7 @@ import org.jboss.logging.Logger;
 
 import java.security.SecureRandom;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
@@ -23,26 +26,49 @@ public class ConversionService {
     enum BackendType { INTERNAL, EXTERNAL }
 
     public Map<String, String> convert(ApiService service, String namespace) {
-        return convert(service, namespace, null, "gateway", "httproute");
+        return convert(service, namespace, null, new ConversionOptions());
     }
 
     public Map<String, String> convert(ApiService service, String namespace, String backendUrl) {
-        return convert(service, namespace, backendUrl, "gateway", "httproute");
+        return convert(service, namespace, backendUrl, new ConversionOptions());
     }
 
     public Map<String, String> convert(ApiService service, String namespace,
             String backendUrl, String loggingTarget) {
-        return convert(service, namespace, backendUrl, loggingTarget, "httproute");
+        ConversionOptions opts = new ConversionOptions();
+        opts.loggingTarget = loggingTarget;
+        return convert(service, namespace, backendUrl, opts);
     }
 
     public Map<String, String> convert(ApiService service, String namespace,
             String backendUrl, String loggingTarget, String anonymousTarget) {
-        return convert(service, namespace, backendUrl, loggingTarget, anonymousTarget, true);
+        ConversionOptions opts = new ConversionOptions();
+        opts.loggingTarget = loggingTarget;
+        opts.anonymousTarget = anonymousTarget;
+        return convert(service, namespace, backendUrl, opts);
     }
 
     public Map<String, String> convert(ApiService service, String namespace,
             String backendUrl, String loggingTarget, String anonymousTarget,
             boolean includeMigratedFromLabel) {
+        ConversionOptions opts = new ConversionOptions();
+        opts.loggingTarget = loggingTarget;
+        opts.anonymousTarget = anonymousTarget;
+        opts.includeMigratedFromLabel = includeMigratedFromLabel;
+        return convert(service, namespace, backendUrl, opts);
+    }
+
+    public Map<String, String> convert(ApiService service, String namespace,
+            String backendUrl, ConversionOptions opts) {
+        if (opts == null) {
+            opts = new ConversionOptions();
+        }
+        String loggingTarget = opts.loggingTarget != null ? opts.loggingTarget : "gateway";
+        String anonymousTarget = opts.anonymousTarget != null ? opts.anonymousTarget : "httproute";
+        boolean includeMigratedFromLabel = opts.includeMigratedFromLabel;
+        String ipCheckMode = "authPolicyOpa".equals(opts.ipCheckMode)
+                ? "authPolicyOpa" : "authorizationPolicy";
+
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
@@ -73,7 +99,7 @@ public class ConversionService {
         files.put("gateway.yaml", generateGateway(name, namespace));
         files.put("httproute.yaml",  generateHttpRoute(
                 name, namespace, service, backendType, externalHost, internalService, internalPort, externalPort));
-        files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget));
+        files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
         files.put("configmap.yaml",  generateConfigMap(name, namespace, service, effectiveBackendUrl));
         files.put("apiproduct.yaml", generateApiProduct(name, namespace, service));
@@ -113,6 +139,12 @@ public class ConversionService {
                 files.put("envoyfilter-url-rewriting.yaml",
                         generateUrlRewritingEnvoyFilter(name, namespace, rewriteCommands));
             }
+        }
+
+        Policy ipCheck = findIpCheckPolicy(service);
+        if (ipCheck != null && "authorizationPolicy".equals(ipCheckMode)) {
+            files.put("authorizationpolicy.yaml",
+                    generateAuthorizationPolicy(name, namespace, ipCheck));
         }
 
         files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
@@ -753,13 +785,14 @@ spec:
     // ─────────────────────────────────────────────
 
     private String generateAuthPolicy(String name, String namespace, ApiService service,
-            String anonymousTarget) {
+            String anonymousTarget, String ipCheckMode) {
         String authType = service.authentication != null ? service.authentication.type : "none";
 
         // Anonymous Access (default_credentials policy) — inject credentials as response headers
         Policy anonymousPolicy = findAnonymousPolicy(service);
         if (anonymousPolicy != null) {
-            return generateAnonymousAuthPolicy(name, namespace, anonymousPolicy, anonymousTarget);
+            String yaml = generateAnonymousAuthPolicy(name, namespace, anonymousPolicy, anonymousTarget);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
         }
 
         String authCacheBlock = buildAuthCacheBlock(findAuthCachingPolicy(service));
@@ -768,7 +801,7 @@ spec:
             String issuer = service.authentication.oidcIssuerEndpoint != null
                     ? service.authentication.oidcIssuerEndpoint
                     : "https://your-oidc-provider/realms/your-realm";
-            return """
+            String yaml = """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
@@ -788,8 +821,9 @@ spec:
         jwt:
           issuerUrl: %s
 %s""".formatted(name, namespace, name, name, issuer, authCacheBlock);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
         } else if ("apiKey".equals(authType)) {
-            return """
+            String yaml = """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
@@ -815,9 +849,41 @@ spec:
           authorizationHeader:
             prefix: APIKEY
 """.formatted(name, namespace, name, name, name, authCacheBlock);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+        } else if ("appIdKey".equals(authType)) {
+            String yaml = """
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: %s-auth
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/auth-type: "app-id-key"
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: %s-route
+  rules:
+    authentication:
+      app-id-key-auth:
+        apiKey:
+          allNamespaces: true
+          selector:
+            matchLabels:
+              app: %s
+              auth-type: app-id-key
+%s        credentials:
+          queryString:
+            name: app_key
+""".formatted(name, namespace, name, name, name, authCacheBlock);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
         }
 
-        return """
+        String yaml = """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
@@ -834,6 +900,144 @@ spec:
   rules:
     authentication: {}
 """.formatted(name, namespace, name, name);
+        return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+    }
+
+    /**
+     * When ipCheckMode is authPolicyOpa, append OPA authorization encoding the same
+     * allow/deny CIDR logic that AuthorizationPolicy would enforce.
+     */
+    private String appendIpCheckOpaIfNeeded(String authPolicyYaml, ApiService service, String ipCheckMode) {
+        if (!"authPolicyOpa".equals(ipCheckMode)) {
+            return authPolicyYaml;
+        }
+        Policy ipCheck = findIpCheckPolicy(service);
+        if (ipCheck == null) {
+            return authPolicyYaml;
+        }
+        String opaBlock = buildIpCheckOpaAuthorization(ipCheck);
+        if (opaBlock.isEmpty()) {
+            return authPolicyYaml;
+        }
+        // Insert authorization under rules: — after authentication block end is fragile;
+        // append as sibling under rules by replacing the trailing authentication section end.
+        if (authPolicyYaml.contains("\n    authorization:")) {
+            return authPolicyYaml;
+        }
+        // Ensure rules has authorization sibling
+        int rulesIdx = authPolicyYaml.indexOf("\n  rules:");
+        if (rulesIdx < 0) {
+            return authPolicyYaml + "\n" + opaBlock;
+        }
+        return authPolicyYaml.stripTrailing() + "\n" + opaBlock;
+    }
+
+    private String buildIpCheckOpaAuthorization(Policy ipCheck) {
+        Map<String, Object> cfg = ipCheck.configuration != null ? ipCheck.configuration : Map.of();
+        String checkType = String.valueOf(cfg.getOrDefault("check_type", "whitelist"));
+        List<String> ips = toStringList(cfg.get("ips"));
+        if (ips.isEmpty()) {
+            return "";
+        }
+        StringBuilder cidrList = new StringBuilder();
+        for (String ip : ips) {
+            String cidr = normalizeCidr(ip);
+            if (cidrList.length() > 0) {
+                cidrList.append(", ");
+            }
+            cidrList.append("\"").append(cidr).append("\"");
+        }
+        boolean whitelist = !"blacklist".equalsIgnoreCase(checkType)
+                && !"deny".equalsIgnoreCase(checkType);
+        // whitelist: allow if IP in list; blacklist: allow if IP NOT in list
+        String allowBody = whitelist
+                ? """
+            allow {
+              some i
+              net.cidr_contains(cidrs[i], client_ip)
+            }
+"""
+                : """
+            allow {
+              not denied
+            }
+            denied {
+              some i
+              net.cidr_contains(cidrs[i], client_ip)
+            }
+""";
+        return """
+    authorization:
+      ip-check:
+        opa:
+          rego: |
+            package ipcheck
+            import future.keywords
+            cidrs := [%s]
+            client_ip := input.attributes.request.http.headers["x-forwarded-for"]
+%s""".formatted(cidrList, allowBody);
+    }
+
+    private Policy findIpCheckPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "ip_check".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String generateAuthorizationPolicy(String name, String namespace, Policy ipCheck) {
+        Map<String, Object> cfg = ipCheck.configuration != null ? ipCheck.configuration : Map.of();
+        String checkType = String.valueOf(cfg.getOrDefault("check_type", "whitelist"));
+        List<String> ips = toStringList(cfg.get("ips"));
+        boolean deny = "blacklist".equalsIgnoreCase(checkType) || "deny".equalsIgnoreCase(checkType);
+        String action = deny ? "DENY" : "ALLOW";
+
+        StringBuilder remoteIps = new StringBuilder();
+        for (String ip : ips) {
+            remoteIps.append("        - \"").append(normalizeCidr(ip)).append("\"\n");
+        }
+        if (remoteIps.length() == 0) {
+            remoteIps.append("        - \"0.0.0.0/0\"\n");
+        }
+
+        return """
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: %s-ip-check
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/ip-check-type: "%s"
+spec:
+  action: %s
+  rules:
+    - from:
+        - source:
+            remoteIpBlocks:
+%s""".formatted(name, namespace, name, checkType, action, remoteIps);
+    }
+
+    private static String normalizeCidr(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return "0.0.0.0/0";
+        }
+        String trimmed = ip.trim();
+        if (trimmed.contains("/")) {
+            return trimmed;
+        }
+        // Single host → /32
+        if (trimmed.contains(":")) {
+            return trimmed + "/128";
+        }
+        return trimmed + "/32";
     }
 
     private Policy findLoggingPolicy(ApiService service) {
@@ -1232,6 +1436,10 @@ stringData:
 %s""".formatted(name, namespace, name, stringData);
         }
 
+        if ("appIdKey".equals(authType)) {
+            return generateAppIdKeySecret(name, namespace, service);
+        }
+
         if ("apiKey".equals(authType)) {
             String apiKey = generateRandomHex(32);
             return """
@@ -1263,6 +1471,84 @@ stringData:
   client-id: "REPLACE_ME"
   client-secret: "REPLACE_ME"
 """.formatted(name, namespace, name);
+    }
+
+    /**
+     * One Secret with real App ID / App Key pairs as app_id_N / app_key_N.
+     * Never invents keys; warns when credentials are missing.
+     */
+    private String generateAppIdKeySecret(String name, String namespace, ApiService service) {
+        List<Application> apps = service.applications != null ? service.applications : List.of();
+        StringBuilder stringData = new StringBuilder();
+        String warning;
+        int index = 1;
+        int pairs = 0;
+        for (Application app : apps) {
+            String appId = app.appId != null && !app.appId.isBlank() ? app.appId : null;
+            String appKey = null;
+            if (app.keys != null) {
+                for (String k : app.keys) {
+                    if (k != null && !k.isBlank()) {
+                        appKey = k;
+                        break;
+                    }
+                }
+            }
+            if (appId == null && appKey == null) {
+                continue;
+            }
+            if (appId != null) {
+                stringData.append(String.format("  app_id_%d: \"%s\"%n", index, appId));
+            }
+            if (appKey != null) {
+                stringData.append(String.format("  app_key_%d: \"%s\"%n", index, appKey));
+                pairs++;
+            } else {
+                LOG.warnf("App ID %s for service %s has no application keys from Admin API",
+                        appId, service.id);
+            }
+            index++;
+        }
+
+        if (pairs == 0 && stringData.length() == 0) {
+            warning = "# WARNING: No App ID/App Key credentials fetched from 3scale Admin API — "
+                    + "Secret left empty; do not invent keys\n";
+            LOG.warnf("No App ID/App Key credentials for service %s; emitting empty Secret with warning",
+                    service.id);
+            return """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s-app-id-keys
+  namespace: %s
+  labels:
+    app: %s
+    auth-type: app-id-key
+    migrated-from: 3scale
+    authorino.kuadrant.io/managed-by: authorino
+type: Opaque
+%sstringData: {}
+""".formatted(name, namespace, name, warning);
+        } else if (pairs == 0) {
+            warning = "# WARNING: App IDs present but application keys missing from Admin API\n";
+        } else {
+            warning = "";
+        }
+
+        return """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s-app-id-keys
+  namespace: %s
+  labels:
+    app: %s
+    auth-type: app-id-key
+    migrated-from: 3scale
+    authorino.kuadrant.io/managed-by: authorino
+type: Opaque
+%sstringData:
+%s""".formatted(name, namespace, name, warning, stringData);
     }
 
     // ─────────────────────────────────────────────

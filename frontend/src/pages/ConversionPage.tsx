@@ -50,15 +50,18 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [externalBackendUrl, setExternalBackendUrl] = useState('');
   const [loggingTarget, setLoggingTarget] = useState<'gateway' | 'workload'>('gateway');
   const [anonymousTarget, setAnonymousTarget] = useState<'httproute' | 'gateway'>('httproute');
+  const [ipCheckMode, setIpCheckMode] = useState<'authorizationPolicy' | 'authPolicyOpa'>('authorizationPolicy');
   const [includeMigratedFromLabel, setIncludeMigratedFromLabel] = useState(true);
 
   // Show the corresponding target setting only when any selected service
-  // has a Logging / Anonymous Access policy enabled.
+  // has a Logging / Anonymous Access / IP Check policy enabled.
   const hasLoggingPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'logging'));
   const hasAnonymousPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled
       && (p.name === 'default_credentials' || p.name === 'anonymous_access')));
+  const hasIpCheckPolicy = appState.selectedServices.some(svc =>
+    svc.policies?.some(p => p.enabled && p.name === 'ip_check'));
 
   const handleConvert = async () => {
     setLoading(true);
@@ -78,6 +81,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
         loggingTarget,
         anonymousTarget,
         includeMigratedFromLabel,
+        ipCheckMode,
       });
       setProgress(100);
       const convResults: ConversionResultItem[] = resp.data.results;
@@ -212,15 +216,15 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   </Form>
                 </div>
 
-                {/* Policy settings form (shown only when Logging / Anonymous Access policies are configured) */}
-                {(hasLoggingPolicy || hasAnonymousPolicy) && (
+                {/* Policy settings form (shown only when Logging / Anonymous Access / IP Check policies are configured) */}
+                {(hasLoggingPolicy || hasAnonymousPolicy || hasIpCheckPolicy) && (
                   <div style={{ marginTop: '16px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
                     <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '16px', color: '#004080' }}>
                       {t('conversion.policySettings', 'Policy Settings')}
                     </div>
 
                     {hasLoggingPolicy && (
-                      <div style={{ marginBottom: hasAnonymousPolicy ? '16px' : 0 }}>
+                      <div style={{ marginBottom: (hasAnonymousPolicy || hasIpCheckPolicy) ? '16px' : 0 }}>
                         <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
                           {t('conversion.loggingTarget', 'Logging Policy Target')}
                         </div>
@@ -246,7 +250,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     )}
 
                     {hasAnonymousPolicy && (
-                      <div>
+                      <div style={{ marginBottom: hasIpCheckPolicy ? '16px' : 0 }}>
                         <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
                           {t('conversion.anonymousTarget', 'Anonymous Access Policy Target')}
                         </div>
@@ -266,6 +270,32 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                             isChecked={anonymousTarget === 'httproute'}
                             onChange={() => setAnonymousTarget('httproute')}
                             description={t('conversion.anonymousTargetHttpRouteDesc', 'targetRef.kind: HTTPRoute — Applies to specific routes only')}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {hasIpCheckPolicy && (
+                      <div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
+                          {t('conversion.ipCheckMode', 'IP Check 変換先')}
+                        </div>
+                        <div style={{ display: 'flex', gap: '24px' }}>
+                          <Radio
+                            id="ip-check-authorization-policy"
+                            name="ipCheckMode"
+                            label={t('conversion.ipCheckModeAuthz', 'AuthorizationPolicy（推奨）')}
+                            isChecked={ipCheckMode === 'authorizationPolicy'}
+                            onChange={() => setIpCheckMode('authorizationPolicy')}
+                            description={t('conversion.ipCheckModeAuthzDesc', 'Istio AuthorizationPolicy with remoteIpBlocks')}
+                          />
+                          <Radio
+                            id="ip-check-auth-policy-opa"
+                            name="ipCheckMode"
+                            label={t('conversion.ipCheckModeOpa', 'AuthPolicy / OPA')}
+                            isChecked={ipCheckMode === 'authPolicyOpa'}
+                            onChange={() => setIpCheckMode('authPolicyOpa')}
+                            description={t('conversion.ipCheckModeOpaDesc', 'Kuadrant AuthPolicy authorization with OPA/Rego')}
                           />
                         </div>
                       </div>

@@ -90,8 +90,8 @@ public class CompatibilityService {
                         "API Key Authentication", "SUPPORTED", "API key authentication is supported"));
             case "appIdKey" ->
                 items.add(new CompatibilityItem(
-                        "App ID/Key Authentication", "WARNING",
-                        "App ID/Key requires custom policy configuration"));
+                        "App ID/Key Authentication", "SUPPORTED",
+                        "App ID/App Key converts to AuthPolicy with tenant credentials Secret"));
             default ->
                 items.add(new CompatibilityItem(
                         "Authentication", "WARNING",

@@ -1,5 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionRequest;
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
 import com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity;
@@ -68,12 +69,14 @@ public class ConversionController {
                         ? new HashSet<>(request.supportedPolicies)
                         : Set.of();
                 CompatibilityResult compatibility = compatibilityService.check(service, supportedPolicies);
-                String loggingTarget = "workload".equals(request.loggingTarget) ? "workload" : "gateway";
-                String anonymousTarget = "gateway".equals(request.anonymousTarget) ? "gateway" : "httproute";
-                boolean includeMigratedFromLabel = !Boolean.FALSE.equals(request.includeMigratedFromLabel);
+                ConversionOptions opts = new ConversionOptions();
+                opts.loggingTarget = "workload".equals(request.loggingTarget) ? "workload" : "gateway";
+                opts.anonymousTarget = "gateway".equals(request.anonymousTarget) ? "gateway" : "httproute";
+                opts.includeMigratedFromLabel = !Boolean.FALSE.equals(request.includeMigratedFromLabel);
+                opts.ipCheckMode = "authPolicyOpa".equals(request.ipCheckMode)
+                        ? "authPolicyOpa" : "authorizationPolicy";
                 Map<String, String> yamlFiles = conversionService.convert(
-                        service, namespace, request.externalBackendUrl, loggingTarget, anonymousTarget,
-                        includeMigratedFromLabel);
+                        service, namespace, request.externalBackendUrl, opts);
 
                 String name = service.systemName != null ? service.systemName : service.name;
                 name = name.toLowerCase().replaceAll("[^a-z0-9]+", "-");

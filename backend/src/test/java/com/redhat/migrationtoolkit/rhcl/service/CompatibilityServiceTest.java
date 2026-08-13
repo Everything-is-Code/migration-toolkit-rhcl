@@ -57,11 +57,11 @@ class CompatibilityServiceTest {
     }
 
     @Test
-    void check_appIdKeyAuthentication_warning() {
+    void check_appIdKeyAuthentication_supported() {
         ApiService svc = basicService();
         svc.authentication = auth("appIdKey");
         CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
-        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("App ID")));
     }
 
@@ -156,6 +156,30 @@ class CompatibilityServiceTest {
         CompatibilityResult headerResult = service.check(headerSvc, pr1Defaults);
         assertTrue(headerResult.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && "Header Modification".equals(i.name)));
+    }
+
+    /**
+     * After PR2 converters land, DEFAULT_SUPPORTED includes IP Check.
+     */
+    @Test
+    void check_pr2DefaultSupportedPolicies_ipCheckSupported() {
+        Set<String> pr2Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("ip_check"));
+        CompatibilityResult result = service.check(svc, pr2Defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "IP Check".equals(i.name)));
     }
 
     @Test
