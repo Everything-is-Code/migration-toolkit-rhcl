@@ -123,7 +123,9 @@ class ConversionServiceTest {
     }
 
     @Test
-    void convert_httpRouteYaml_wildcardReplaced() {
+    void convert_httpRouteYaml_bracePatternBecomesPathPrefix() {
+        // 3scale patterns like /api/{?} are sanitized for Gateway API PathPrefix by
+        // truncating at '{'; a literal '*' would be misleading (PathPrefix is not a glob).
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
         MappingRule rule = new MappingRule();
@@ -133,8 +135,10 @@ class ConversionServiceTest {
 
         Map<String, String> files = service.convert(svc, "ns");
         String httproute = files.get("httproute.yaml");
-        assertTrue(httproute.contains("*"), "Wildcard {?} should be replaced with *");
-        assertFalse(httproute.contains("{?}"));
+        assertTrue(httproute.contains("type: PathPrefix"), "brace patterns must use PathPrefix");
+        assertTrue(httproute.contains("value: \"/api\""), "prefix should truncate at '{'");
+        assertFalse(httproute.contains("{?}"), "brace wildcards must not appear in HTTPRoute");
+        assertFalse(httproute.contains("value: \"/api*\""), "must not emit a literal '*' PathPrefix");
     }
 
     @Test
