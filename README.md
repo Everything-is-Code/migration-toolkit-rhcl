@@ -199,6 +199,13 @@ npm install --legacy-peer-deps
 VITE_API_URL=http://localhost:8080 npm run dev
 ```
 
+CORS defaults to `http://localhost:5173`, `http://localhost:3000`, and
+`http://localhost:8080`. For OpenShift or temporary demos, override with
+`CORS_ORIGINS` or `QUARKUS_HTTP_CORS_ORIGINS` (comma-separated origins).
+Export API tokens must be sent as `Authorization: Bearer <token>` (never as
+query `accessToken` / `access_token`). Existing POST bodies may still include
+`accessToken`.
+
 ---
 
 ## Architecture
@@ -859,6 +866,13 @@ cd frontend
 npm install --legacy-peer-deps
 VITE_API_URL=http://localhost:8080 npm run dev
 ```
+
+CORS のデフォルト許可オリジンは `http://localhost:5173`、`http://localhost:3000`、
+`http://localhost:8080` です。OpenShift や一時デモでは `CORS_ORIGINS` または
+`QUARKUS_HTTP_CORS_ORIGINS`（カンマ区切り）で上書きしてください。
+エクスポート API のトークンは `Authorization: Bearer <token>` で送り、
+クエリの `accessToken` / `access_token` は使いません。既存の POST ボディの
+`accessToken` はそのまま利用できます。
 
 ---
 

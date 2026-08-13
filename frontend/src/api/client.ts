@@ -31,13 +31,20 @@ export const defaultsApi = {
     }>('/api/defaults'),
 };
 
+const bearerHeaders = (accessToken: string) => ({
+  Authorization: `Bearer ${accessToken}`,
+});
+
 export const servicesApi = {
   list: (url: string, accessToken: string) =>
-    api.get('/api/services', { params: { url, accessToken } }),
+    api.get('/api/services', { params: { url }, headers: bearerHeaders(accessToken) }),
   get: (id: string, url: string, accessToken: string) =>
-    api.get(`/api/services/${id}`, { params: { url, accessToken } }),
+    api.get(`/api/services/${id}`, { params: { url }, headers: bearerHeaders(accessToken) }),
   checkCompatibility: (id: string, url: string, accessToken: string, supportedPolicies: string[]) =>
-    api.get(`/api/services/${id}/compatibility`, { params: { url, accessToken, supportedPolicies: supportedPolicies.join('|') } }),
+    api.get(`/api/services/${id}/compatibility`, {
+      params: { url, supportedPolicies: supportedPolicies.join('|') },
+      headers: bearerHeaders(accessToken),
+    }),
 };
 
 export const conversionApi = {

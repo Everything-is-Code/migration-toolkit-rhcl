@@ -15,6 +15,9 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
@@ -35,32 +38,102 @@ class ExportControllerTest {
     }
 
     @Test
-    void getServices_withParams_returns200() {
+    void getServices_queryOnlyAccessToken_returns400() {
+        given()
+                .queryParam("url", "https://3scale.example.com")
+                .queryParam("accessToken", "secret-from-query")
+                .when().get("/api/services")
+                .then()
+                .statusCode(400);
+
+        verify(exportService, never()).exportServices(anyString(), anyString());
+    }
+
+    @Test
+    void getServices_queryOnlySnakeCaseAccessToken_returns400() {
+        given()
+                .queryParam("url", "https://3scale.example.com")
+                .queryParam("access_token", "secret-from-query")
+                .when().get("/api/services")
+                .then()
+                .statusCode(400);
+
+        verify(exportService, never()).exportServices(anyString(), anyString());
+    }
+
+    @Test
+    void getServices_missingAuthorization_returns400() {
+        given()
+                .queryParam("url", "https://3scale.example.com")
+                .when().get("/api/services")
+                .then()
+                .statusCode(400);
+
+        verify(exportService, never()).exportServices(anyString(), anyString());
+    }
+
+    @Test
+    void getServices_invalidAuthorizationScheme_returns400() {
+        given()
+                .header("Authorization", "Basic dXNlcjpwYXNz")
+                .queryParam("url", "https://3scale.example.com")
+                .when().get("/api/services")
+                .then()
+                .statusCode(400);
+
+        verify(exportService, never()).exportServices(anyString(), anyString());
+    }
+
+    @Test
+    void getServices_withBearerAuthorization_returns200() {
         ApiService svc = new ApiService();
         svc.id = "1";
         svc.name = "Test API";
-        when(exportService.exportServices(anyString(), anyString())).thenReturn(List.of(svc));
+        when(exportService.exportServices(eq("https://3scale.example.com"), eq("token123")))
+                .thenReturn(List.of(svc));
 
         given()
+                .header("Authorization", "Bearer token123")
                 .queryParam("url", "https://3scale.example.com")
-                .queryParam("accessToken", "token123")
                 .when().get("/api/services")
                 .then()
                 .statusCode(200)
                 .body("$", hasSize(1))
                 .body("[0].id", equalTo("1"));
+
+        verify(exportService).exportServices("https://3scale.example.com", "token123");
     }
 
     @Test
-    void getService_byId_returns200() {
+    void getServices_ignoresQueryTokenWhenBearerPresent() {
+        ApiService svc = new ApiService();
+        svc.id = "1";
+        svc.name = "Test API";
+        when(exportService.exportServices(eq("https://3scale.example.com"), eq("header-token")))
+                .thenReturn(List.of(svc));
+
+        given()
+                .header("Authorization", "Bearer header-token")
+                .queryParam("url", "https://3scale.example.com")
+                .queryParam("accessToken", "query-token")
+                .when().get("/api/services")
+                .then()
+                .statusCode(200);
+
+        verify(exportService).exportServices("https://3scale.example.com", "header-token");
+        verify(exportService, never()).exportServices(anyString(), eq("query-token"));
+    }
+
+    @Test
+    void getService_byId_withBearer_returns200() {
         ApiService svc = new ApiService();
         svc.id = "42";
         svc.name = "My API";
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
 
         given()
+                .header("Authorization", "Bearer token123")
                 .queryParam("url", "https://3scale.example.com")
-                .queryParam("accessToken", "token123")
                 .when().get("/api/services/42")
                 .then()
                 .statusCode(200)
@@ -68,7 +141,7 @@ class ExportControllerTest {
     }
 
     @Test
-    void checkCompatibility_returns200() {
+    void checkCompatibility_withBearer_returns200() {
         ApiService svc = new ApiService();
         svc.id = "42";
         svc.name = "My API";
@@ -86,12 +159,33 @@ class ExportControllerTest {
         when(compatibilityService.check(any(), any())).thenReturn(result);
 
         given()
+                .header("Authorization", "Bearer token123")
                 .queryParam("url", "https://3scale.example.com")
-                .queryParam("accessToken", "token123")
                 .when().get("/api/services/42/compatibility")
                 .then()
                 .statusCode(200)
                 .body("score", equalTo(80))
                 .body("level", equalTo("HIGH"));
+    }
+
+    @Test
+    void cors_preflight_localhost5173_allowed() {
+        given()
+                .header("Origin", "http://localhost:5173")
+                .header("Access-Control-Request-Method", "GET")
+                .when().options("/api/services")
+                .then()
+                .statusCode(anyOf(is(200), is(204)))
+                .header("Access-Control-Allow-Origin", equalTo("http://localhost:5173"));
+    }
+
+    @Test
+    void cors_preflight_evilOrigin_notAllowed() {
+        given()
+                .header("Origin", "https://evil.example")
+                .header("Access-Control-Request-Method", "GET")
+                .when().options("/api/services")
+                .then()
+                .header("Access-Control-Allow-Origin", nullValue());
     }
 }
