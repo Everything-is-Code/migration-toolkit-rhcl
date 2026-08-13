@@ -122,7 +122,7 @@ public class ApplyController {
                 for (GenericKubernetesResource gkr : items) {
                     String kind = gkr.getKind();
                     String name = gkr.getMetadata() != null ? gkr.getMetadata().getName() : "unknown";
-                    // リクエストの namespace で常に上書き（YAML 内の namespace が古い/存在しない場合の対策）
+                    // Always override with the request namespace (handles stale/missing namespace in YAML)
                     String ns = namespace;
                     if (gkr.getMetadata() != null) {
                         gkr.getMetadata().setNamespace(ns);
@@ -133,7 +133,7 @@ public class ApplyController {
                         LOG.infof("Applied %s/%s to namespace %s", kind, name, ns);
                         resourceResults.add(new ResourceResult(fileName, kind, name, ns, true, null));
 
-                        // cluster から実リソースを export (-o yaml 相当)
+                        // Export the actual resource from the cluster (equivalent to -o yaml)
                         try {
                             GenericKubernetesResource live = client.genericKubernetesResources(rdc)
                                     .inNamespace(ns).withName(name).get();
@@ -174,7 +174,7 @@ public class ApplyController {
         long successCount = resourceResults.stream().filter(ResourceResult::success).count();
         long failureCount = resourceResults.stream().filter(r -> !r.success()).count();
 
-        // Secret が適用された場合、Authorino を再起動して新しい API キーを認識させる
+        // If a Secret was applied, restart Authorino to pick up the new API key
         boolean secretApplied = resourceResults.stream()
                 .anyMatch(r -> r.success() && "Secret".equals(r.kind()));
         if (secretApplied) {
@@ -239,7 +239,7 @@ public class ApplyController {
                 LOG.infof("Authorino deployment not found in %s, skipping restart", authorinoNs);
                 return;
             }
-            // rollout restart: kubectl.kubernetes.io/restartedAt アノテーションを更新
+            // Rollout restart: update the kubectl.kubernetes.io/restartedAt annotation
             String now = java.time.Instant.now().toString();
             client.apps().deployments().inNamespace(authorinoNs).withName(deployName)
                     .edit(d -> {
@@ -278,10 +278,10 @@ public class ApplyController {
         String roleName = "migration-tool-istio-manager";
         String clusterRoleName = "migration-tool-applier";
 
-        // ── ClusterRole に不足 apiGroups を補完 ──────────────────────────────
+        // ── Ensure missing apiGroups are added to ClusterRole ─────────────────
         ensureClusterRole(clusterRoleName, saName, saNamespace);
 
-        // ── 対象 namespace への Role / RoleBinding ────────────────────────────
+        // ── Role / RoleBinding for the target namespace ────────────────────────
         PolicyRule istioRule = new PolicyRuleBuilder()
                 .withApiGroups("networking.istio.io")
                 .withResources("destinationrules", "serviceentries", "serviceentrys", "virtualservices")
@@ -322,8 +322,8 @@ public class ApplyController {
                 .endSubject()
                 .build();
 
-        // Authorino SA が対象 namespace の Secrets を読めるよう RoleBinding を追加
-        // （ClusterRoleBinding がある場合は冗長だが namespace 再作成後の安全網として追加）
+        // Add RoleBinding so the Authorino SA can read Secrets in the target namespace
+        // (redundant if a ClusterRoleBinding exists, but serves as a safety net after namespace recreation)
         RoleBinding authorinoBinding = new RoleBindingBuilder()
                 .withNewMetadata()
                     .withName("authorino-secret-reader")

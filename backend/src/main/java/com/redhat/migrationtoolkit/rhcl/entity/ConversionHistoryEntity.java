@@ -32,7 +32,7 @@ public class ConversionHistoryEntity extends PanacheEntity {
     @Column(name = "yaml_content", columnDefinition = "TEXT")
     public String yamlContent;
 
-    /** CONVERT（変換フロー）または IMPORT（ZIP インポート） */
+    /** CONVERT (conversion flow) or IMPORT (ZIP import) */
     @Column(name = "source", length = 20)
     public String source = "CONVERT";
 
@@ -52,11 +52,11 @@ public class ConversionHistoryEntity extends PanacheEntity {
     @Column(name = "failure_details", columnDefinition = "TEXT")
     public String failureDetails;
 
-    /** JSON: {filename: yamlContent} — cluster から export した実リソース YAML */
+    /** JSON: {filename: yamlContent} — actual resource YAML exported from the cluster */
     @Column(name = "exported_yaml", columnDefinition = "TEXT")
     public String exportedYaml;
 
-    /** IMPORT 時のAPIパッケージ名 */
+    /** API package name used during IMPORT */
     @Column(name = "package_name")
     public String packageName;
 

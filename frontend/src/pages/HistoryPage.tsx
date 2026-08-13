@@ -154,7 +154,7 @@ const HistoryPage: React.FC = () => {
 
   return (
     <>
-      {/* トースト通知 */}
+      {/* Toast notification */}
       {toast && (
         <div style={{
           position: 'fixed', top: 16, right: 16, zIndex: 9999,
@@ -211,7 +211,7 @@ const HistoryPage: React.FC = () => {
               </EmptyState>
             ) : (
               <>
-                {/* ツールバー */}
+                {/* Toolbar */}
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '8px 16px', borderBottom: '1px solid #d2d2d2', background: '#f5f5f5',
@@ -233,7 +233,7 @@ const HistoryPage: React.FC = () => {
                   <Badge isRead>{t('history.countBadge', { count: history.length })}</Badge>
                 </div>
 
-                {/* テーブル */}
+                {/* Table */}
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
                     <thead>
@@ -265,7 +265,7 @@ const HistoryPage: React.FC = () => {
                                   : idx % 2 === 0 ? '#ffffff' : '#fafafa',
                               }}
                             >
-                              {/* チェックボックス */}
+                              {/* Checkbox */}
                               <td style={{ ...tdS, textAlign: 'center' }}>
                                 <Checkbox
                                   id={`chk-${entry.id}`}
@@ -275,7 +275,7 @@ const HistoryPage: React.FC = () => {
                                 />
                               </td>
 
-                              {/* 展開ボタン（失敗がある場合のみ） */}
+                              {/* Expand button (only when there are failures) */}
                               <td style={{ ...tdS, textAlign: 'center' }}>
                                 {hasFailures && (
                                   <Button variant="plain" size="sm"
@@ -286,17 +286,17 @@ const HistoryPage: React.FC = () => {
                                 )}
                               </td>
 
-                              {/* 実行日時 */}
+                              {/* Execution date/time */}
                               <td style={tdS}>
                                 <span style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
                                   {formatDate(entry.createdAt)}
                                 </span>
                               </td>
 
-                              {/* 種別 */}
+                              {/* Type */}
                               <td style={tdS}>{sourceLabel(entry.source)}</td>
 
-                              {/* サービス/パッケージ名 */}
+                              {/* Service/Package name */}
                               <td style={tdS}>
                                 {(() => {
                                   const name = entry.source === 'IMPORT'
@@ -313,7 +313,7 @@ const HistoryPage: React.FC = () => {
                                 <code style={{ fontSize: 12 }}>{entry.namespace ?? '—'}</code>
                               </td>
 
-                              {/* ステータス */}
+                              {/* Status */}
                               <td style={{ ...tdS, textAlign: 'center' }}>
                                 <Label color={statusColor(entry.status)}>
                                   {entry.status === 'COMPLETED' ? t('history.statusSuccess')
@@ -323,7 +323,7 @@ const HistoryPage: React.FC = () => {
                                 </Label>
                               </td>
 
-                              {/* 成功/失敗カウント */}
+                              {/* Success/Failure count */}
                               <td style={{ ...tdS, textAlign: 'center' }}>
                                 {entry.totalCount != null ? (
                                   <span style={{ fontSize: 13 }}>
@@ -343,7 +343,7 @@ const HistoryPage: React.FC = () => {
                                 ) : '—'}
                               </td>
 
-                              {/* ダウンロード */}
+                              {/* Download */}
                               <td style={{ ...tdS, textAlign: 'center' }}>
                                 <Button
                                   variant="secondary"
@@ -357,7 +357,7 @@ const HistoryPage: React.FC = () => {
                               </td>
                             </tr>
 
-                            {/* 展開: 失敗詳細 */}
+                            {/* Expanded: failure details */}
                             {isExpanded && hasFailures && (
                               <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
                                 <td colSpan={9} style={{ padding: '0 0 12px 72px', background: '#fff8f7' }}>
@@ -403,7 +403,7 @@ const HistoryPage: React.FC = () => {
         </Card>
       </PageSection>
 
-      {/* 削除確認モーダル */}
+      {/* Delete confirmation modal */}
       <Modal
         variant={ModalVariant.small}
         title={t('history.deleteTitle')}

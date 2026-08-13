@@ -16,9 +16,9 @@ public class ConversionService {
     private static final Logger LOG = Logger.getLogger(ConversionService.class);
 
     /**
-     * バックエンドの種別を表す列挙型。
-     * INTERNAL : OpenShift/Kubernetes 内の Service（ServiceEntry・DestinationRule・URLRewrite 不要）
-     * EXTERNAL : クラスター外の HTTPS エンドポイント（ServiceEntry・DestinationRule・URLRewrite が必要）
+     * Enum representing the backend type.
+     * INTERNAL : Service within OpenShift/Kubernetes (no ServiceEntry, DestinationRule, or URLRewrite needed)
+     * EXTERNAL : HTTPS endpoint outside the cluster (ServiceEntry, DestinationRule, and URLRewrite required)
      */
     enum BackendType { INTERNAL, EXTERNAL }
 
@@ -46,11 +46,11 @@ public class ConversionService {
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
-        // ユーザーが明示的に URL を指定しなかった場合は、3scale に登録済みの
-        // 実際のバックエンド (privateEndpoint) を使ってタイプを自動判定する。
-        // configmap.yaml のフォールバックと一致させることで、
-        // 「バックエンド URL は ELB を指しているのに HTTPRoute は
-        //  存在しないクラスター内部 Service を指す」という不整合を防ぐ。
+        // If the user did not explicitly specify a URL, auto-detect the type
+        // using the actual backend (privateEndpoint) registered in 3scale.
+        // By aligning with the configmap.yaml fallback, this prevents
+        // inconsistencies such as "the backend URL points to an ELB but the
+        // HTTPRoute points to a non-existent internal cluster Service".
         String effectiveBackendUrl = backendUrl;
         if ((effectiveBackendUrl == null || effectiveBackendUrl.isBlank())
                 && service.backends != null && !service.backends.isEmpty()) {
@@ -62,9 +62,9 @@ public class ConversionService {
         String internalService = backendType == BackendType.INTERNAL
                 ? extractInternalService(effectiveBackendUrl, name) : null;
         int internalPort = backendType == BackendType.INTERNAL ? extractPort(effectiveBackendUrl, 8080) : 8080;
-        // 外部バックエンドのポートは URL のスキーム（http→80 / https→443）または
-        // 明示ポートから決定する。443 に固定すると、実際は HTTP のみで待ち受けている
-        // バックエンド（TLS 未設定の OpenShift Route など）に接続できなくなる。
+        // The external backend port is determined from the URL scheme (http→80 / https→443)
+        // or an explicitly specified port. Hardcoding 443 would prevent connections to
+        // backends that only listen on HTTP (e.g., OpenShift Routes without TLS).
         int externalDefaultPort = effectiveBackendUrl != null && effectiveBackendUrl.trim().startsWith("http://")
                 ? 80 : 443;
         int externalPort = backendType == BackendType.EXTERNAL
@@ -123,21 +123,21 @@ public class ConversionService {
         return files;
     }
 
-    /** 生成 YAML から "migrated-from: 3scale" ラベル行を取り除く（チェックボックスで無効化された場合）。 */
+    /** Remove the "migrated-from: 3scale" label line from the generated YAML (when disabled via checkbox). */
     private String stripMigratedFromLabel(String content) {
         return content.replaceAll("(?m)^[ \\t]*migrated-from: 3scale\\R?", "");
     }
 
     // ─────────────────────────────────────────────
-    // バックエンドタイプ判定
+    // Backend type detection
     // ─────────────────────────────────────────────
 
     /**
-     * バックエンド URL からタイプを判定する。
-     *   null / 空文字          → INTERNAL（デフォルト）
-     *   *.svc / *.svc.cluster.local 形式 → INTERNAL
-     *   クラスター内 DNS（ドット区切りのないホスト名）→ INTERNAL
-     *   https?://external...   → EXTERNAL
+     * Detect the backend type from the URL.
+     *   null / empty string                       → INTERNAL (default)
+     *   *.svc / *.svc.cluster.local format        → INTERNAL
+     *   In-cluster DNS (hostname without dots)     → INTERNAL
+     *   https?://external...                       → EXTERNAL
      */
     BackendType detectBackendType(String url) {
         if (url == null || url.isBlank()) {
@@ -147,18 +147,18 @@ public class ConversionService {
         if (host == null) {
             return BackendType.INTERNAL;
         }
-        // *.svc または *.svc.cluster.local → 内部
+        // *.svc or *.svc.cluster.local → internal
         if (host.endsWith(".svc") || host.endsWith(".svc.cluster.local")) {
             return BackendType.INTERNAL;
         }
-        // ドットを含まないシンプルなホスト名（例: my-service）→ 内部
+        // Simple hostname without dots (e.g., my-service) → internal
         if (!host.contains(".")) {
             return BackendType.INTERNAL;
         }
         return BackendType.EXTERNAL;
     }
 
-    /** URL からホスト名を抽出する。失敗時は null。 */
+    /** Extract the hostname from a URL. Returns null on failure. */
     private String extractHostname(String url) {
         if (url == null || url.isBlank()) {
             return null;
@@ -175,20 +175,20 @@ public class ConversionService {
     }
 
     /**
-     * 内部バックエンド URL からサービス名を抽出する。
+     * Extract the service name from an internal backend URL.
      * "http://my-service:8080" → "my-service"
-     * 抽出できない場合は "{name}-backend" を返す。
+     * Falls back to "{name}-backend" if extraction fails.
      */
     private String extractInternalService(String url, String name) {
         String host = extractHostname(url);
         if (host == null || host.isBlank()) {
             return name + "-backend";
         }
-        // "svc.cluster.local" サフィックスを除去して先頭のサービス名だけ返す
+        // Strip the "svc.cluster.local" suffix and return only the leading service name
         return host.split("\\.")[0];
     }
 
-    /** URL からポート番号を抽出する。失敗時はデフォルト値を返す。 */
+    /** Extract the port number from a URL. Returns the default value on failure. */
     private int extractPort(String url, int defaultPort) {
         if (url == null || url.isBlank()) {
             return defaultPort;
@@ -253,7 +253,7 @@ spec:
                 ? (name + "-backend")
                 : (internalService != null ? internalService : name + "-backend");
 
-        // filters ブロックを構築（URLRewrite + Header Modification を統合）
+        // Build the filters block (combining URLRewrite + Header Modification)
         StringBuilder filterItems = new StringBuilder();
         if (backendType == BackendType.EXTERNAL) {
             filterItems.append("""
@@ -290,8 +290,8 @@ metadata:
         String timeoutsBlock = buildTimeoutsBlock(service);
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
-            // "/" (catch-all) な Mapping Rule が既にある HTTP メソッドについては、
-            // それより後ろにある同メソッドのルールは常に "/" に包含され冗長なのでスキップする。
+            // For HTTP methods that already have a "/" (catch-all) Mapping Rule,
+            // skip any subsequent rules for the same method since they are always subsumed by "/".
             java.util.Set<String> catchAllMethods = new java.util.HashSet<>();
             java.util.Set<String> emitted = new java.util.LinkedHashSet<>();
             for (MappingRule rule : service.mappingRules) {
@@ -331,12 +331,12 @@ metadata:
     }
 
     /**
-     * 3scale の Mapping Rule パターン（例: "/api/dashboard/{id}", "/foo/{?}"）を
-     * Gateway API の PathPrefix で使える値に変換する。
-     * Gateway API の path.value は `^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$`
-     * のみ許可され、`{`/`}` を含むテンプレート化されたパスパラメータは指定できない。
-     * そのため、最初のパスパラメータの直前までを PathPrefix として使用する
-     * （例: "/api/dashboard/{id}" → "/api/dashboard"）。
+     * Convert a 3scale Mapping Rule pattern (e.g., "/api/dashboard/{id}", "/foo/{?}")
+     * into a value usable as a Gateway API PathPrefix.
+     * Gateway API path.value only allows `^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$`
+     * and cannot contain templated path parameters with `{`/`}`.
+     * Therefore, only the portion up to the first path parameter is used as the PathPrefix
+     * (e.g., "/api/dashboard/{id}" → "/api/dashboard").
      */
     private String toGatewayApiPathPrefix(String pattern) {
         if (pattern == null || pattern.isBlank()) {
@@ -440,10 +440,10 @@ metadata:
     }
 
     /**
-     * upstream_connection ポリシーの各タイムアウト値を Gateway API timeouts フィールドに変換する。
-     *   connect_timeout → backendRequest（バックエンド接続タイムアウト）
-     *   read_timeout    → request（レスポンス受信タイムアウト）
-     *   send_timeout    → アノテーションに記録（Gateway API に直接対応フィールドなし）
+     * Convert the upstream_connection policy timeout values to Gateway API timeouts fields.
+     *   connect_timeout → backendRequest (backend connection timeout)
+     *   read_timeout    → request (response receive timeout)
+     *   send_timeout    → recorded as annotation (no direct Gateway API field)
      */
     private String buildTimeoutsBlock(ApiService service) {
         if (service.policies == null) {
@@ -485,7 +485,7 @@ metadata:
     }
 
     /**
-     * upstream_connection の send_timeout をアノテーションとして返す（HTTPRoute metadata に付与）。
+     * Return the upstream_connection send_timeout as an annotation (attached to HTTPRoute metadata).
      */
     private String buildUpstreamAnnotations(ApiService service) {
         if (service.policies == null) {
@@ -514,7 +514,7 @@ metadata:
     }
 
     // ─────────────────────────────────────────────
-    // ServiceEntry（外部バックエンドのみ生成）
+    // ServiceEntry (generated only for external backends)
     // ─────────────────────────────────────────────
 
     private String generateServiceEntry(String name, String namespace, String externalHost,
@@ -560,7 +560,7 @@ spec:
     }
 
     // ─────────────────────────────────────────────
-    // DestinationRule（外部バックエンドのみ生成）
+    // DestinationRule (generated only for external backends)
     // ─────────────────────────────────────────────
 
     private String generateDestinationRule(String name, String namespace, String externalHost, boolean useTls) {
@@ -699,13 +699,13 @@ spec:
     }
 
     /**
-     * 3scale の Auth Caching ポリシー（caching_type: allow / strict / resilient）を
-     * Kuadrant AuthPolicy の認証ルール単位の cache（Authorino のキャッシュ）へ変換する。
-     * cache.key は認証情報そのもの（Authorization ヘッダー）をキーにして、
-     * 同一クレデンシャルからのリクエストに対する認証結果を再利用する。
-     * 3scale の caching_type は fail-open/fail-closed 等の詳細な意味論を持つが、
-     * Authorino 側は単純な TTL ベースのキャッシュしか持たないため、
-     * caching_type から TTL 目安へベストエフォートでマッピングする。
+     * Convert the 3scale Auth Caching policy (caching_type: allow / strict / resilient)
+     * to a per-authentication-rule cache in a Kuadrant AuthPolicy (Authorino cache).
+     * cache.key uses the credentials themselves (Authorization header) as the key,
+     * reusing authentication results for requests with the same credentials.
+     * 3scale's caching_type has detailed semantics such as fail-open/fail-closed,
+     * but Authorino only supports simple TTL-based caching, so we do a
+     * best-effort mapping from caching_type to an approximate TTL.
      */
     private String buildAuthCacheBlock(Policy authCachingPolicy) {
         if (authCachingPolicy == null) {
@@ -742,16 +742,16 @@ spec:
     // ─────────────────────────────────────────────
 
     /**
-     * 3scale の URL Rewriting ポリシー（op: sub/gsub, regex, replace）を
-     * Gateway API の HTTPRoute では表現できない（サポートするのは静的な
-     * ReplaceFullPath / ReplacePrefixMatch のみ）ため、Istio EnvoyFilter で
-     * envoy.filters.http.lua フィルターを挿入し、リクエストパスを書き換える。
+     * The 3scale URL Rewriting policy (op: sub/gsub, regex, replace) cannot be expressed
+     * in Gateway API HTTPRoute (which only supports static ReplaceFullPath / ReplacePrefixMatch),
+     * so an Istio EnvoyFilter is used to inject an envoy.filters.http.lua filter
+     * that rewrites the request path.
      *
-     * 3scale の regex/replace は PCRE + ngx.re.sub 構文（\d, キャプチャ参照 $1）。
-     * Envoy Lua フィルターは Lua 標準の string.gsub（Lua パターン）しか使えないため、
-     * よく使われる記法をベストエフォートで変換する（\d → %d, \w → %w, $1/\1 → %1 等）。
-     * 複雑な PCRE 構文（先読み等）は変換できないため、生成された Lua パターンは
-     * 必ず目視確認すること。
+     * 3scale regex/replace uses PCRE + ngx.re.sub syntax (\d, capture references $1).
+     * The Envoy Lua filter can only use Lua's standard string.gsub (Lua patterns), so
+     * commonly used notations are converted on a best-effort basis (\d → %d, \w → %w, $1/\1 → %1, etc.).
+     * Complex PCRE constructs (lookahead, etc.) cannot be converted, so the generated
+     * Lua patterns must be manually verified.
      */
     private String generateUrlRewritingEnvoyFilter(String name, String namespace,
             java.util.List<Map<String, Object>> commands) {
@@ -781,7 +781,7 @@ function envoy_on_request(request_handle)
 end
 """.formatted(rules);
 
-        // インデント調整（YAML の inlineCode ブロックに合わせる）
+        // Adjust indentation (to match the YAML inlineCode block)
         String indentedScript = luaScript.lines()
                 .map(l -> "              " + l)
                 .reduce((a, b) -> a + "\n" + b)
@@ -824,7 +824,7 @@ spec:
 """.formatted(name, namespace, name, name, indentedScript);
     }
 
-    /** PCRE の代表的な記法を Lua パターンへベストエフォートで変換する。 */
+    /** Best-effort conversion of common PCRE notations to Lua patterns. */
     private String pcreToLuaPattern(String pcre) {
         return pcre
                 .replace("\\d", "%d")
@@ -833,7 +833,7 @@ spec:
                 .replace("\\.", "%.");
     }
 
-    /** 3scale の置換文字列（$1 / \\1）を Lua の %1 形式へ変換する。 */
+    /** Convert 3scale replacement strings ($1 / \\1) to Lua's %1 format. */
     private String pcreReplaceToLua(String replace) {
         return replace
                 .replaceAll("\\$(\\d)", "%$1")
@@ -842,8 +842,8 @@ spec:
 
     @SuppressWarnings("unchecked")
     /**
-     * 3scale の nginx 変数を Envoy アクセスログ変数にマッピングする。
-     * 値に複数の変数が混在する場合（例: "uri$request_uri"）も対応。
+     * Map 3scale nginx variables to Envoy access log variables.
+     * Handles values containing multiple variables (e.g., "uri$request_uri").
      */
     private static String toEnvoyVar(String nginxValue) {
         return nginxValue
@@ -1191,36 +1191,36 @@ data:
         String backendSection = switch (backendType) {
             case EXTERNAL -> """
 
-## External Backend（外部 HTTPS サービス）
+## External Backend (External HTTPS Service)
 
-バックエンドはクラスター外の HTTPS エンドポイントです。
+The backend is an HTTPS endpoint outside the cluster.
 
-**外部エンドポイント:** `%s`
+**External endpoint:** `%s`
 
-| File | 説明 |
-|------|------|
-| serviceentry.yaml | Istio に外部ホストを登録（ServiceEntry + ExternalName Service） |
-| destinationrule.yaml | 外部への接続に TLS（SIMPLE）を適用 |
-| httproute.yaml | `URLRewrite` で Host ヘッダーを外部ホスト名に書き換え |
+| File | Description |
+|------|-------------|
+| serviceentry.yaml | Register the external host with Istio (ServiceEntry + ExternalName Service) |
+| destinationrule.yaml | Apply TLS (SIMPLE) for connections to the external host |
+| httproute.yaml | Rewrite the Host header to the external hostname via `URLRewrite` |
 """.formatted(externalHost);
             case INTERNAL -> """
 
-## Internal Backend（OpenShift 内 Service）
+## Internal Backend (Service within OpenShift)
 
-バックエンドはクラスター内の Kubernetes Service です。
-ServiceEntry・DestinationRule・URLRewrite フィルターは不要なため生成されていません。
+The backend is a Kubernetes Service within the cluster.
+ServiceEntry, DestinationRule, and URLRewrite filters are not needed and have not been generated.
 
-> `httproute.yaml` の `backendRefs.name` が実際の Service 名と一致していることを確認してください。
+> Verify that `backendRefs.name` in `httproute.yaml` matches the actual Service name.
 """;
         };
 
         boolean hasLogging = findLoggingPolicy(service) != null;
         String loggingFile = hasLogging
-                ? "| gateway.yaml | Gateway + Istio Telemetry / EnvoyFilter（アクセスログ設定） |\n" : "";
+                ? "| gateway.yaml | Gateway + Istio Telemetry / EnvoyFilter (access log configuration) |\n" : "";
 
         boolean hasUrlRewriting = findUrlRewritingPolicy(service) != null;
         String urlRewritingFile = hasUrlRewriting
-                ? "| envoyfilter-url-rewriting.yaml | 3scale URL Rewriting ポリシーを Lua フィルターで再現（PCRE→Lua パターンはベストエフォート変換のため要確認） |\n"
+                ? "| envoyfilter-url-rewriting.yaml | Reproduces the 3scale URL Rewriting policy via Lua filter (PCRE→Lua pattern conversion is best-effort — verify before use) |\n"
                 : "";
 
         String fileList = loggingFile
@@ -1234,21 +1234,21 @@ ServiceEntry・DestinationRule・URLRewrite フィルターは不要なため生
 # %s - Connectivity Link Migration
 
 ## Overview
-Migration Toolkit で生成した Kubernetes/OpenShift リソースです。
+Kubernetes/OpenShift resources generated by Migration Toolkit.
 
-**元の 3scale サービス:** %s (ID: %s)
-**対象 Namespace:** %s
-**バックエンドタイプ:** %s
+**Original 3scale service:** %s (ID: %s)
+**Target Namespace:** %s
+**Backend type:** %s
 %s
 ## Files
 
-| File | 説明 |
-|------|------|
-| gateway.yaml | 外部トラフィックの入口となる Gateway |
-| httproute.yaml | 3scale マッピングルールから変換した HTTPRoute |
-| policy.yaml | 認証・認可ポリシー（AuthPolicy） |
-| secret.yaml | 認証情報（apply 前に値を置き換えてください） |
-| configmap.yaml | 設定情報 |
+| File | Description |
+|------|-------------|
+| gateway.yaml | Gateway serving as the entry point for external traffic |
+| httproute.yaml | HTTPRoute converted from 3scale mapping rules |
+| policy.yaml | Authentication/authorization policy (AuthPolicy) |
+| secret.yaml | Credentials (replace values before applying) |
+| configmap.yaml | Configuration data |
 %s
 
 ## Prerequisites
@@ -1259,19 +1259,19 @@ Migration Toolkit で生成した Kubernetes/OpenShift リソースです。
 ## Installation
 
 ```bash
-# secret.yaml の値を確認・更新してから適用
+# Review and update the values in secret.yaml before applying
 vi secret.yaml
 kubectl apply -f . -n %s
 
-# Gateway 確認
+# Verify Gateway
 kubectl get gateway %s-gateway -n %s
 kubectl get httproute %s-route -n %s
 ```
 
 ## Notes
-- `secret.yaml` の認証情報を apply 前に必ず更新してください
-- `httproute.yaml` のバックエンドサービス名が実際の Service 名と一致しているか確認してください
-- まずステージング環境でテストしてください
+- Make sure to update the credentials in `secret.yaml` before applying
+- Verify that the backend service name in `httproute.yaml` matches the actual Service name
+- Test in a staging environment first
 """.formatted(
             service.name, service.name, service.id, namespace,
             backendType == BackendType.EXTERNAL ? "External HTTPS" : "Internal OpenShift Service",
@@ -1282,7 +1282,7 @@ kubectl get httproute %s-route -n %s
     }
 
     // ─────────────────────────────────────────────
-    // ユーティリティ
+    // Utilities
     // ─────────────────────────────────────────────
 
     private String toKebabCase(String input) {

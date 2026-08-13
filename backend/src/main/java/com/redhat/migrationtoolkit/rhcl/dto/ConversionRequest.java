@@ -8,15 +8,15 @@ public class ConversionRequest {
     public String tenant;
     public String namespace;
     public List<String> serviceIds;
-    /** 外部バックエンドURL (例: https://foo.ecs.us-east-2.on.aws/api)。
-     * 指定時は ServiceEntry + DestinationRule + Host rewrite を生成する。 */
+    /** External backend URL (e.g. https://foo.ecs.us-east-2.on.aws/api).
+     * When specified, generates ServiceEntry + DestinationRule + Host rewrite. */
     public String externalBackendUrl;
-    /** 互換性チェックで「対応済み」と見なすポリシー表示名のリスト。 */
+    /** List of policy display names considered "supported" in the compatibility check. */
     public List<String> supportedPolicies;
-    /** Logging ポリシーの適用先: "gateway"（デフォルト）または "workload" */
+    /** Target for the Logging policy: "gateway" (default) or "workload" */
     public String loggingTarget;
-    /** Anonymous Access ポリシーの targetRef: "httproute"（デフォルト）または "gateway" */
+    /** targetRef for the Anonymous Access policy: "httproute" (default) or "gateway" */
     public String anonymousTarget;
-    /** 生成リソースに "migrated-from: 3scale" ラベルを付与するかどうか（デフォルト: true）。 */
+    /** Whether to add the "migrated-from: 3scale" label to generated resources (default: true). */
     public Boolean includeMigratedFromLabel;
 }

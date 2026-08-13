@@ -38,14 +38,14 @@ public class HistoryController {
     ObjectMapper objectMapper;
 
     @GET
-    @Operation(summary = "Get conversion history (exportedYaml を除いた軽量レスポンス)")
+    @Operation(summary = "Get conversion history (lightweight response excluding exportedYaml)")
     public Response getHistory(@QueryParam("page") @DefaultValue("0") int page,
                                @QueryParam("size") @DefaultValue("50") int size) {
         List<ConversionHistoryEntity> history = ConversionHistoryEntity
                 .find("ORDER BY createdAt DESC")
                 .page(page, size)
                 .list();
-        // exportedYaml はサイズが大きいためリスト API では除外する
+        // Exclude exportedYaml from the list API due to its large size
         List<Map<String, Object>> result = history.stream().map(h -> {
             Map<String, Object> m = new java.util.LinkedHashMap<>();
             m.put("id",               h.id);
@@ -84,7 +84,7 @@ public class HistoryController {
         return Response.ok(ProjectEntity.listAll()).build();
     }
 
-    /** 履歴の export YAML を ZIP でダウンロード */
+    /** Download history exported YAML as a ZIP file */
     @GET
     @Path("/{id}/download")
     @Produces("application/zip")
@@ -96,7 +96,7 @@ public class HistoryController {
         }
 
         try {
-            // exportedYaml は JSON: {filename → yamlContent}
+            // exportedYaml is JSON: {filename -> yamlContent}
             Map<String, String> files = entity.exportedYaml != null
                     ? objectMapper.readValue(entity.exportedYaml,
                         objectMapper.getTypeFactory().constructMapType(Map.class, String.class, String.class))
@@ -127,7 +127,7 @@ public class HistoryController {
         }
     }
 
-    /** 複数 ID をまとめて削除 */
+    /** Delete multiple entries by IDs */
     @DELETE
     @Consumes(MediaType.APPLICATION_JSON)
     @Transactional

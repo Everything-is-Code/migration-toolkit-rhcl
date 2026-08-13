@@ -8,8 +8,8 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// バックエンドのメッセージ (apply.success 等) をフロントエンドの表示言語と
-// 一致させるため、現在の i18n 言語を Accept-Language として送信する。
+// Send the current i18n language as Accept-Language so that backend messages
+// (e.g. apply.success) match the frontend display language.
 api.interceptors.request.use((config) => {
   config.headers['Accept-Language'] = i18n.language || 'en';
   return config;
