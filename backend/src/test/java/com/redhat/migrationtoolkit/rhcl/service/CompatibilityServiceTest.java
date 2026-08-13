@@ -182,6 +182,41 @@ class CompatibilityServiceTest {
                 && "IP Check".equals(i.name)));
     }
 
+    /**
+     * After PR3 converters land, DEFAULT_SUPPORTED includes Edge Limiting.
+     */
+    @Test
+    void check_pr3DefaultSupportedPolicies_edgeLimitingSupported() {
+        Set<String> pr3Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        CompatibilityResult result = service.check(svc, pr3Defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Edge Limiting".equals(i.name)));
+    }
+
+    @Test
+    void check_edgeLimiting_withoutSupportedList_warns() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "Edge Limiting".equals(i.name)));
+    }
+
     @Test
     void check_customSupportedListWithoutCors_stillWarns() {
         // User override / saved custom list without CORS must keep WARNING until reset.

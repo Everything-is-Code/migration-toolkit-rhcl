@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
+import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
@@ -675,6 +676,89 @@ class ConversionServiceTest {
         assertTrue(secret.contains("app_key_2") && secret.contains("key-two"));
     }
 
+    // ── edge_limiting ∪ plan limits → RateLimitPolicy (PR3) ───────────────────
+
+    @Test
+    void convert_edgeLimitingAndPlanLimits_emitsUnionRateLimitPolicy() {
+        ApiService svc = basicService("Rate API", "rate-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(edgeLimitingPolicy(30, 60));
+        ApplicationPlan plan = new ApplicationPlan();
+        plan.id = "1";
+        plan.name = "Gold";
+        plan.systemName = "gold";
+        plan.limits = List.of(Map.of("period", "minute", "value", 200, "metric_system_name", "hits"));
+        svc.applicationPlans = List.of(plan);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("ratelimitpolicy.yaml"),
+                "Both sources must emit ratelimitpolicy.yaml");
+        String rlp = files.get("ratelimitpolicy.yaml");
+        assertTrue(rlp.contains("kind: RateLimitPolicy"));
+        assertTrue(rlp.contains("targetRef") && rlp.contains("HTTPRoute"),
+                "RateLimitPolicy must target HTTPRoute");
+        // Named limit from edge_limiting policy
+        assertTrue(rlp.contains("30") && (rlp.contains("60s") || rlp.contains("60")),
+                "Policy fixed-window count/window must appear in rates");
+        // Global ceiling from plan (prefer plan minute over hardcoded 100/60s)
+        assertTrue(rlp.contains("global") && rlp.contains("200"),
+                "Plan max minute ceiling must appear as global limit");
+        assertFalse(rlp.contains("kind: PlanPolicy"), "v1 emits RateLimitPolicy only, no PlanPolicy");
+    }
+
+    @Test
+    void convert_edgeLimitingOnly_emitsRateLimitFromPolicy() {
+        ApiService svc = basicService("Edge Only", "edge-only");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(edgeLimitingPolicy(15, 30));
+        svc.applicationPlans = List.of();
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("ratelimitpolicy.yaml"));
+        String rlp = files.get("ratelimitpolicy.yaml");
+        assertTrue(rlp.contains("RateLimitPolicy"));
+        assertTrue(rlp.contains("15"));
+        assertFalse(rlp.contains("\nglobal:") || rlp.matches("(?s).*\\bglobal:\\s*\\n.*rates:.*"),
+                "Policy-only path should not invent a plan global ceiling");
+    }
+
+    @Test
+    void convert_planLimitsOnly_emitsGlobalFromPlanCeiling() {
+        ApiService svc = basicService("Plan Only", "plan-only");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of();
+        ApplicationPlan planA = new ApplicationPlan();
+        planA.id = "1";
+        planA.limits = List.of(Map.of("period", "hour", "value", 1000));
+        ApplicationPlan planB = new ApplicationPlan();
+        planB.id = "2";
+        planB.limits = List.of(
+                Map.of("period", "minute", "value", 50),
+                Map.of("period", "minute", "value", 80));
+        svc.applicationPlans = List.of(planA, planB);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("ratelimitpolicy.yaml"));
+        String rlp = files.get("ratelimitpolicy.yaml");
+        assertTrue(rlp.contains("global"));
+        // Prefer highest minute (80) over hour when minute exists
+        assertTrue(rlp.contains("80"), "Must prefer max plan minute ceiling");
+        assertFalse(rlp.contains("limit: 100") && rlp.contains("60s") && !rlp.contains("80"),
+                "Must not fall back to hardcoded 100/60s when plan data exists");
+    }
+
+    @Test
+    void convert_neitherEdgeLimitingNorPlans_noRateLimitPolicyFile() {
+        ApiService svc = basicService("No Limits", "no-limits");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of();
+        svc.applicationPlans = null;
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertFalse(files.containsKey("ratelimitpolicy.yaml"),
+                "Neither source → no RateLimitPolicy file");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService(String name, String systemName) {
@@ -730,6 +814,23 @@ class ConversionServiceTest {
         cfg.put("ips", ips);
         cfg.put("error_msg", "IP not allowed");
         cfg.put("client_ip_sources", List.of("X-Forwarded-For", "X-Real-IP"));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy edgeLimitingPolicy(int count, int windowSeconds) {
+        Policy p = new Policy();
+        p.name = "edge_limiting";
+        p.enabled = true;
+        Map<String, Object> limiter = new HashMap<>();
+        limiter.put("count", count);
+        limiter.put("window", windowSeconds);
+        Map<String, Object> key = new HashMap<>();
+        key.put("name", "service");
+        key.put("scope", "service");
+        limiter.put("key", key);
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("fixed_window_limiters", List.of(limiter));
         p.configuration = cfg;
         return p;
     }

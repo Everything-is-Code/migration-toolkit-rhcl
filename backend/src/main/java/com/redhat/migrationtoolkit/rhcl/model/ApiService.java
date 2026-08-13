@@ -22,6 +22,6 @@ public class ApiService {
 
     /** Applications + keys from Admin API (App ID/App Key auth). */
     public List<Application> applications;
-    /** Application plans + limits (used by RateLimit in PR3; may be stubbed empty in PR2). */
+    /** Application plans + usage limits (RateLimitPolicy global ceiling). */
     public List<ApplicationPlan> applicationPlans;
 }

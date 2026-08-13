@@ -21,6 +21,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -154,7 +155,7 @@ public class ThreeScaleExportService {
                 service.authentication = extractAuthentication(svc);
                 service.backends = fetchBackendsForService(client, service.id, accessToken);
                 service.applications = fetchApplications(client, service.id, accessToken);
-                service.applicationPlans = fetchApplicationPlansStub(client, service.id, accessToken);
+                service.applicationPlans = fetchApplicationPlans(client, service.id, accessToken);
 
                 Map<String, Object> proxyConfig = safeGetProxyConfig(client, service.id, accessToken);
                 if (proxyConfig != null) {
@@ -188,7 +189,7 @@ public class ThreeScaleExportService {
         service.authentication = extractAuthentication(svc);
         service.backends = fetchBackendsForService(client, serviceId, accessToken);
         service.applications = fetchApplications(client, serviceId, accessToken);
-        service.applicationPlans = fetchApplicationPlansStub(client, serviceId, accessToken);
+        service.applicationPlans = fetchApplicationPlans(client, serviceId, accessToken);
 
         return service;
     }
@@ -380,10 +381,10 @@ public class ThreeScaleExportService {
     }
 
     /**
-     * Stub for PR3: fetch application plan metadata (limits completed in PR3).
+     * Fetch application plans and their usage limits from the Admin API.
      */
     @SuppressWarnings("unchecked")
-    List<ApplicationPlan> fetchApplicationPlansStub(ThreeScaleClient client, String serviceId, String accessToken) {
+    List<ApplicationPlan> fetchApplicationPlans(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
             Map<String, Object> resp = client.getApplicationPlans(serviceId, accessToken);
             List<Map<String, Object>> planList = extractList(resp, "plans");
@@ -402,12 +403,60 @@ public class ThreeScaleExportService {
                 plan.id = String.valueOf(planMap.get("id"));
                 plan.name = (String) planMap.get("name");
                 plan.systemName = (String) planMap.get("system_name");
-                plan.limits = Collections.emptyList(); // PR3 fills limits
+                plan.limits = fetchApplicationPlanLimits(client, plan.id, accessToken);
                 plans.add(plan);
             }
             return plans;
         } catch (Exception e) {
             LOG.warnf("Failed to fetch application plans for service %s: %s", serviceId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> fetchApplicationPlanLimits(
+            ThreeScaleClient client, String planId, String accessToken) {
+        try {
+            Map<String, Object> resp = client.getApplicationPlanLimits(planId, accessToken);
+            List<Map<String, Object>> limitList = extractList(resp, "limits");
+            List<Map<String, Object>> limits = new ArrayList<>();
+            for (Map<String, Object> wrapper : limitList) {
+                Map<String, Object> limitMap = wrapper;
+                if (wrapper.get("limit") instanceof Map<?, ?> nested) {
+                    limitMap = (Map<String, Object>) nested;
+                }
+                Map<String, Object> normalized = new LinkedHashMap<>();
+                normalized.put("id", limitMap.get("id") != null ? String.valueOf(limitMap.get("id")) : null);
+                normalized.put("metric_id", limitMap.get("metric_id") != null
+                        ? String.valueOf(limitMap.get("metric_id")) : null);
+                Object metricSystemName = limitMap.get("metric_system_name");
+                if (metricSystemName == null) {
+                    metricSystemName = limitMap.get("metric_name");
+                }
+                if (metricSystemName != null) {
+                    normalized.put("metric_system_name", String.valueOf(metricSystemName));
+                }
+                Object period = limitMap.get("period");
+                if (period != null) {
+                    normalized.put("period", String.valueOf(period));
+                }
+                Object value = limitMap.get("value");
+                if (value instanceof Number n) {
+                    normalized.put("value", n.intValue());
+                } else if (value != null) {
+                    try {
+                        normalized.put("value", Integer.parseInt(String.valueOf(value)));
+                    } catch (NumberFormatException ignored) {
+                        // skip unparsable values
+                    }
+                }
+                if (normalized.containsKey("period") && normalized.containsKey("value")) {
+                    limits.add(normalized);
+                }
+            }
+            return limits;
+        } catch (Exception e) {
+            LOG.warnf("Failed to fetch limits for application plan %s: %s", planId, e.getMessage());
             return Collections.emptyList();
         }
     }
