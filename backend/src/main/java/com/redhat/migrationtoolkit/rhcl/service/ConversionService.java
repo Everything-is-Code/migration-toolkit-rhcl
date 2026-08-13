@@ -801,6 +801,17 @@ spec:
             return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
         }
 
+        // token_introspection → AuthPolicy oauth2Introspection (GateForge #202 / Kuadrant)
+        Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
+        if (tokenIntrospection != null) {
+            String introspectionYaml = generateOauth2IntrospectionAuthPolicy(
+                    name, namespace, tokenIntrospection, buildAuthCacheBlock(findAuthCachingPolicy(service)));
+            if (introspectionYaml != null) {
+                return appendIpCheckOpaIfNeeded(introspectionYaml, service, ipCheckMode);
+            }
+            // Incomplete (no URL): fall through to normal auth; warning emitted via README/secret
+        }
+
         String authCacheBlock = buildAuthCacheBlock(findAuthCachingPolicy(service));
 
         if ("jwt".equals(authType)) {
@@ -1006,6 +1017,83 @@ spec:
                         && "edge_limiting".equalsIgnoreCase(p.name))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private Policy findTokenIntrospectionPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "token_introspection".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Build AuthPolicy with oauth2Introspection when introspection_url is present.
+     * Returns null when required URL is missing (incomplete — caller warns, no full support).
+     */
+    private String generateOauth2IntrospectionAuthPolicy(String name, String namespace,
+                                                          Policy policy, String authCacheBlock) {
+        Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
+        String endpoint = firstNonBlank(
+                cfg.get("introspection_url"),
+                cfg.get("introspectionEndpoint"),
+                cfg.get("endpoint"));
+        if (endpoint == null) {
+            return null;
+        }
+
+        String tokenTypeHint = firstNonBlank(
+                cfg.get("token_type_hint"),
+                cfg.get("tokenTypeHint"));
+        String hintBlock = tokenTypeHint != null
+                ? "          tokenTypeHint: " + tokenTypeHint + "\n"
+                : "";
+
+        String secretName = name + "-oauth2-introspection";
+        return """
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: %s-auth
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/auth-type: "token-introspection"
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: %s-route
+  rules:
+    authentication:
+      oauth2-introspection:
+        oauth2Introspection:
+          endpoint: %s
+%s          credentialsRef:
+            name: %s
+%s        credentials:
+          authorizationHeader:
+            prefix: Bearer
+""".formatted(name, namespace, name, name, endpoint, hintBlock, secretName, authCacheBlock);
+    }
+
+    private static String firstNonBlank(Object... values) {
+        for (Object value : values) {
+            if (value == null) {
+                continue;
+            }
+            String s = String.valueOf(value).trim();
+            if (!s.isEmpty() && !"null".equalsIgnoreCase(s)) {
+                return s;
+            }
+        }
+        return null;
     }
 
     /**
@@ -1649,6 +1737,11 @@ stringData:
 %s""".formatted(name, namespace, name, stringData);
         }
 
+        Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
+        if (tokenIntrospection != null) {
+            return generateTokenIntrospectionSecret(name, namespace, tokenIntrospection);
+        }
+
         if ("appIdKey".equals(authType)) {
             return generateAppIdKeySecret(name, namespace, service);
         }
@@ -1684,6 +1777,49 @@ stringData:
   client-id: "REPLACE_ME"
   client-secret: "REPLACE_ME"
 """.formatted(name, namespace, name);
+    }
+
+    /**
+     * Secret for Authorino oauth2Introspection credentialsRef (clientID / clientSecret).
+     * Incomplete policy (no introspection_url) emits a WARNING and does not claim full support.
+     */
+    private String generateTokenIntrospectionSecret(String name, String namespace, Policy policy) {
+        Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
+        String endpoint = firstNonBlank(
+                cfg.get("introspection_url"),
+                cfg.get("introspectionEndpoint"),
+                cfg.get("endpoint"));
+        String clientId = firstNonBlank(cfg.get("client_id"), cfg.get("clientID"));
+        String clientSecret = firstNonBlank(cfg.get("client_secret"), cfg.get("clientSecret"));
+
+        String warning = "";
+        if (endpoint == null) {
+            warning = "# WARNING: token_introspection missing introspection_url — "
+                    + "incomplete; not claiming full oauth2Introspection support\n";
+            LOG.warnf("token_introspection policy incomplete: missing introspection_url");
+        } else if (clientId == null || clientSecret == null) {
+            warning = "# WARNING: token_introspection credentials incomplete — "
+                    + "fill clientID/clientSecret before apply\n";
+        }
+
+        String idValue = clientId != null ? clientId : "REPLACE_ME";
+        String secretValue = clientSecret != null ? clientSecret : "REPLACE_ME";
+
+        return """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s-oauth2-introspection
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+    auth-type: oauth2-introspection
+type: Opaque
+%sstringData:
+  clientID: "%s"
+  clientSecret: "%s"
+""".formatted(name, namespace, name, warning, idValue, secretValue);
     }
 
     /**
@@ -1887,6 +2023,35 @@ ServiceEntry, DestinationRule, and URLRewrite filters are not needed and have no
                     + "| destinationrule.yaml | TLS origination to external host |"
                     : "");
 
+        Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
+        String tokenIntrospectionNotes = "";
+        if (tokenIntrospection != null) {
+            Map<String, Object> cfg = tokenIntrospection.configuration != null
+                    ? tokenIntrospection.configuration : Map.of();
+            String endpoint = firstNonBlank(
+                    cfg.get("introspection_url"),
+                    cfg.get("introspectionEndpoint"),
+                    cfg.get("endpoint"));
+            if (endpoint == null) {
+                tokenIntrospectionNotes = """
+
+## WARNING: Incomplete token_introspection
+
+The 3scale `token_introspection` policy is present but missing `introspection_url`.
+AuthPolicy oauth2Introspection was **not** fully generated — do not claim full support until the
+introspection endpoint and client credentials are configured.
+""";
+            } else {
+                tokenIntrospectionNotes = """
+
+## OAuth 2.0 Token Introspection
+
+`policy.yaml` uses AuthPolicy `oauth2Introspection` (endpoint + credentialsRef).
+Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before apply.
+""".formatted(name);
+            }
+        }
+
         return """
 # %s - Connectivity Link Migration
 
@@ -1907,7 +2072,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 | secret.yaml | Credentials (replace values before applying) |
 | configmap.yaml | Configuration data |
 %s
-
+%s
 ## Prerequisites
 - OpenShift with Connectivity Link (Kuadrant) operator
 - Gateway API CRDs
@@ -1934,6 +2099,7 @@ kubectl get httproute %s-route -n %s
             backendType == BackendType.EXTERNAL ? "External HTTPS" : "Internal OpenShift Service",
             backendSection,
             fileList,
+            tokenIntrospectionNotes,
             namespace, name, namespace, name, namespace
         );
     }

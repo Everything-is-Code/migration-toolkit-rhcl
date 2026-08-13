@@ -759,6 +759,106 @@ class ConversionServiceTest {
                 "Neither source → no RateLimitPolicy file");
     }
 
+    // ── token_introspection → AuthPolicy oauth2Introspection (PR4) ────────────
+
+    @Test
+    void convert_tokenIntrospection_withUrl_emitsOauth2Introspection() {
+        ApiService svc = basicService("Introspect API", "introspect-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(tokenIntrospectionPolicy(
+                "https://sso.example.com/token/introspect",
+                "access_token",
+                "my-client",
+                "my-secret"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("AuthPolicy"));
+        assertTrue(policy.contains("oauth2Introspection"),
+                "token_introspection with URL must emit oauth2Introspection");
+        assertTrue(policy.contains("https://sso.example.com/token/introspect")
+                        || policy.contains("introspectionEndpoint")
+                        || policy.contains("endpoint:"),
+                "Must map introspection URL into AuthPolicy");
+        assertTrue(policy.contains("tokenTypeHint") || policy.contains("access_token"),
+                "Must map tokenTypeHint when present");
+        assertTrue(policy.contains("credentialsRef") || policy.contains("client"),
+                "Must reference credentials from policy config / Secret");
+    }
+
+    @Test
+    void convert_tokenIntrospection_incomplete_warnsWithoutFullSupport() {
+        ApiService svc = basicService("Incomplete Introspect", "incomplete-introspect");
+        svc.authentication = auth("jwt");
+        Policy incomplete = new Policy();
+        incomplete.name = "token_introspection";
+        incomplete.enabled = true;
+        incomplete.configuration = new HashMap<>();
+        incomplete.configuration.put("auth_type", "client_id+client_secret");
+        // missing introspection_url
+        svc.policies = List.of(incomplete);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        String readme = files.get("README.md");
+        assertFalse(policy != null && policy.contains("oauth2Introspection"),
+                "Incomplete token_introspection must NOT emit full oauth2Introspection");
+        assertTrue((readme != null && readme.toLowerCase().contains("warn"))
+                        || (policy != null && policy.contains("WARNING"))
+                        || (files.get("secret.yaml") != null
+                        && files.get("secret.yaml").contains("WARNING")),
+                "Incomplete config must warn and not claim full support");
+    }
+
+    @Test
+    void convert_tokenIntrospection_mapsCredentialsIntoSecret() {
+        ApiService svc = basicService("Creds Introspect", "creds-introspect");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(tokenIntrospectionPolicy(
+                "https://idp.example.com/introspect",
+                null,
+                "real-client-id",
+                "real-client-secret"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        String secret = files.get("secret.yaml");
+        assertTrue(policy.contains("oauth2Introspection"));
+        assertTrue(secret.contains("real-client-id"), "Secret must hold real client id");
+        assertTrue(secret.contains("real-client-secret"), "Secret must hold real client secret");
+        assertTrue(policy.contains("credentialsRef") || policy.contains("creds-introspect"),
+                "AuthPolicy must reference the credentials Secret");
+    }
+
+    @Test
+    void convert_packageGrows_corsIpCheckEdgeLimiting_keepsPriorKinds() {
+        // Cross-PR gate 5.1: new kinds appear without dropping existing package files
+        ApiService svc = basicService("Combo API", "combo-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(
+                corsPolicy(List.of("https://a.example"), List.of("GET"), List.of("X-Req"), false, 600),
+                ipCheckPolicy("whitelist", List.of("10.0.0.0/8")),
+                edgeLimitingPolicy(10, 60));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("gateway.yaml"));
+        assertTrue(files.containsKey("httproute.yaml"));
+        assertTrue(files.containsKey("policy.yaml"));
+        assertTrue(files.containsKey("secret.yaml"));
+        assertTrue(files.containsKey("configmap.yaml"));
+        assertTrue(files.containsKey("apiproduct.yaml"));
+        assertTrue(files.containsKey("README.md"));
+        assertTrue(files.get("httproute.yaml").contains("CORS")
+                        || files.get("httproute.yaml").contains("cors")
+                        || files.get("httproute.yaml").contains("allowOrigins"),
+                "CORS conversion must still be present");
+        assertTrue(files.containsKey("authorizationpolicy.yaml"),
+                "ip_check AuthzPolicy must still be present");
+        assertTrue(files.containsKey("ratelimitpolicy.yaml"),
+                "edge_limiting RateLimitPolicy must still be present");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService(String name, String systemName) {
@@ -831,6 +931,29 @@ class ConversionServiceTest {
         limiter.put("key", key);
         Map<String, Object> cfg = new HashMap<>();
         cfg.put("fixed_window_limiters", List.of(limiter));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy tokenIntrospectionPolicy(String url, String tokenTypeHint,
+                                            String clientId, String clientSecret) {
+        Policy p = new Policy();
+        p.name = "token_introspection";
+        p.enabled = true;
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("auth_type", "client_id+client_secret");
+        if (url != null) {
+            cfg.put("introspection_url", url);
+        }
+        if (tokenTypeHint != null) {
+            cfg.put("token_type_hint", tokenTypeHint);
+        }
+        if (clientId != null) {
+            cfg.put("client_id", clientId);
+        }
+        if (clientSecret != null) {
+            cfg.put("client_secret", clientSecret);
+        }
         p.configuration = cfg;
         return p;
     }
