@@ -1,5 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
@@ -15,15 +16,18 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
@@ -81,7 +85,7 @@ class ConversionControllerTest {
 
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
         when(compatibilityService.check(any(), any())).thenReturn(compat);
-        when(conversionService.convert(any(), anyString(), isNull())).thenReturn(
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class))).thenReturn(
                 Map.of("gateway.yaml", "kind: Gateway", "httproute.yaml", "kind: HTTPRoute"));
 
         given()
@@ -111,7 +115,7 @@ class ConversionControllerTest {
         when(exportService.exportService(anyString(), anyString(), anyString()))
                 .thenReturn(svc1).thenReturn(svc2);
         when(compatibilityService.check(any(), any())).thenReturn(compat);
-        when(conversionService.convert(any(), anyString(), isNull()))
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 
         given()
@@ -135,7 +139,7 @@ class ConversionControllerTest {
         ApiService svc = buildService("svc-1", "My API", "jwt");
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
         when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 70, "MEDIUM"));
-        when(conversionService.convert(any(), anyString(), isNull()))
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 
         given()
@@ -179,7 +183,7 @@ class ConversionControllerTest {
         ApiService svc = buildService("svc-1", "API One", "jwt");
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
         when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 80, "HIGH"));
-        when(conversionService.convert(any(), anyString(), anyString()))
+        when(conversionService.convert(any(), anyString(), anyString(), any(ConversionOptions.class)))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 
         given()
@@ -205,7 +209,7 @@ class ConversionControllerTest {
         svc.systemName = "My Great API";
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
         when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 85, "HIGH"));
-        when(conversionService.convert(any(), anyString(), isNull()))
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
 
         given()
@@ -222,6 +226,61 @@ class ConversionControllerTest {
                 .then()
                 .statusCode(200)
                 .body("results[0].packageName", equalTo("my-great-api"));
+    }
+
+    @Test
+    void convert_ipCheckMode_passedToConversionOptions() {
+        ApiService svc = buildService("svc-1", "IP API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok",
+                          "ipCheckMode": "authPolicyOpa"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals("authPolicyOpa", optsCaptor.getValue().ipCheckMode);
+    }
+
+    @Test
+    void convert_ipCheckMode_defaultsToAuthorizationPolicy() {
+        ApiService svc = buildService("svc-1", "IP API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any())).thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals("authorizationPolicy", optsCaptor.getValue().ipCheckMode);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

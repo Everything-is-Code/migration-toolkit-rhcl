@@ -74,6 +74,12 @@ export interface ConversionRequest {
   tenant?: string;
   namespace: string;
   serviceIds: string[];
+  externalBackendUrl?: string;
+  supportedPolicies?: string[];
+  loggingTarget?: 'gateway' | 'workload';
+  anonymousTarget?: 'httproute' | 'gateway';
+  includeMigratedFromLabel?: boolean;
+  ipCheckMode?: 'authorizationPolicy' | 'authPolicyOpa';
 }
 
 export interface ConversionResultItem {

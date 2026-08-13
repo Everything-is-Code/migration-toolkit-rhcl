@@ -19,4 +19,9 @@ public class ConversionRequest {
     public String anonymousTarget;
     /** 生成リソースに "migrated-from: 3scale" ラベルを付与するかどうか（デフォルト: true）。 */
     public Boolean includeMigratedFromLabel;
+    /**
+     * ip_check emit target: "authorizationPolicy" (default) or "authPolicyOpa".
+     * Convert-time preference — same pattern as anonymousTarget.
+     */
+    public String ipCheckMode;
 }

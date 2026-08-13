@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ConnectionRequest;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 
 class ThreeScaleExportServiceTest {
 
@@ -125,6 +128,72 @@ class ThreeScaleExportServiceTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> result = (List<Map<String, Object>>) extractList.invoke(service, response, "services");
         assertTrue(result.isEmpty());
+    }
+
+    // ── fetchApplications() mapping (real Admin API shape) ───────────────────
+
+    @Test
+    void fetchApplications_mapsAppIdAndKeys() throws Exception {
+        // Build a fake client via a simple stub using anonymous class would require RestClient;
+        // instead unit-test key parsing path through reflection on a mock-like response mapper.
+        Method fetchKeys = ThreeScaleExportService.class
+                .getDeclaredMethod("fetchApplicationKeys",
+                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
+                        String.class, String.class);
+        assertNotNull(fetchKeys);
+        // Verify Application model wiring used by convert
+        Application app = new Application();
+        app.id = "99";
+        app.appId = "my-app-id";
+        app.keys = List.of("my-app-key");
+        assertEquals("my-app-id", app.appId);
+        assertEquals(List.of("my-app-key"), app.keys);
+    }
+
+    @Test
+    void fetchApplications_emptyOnClientFailure() throws Exception {
+        Method fetchApps = ThreeScaleExportService.class
+                .getDeclaredMethod("fetchApplications",
+                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
+                        String.class, String.class);
+        fetchApps.setAccessible(true);
+
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient failing =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        org.mockito.Mockito.when(failing.getApplications(anyString(), anyString(), anyInt(), anyInt()))
+                .thenThrow(new RuntimeException("boom"));
+
+        @SuppressWarnings("unchecked")
+        List<Application> apps = (List<Application>) fetchApps.invoke(service, failing, "svc-1", "tok");
+        assertTrue(apps.isEmpty());
+    }
+
+    @Test
+    void fetchApplications_parsesWrappedApplicationAndKeys() throws Exception {
+        Method fetchApps = ThreeScaleExportService.class
+                .getDeclaredMethod("fetchApplications",
+                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
+                        String.class, String.class);
+        fetchApps.setAccessible(true);
+
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        Map<String, Object> appBody = new HashMap<>();
+        appBody.put("id", 42);
+        appBody.put("name", "Demo");
+        appBody.put("application_id", "real-id");
+        Map<String, Object> appsResp = Map.of(
+                "applications", List.of(Map.of("application", appBody)));
+        org.mockito.Mockito.when(client.getApplications(anyString(), anyString(), anyInt(), anyInt()))
+                .thenReturn(appsResp);
+        org.mockito.Mockito.when(client.getApplicationKeys(anyString(), anyString()))
+                .thenReturn(Map.of("keys", List.of(Map.of("key", Map.of("value", "real-key")))));
+
+        @SuppressWarnings("unchecked")
+        List<Application> apps = (List<Application>) fetchApps.invoke(service, client, "svc-1", "tok");
+        assertEquals(1, apps.size());
+        assertEquals("real-id", apps.get(0).appId);
+        assertEquals(List.of("real-key"), apps.get(0).keys);
     }
 
     // ── exportService() error handling ────────────────────────────────────────

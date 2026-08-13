@@ -3,6 +3,8 @@ package com.redhat.migrationtoolkit.rhcl.service;
 import com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient;
 import com.redhat.migrationtoolkit.rhcl.dto.ConnectionRequest;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.model.Application;
+import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
@@ -151,6 +153,8 @@ public class ThreeScaleExportService {
                 service.metrics = fetchMetrics(client, service.id, accessToken);
                 service.authentication = extractAuthentication(svc);
                 service.backends = fetchBackendsForService(client, service.id, accessToken);
+                service.applications = fetchApplications(client, service.id, accessToken);
+                service.applicationPlans = fetchApplicationPlansStub(client, service.id, accessToken);
 
                 Map<String, Object> proxyConfig = safeGetProxyConfig(client, service.id, accessToken);
                 if (proxyConfig != null) {
@@ -183,6 +187,8 @@ public class ThreeScaleExportService {
         service.metrics = fetchMetrics(client, serviceId, accessToken);
         service.authentication = extractAuthentication(svc);
         service.backends = fetchBackendsForService(client, serviceId, accessToken);
+        service.applications = fetchApplications(client, serviceId, accessToken);
+        service.applicationPlans = fetchApplicationPlansStub(client, serviceId, accessToken);
 
         return service;
     }
@@ -305,6 +311,105 @@ public class ThreeScaleExportService {
             auth.type = "none";
         }
         return auth;
+    }
+
+    /**
+     * Fetch applications for a service and their application keys from the Admin API.
+     * Real credentials only — never invent keys.
+     */
+    @SuppressWarnings("unchecked")
+    List<Application> fetchApplications(ThreeScaleClient client, String serviceId, String accessToken) {
+        try {
+            Map<String, Object> resp = client.getApplications(serviceId, accessToken, 1, 500);
+            List<Map<String, Object>> appList = extractList(resp, "applications");
+            if (appList.isEmpty()) {
+                // Some tenants wrap differently or return empty — also try top-level list patterns
+                Object raw = resp.get("applications");
+                if (raw == null && resp.containsKey("application")) {
+                    appList = List.of(resp);
+                }
+            }
+            List<Application> applications = new ArrayList<>();
+            for (Map<String, Object> wrapper : appList) {
+                Map<String, Object> appMap = wrapper;
+                if (wrapper.get("application") instanceof Map<?, ?> nested) {
+                    appMap = (Map<String, Object>) nested;
+                }
+                Application app = new Application();
+                app.id = String.valueOf(appMap.get("id"));
+                app.name = (String) appMap.get("name");
+                Object applicationId = appMap.get("application_id");
+                if (applicationId == null) {
+                    applicationId = appMap.get("user_key");
+                }
+                app.appId = applicationId != null ? String.valueOf(applicationId) : null;
+                app.keys = fetchApplicationKeys(client, app.id, accessToken);
+                applications.add(app);
+            }
+            return applications;
+        } catch (Exception e) {
+            LOG.warnf("Failed to fetch applications for service %s: %s", serviceId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> fetchApplicationKeys(ThreeScaleClient client, String applicationId, String accessToken) {
+        try {
+            Map<String, Object> resp = client.getApplicationKeys(applicationId, accessToken);
+            List<Map<String, Object>> keyList = extractList(resp, "keys");
+            List<String> keys = new ArrayList<>();
+            for (Map<String, Object> wrapper : keyList) {
+                Map<String, Object> keyMap = wrapper;
+                if (wrapper.get("key") instanceof Map<?, ?> nested) {
+                    keyMap = (Map<String, Object>) nested;
+                }
+                Object value = keyMap.get("value");
+                if (value == null) {
+                    value = keyMap.get("key");
+                }
+                if (value != null && !String.valueOf(value).isBlank()) {
+                    keys.add(String.valueOf(value));
+                }
+            }
+            return keys;
+        } catch (Exception e) {
+            LOG.warnf("Failed to fetch keys for application %s: %s", applicationId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Stub for PR3: fetch application plan metadata (limits completed in PR3).
+     */
+    @SuppressWarnings("unchecked")
+    List<ApplicationPlan> fetchApplicationPlansStub(ThreeScaleClient client, String serviceId, String accessToken) {
+        try {
+            Map<String, Object> resp = client.getApplicationPlans(serviceId, accessToken);
+            List<Map<String, Object>> planList = extractList(resp, "plans");
+            if (planList.isEmpty()) {
+                planList = extractList(resp, "application_plans");
+            }
+            List<ApplicationPlan> plans = new ArrayList<>();
+            for (Map<String, Object> wrapper : planList) {
+                Map<String, Object> planMap = wrapper;
+                if (wrapper.get("application_plan") instanceof Map<?, ?> nested) {
+                    planMap = (Map<String, Object>) nested;
+                } else if (wrapper.get("plan") instanceof Map<?, ?> nested) {
+                    planMap = (Map<String, Object>) nested;
+                }
+                ApplicationPlan plan = new ApplicationPlan();
+                plan.id = String.valueOf(planMap.get("id"));
+                plan.name = (String) planMap.get("name");
+                plan.systemName = (String) planMap.get("system_name");
+                plan.limits = Collections.emptyList(); // PR3 fills limits
+                plans.add(plan);
+            }
+            return plans;
+        } catch (Exception e) {
+            LOG.warnf("Failed to fetch application plans for service %s: %s", serviceId, e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     private Map<String, Object> safeGetProxyConfig(ThreeScaleClient client, String serviceId, String accessToken) {
