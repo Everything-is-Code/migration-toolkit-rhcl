@@ -217,6 +217,42 @@ class CompatibilityServiceTest {
                 && "Edge Limiting".equals(i.name)));
     }
 
+    /**
+     * After PR4 converters land, DEFAULT_SUPPORTED includes OAuth 2.0 Token Introspection.
+     */
+    @Test
+    void check_pr4DefaultSupportedPolicies_tokenIntrospectionSupported() {
+        Set<String> pr4Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("token_introspection"));
+        CompatibilityResult result = service.check(svc, pr4Defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "OAuth 2.0 Token Introspection".equals(i.name)));
+    }
+
+    @Test
+    void check_tokenIntrospection_withoutSupportedList_warns() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("token_introspection"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "OAuth 2.0 Token Introspection".equals(i.name)));
+    }
+
     @Test
     void check_customSupportedListWithoutCors_stillWarns() {
         // User override / saved custom list without CORS must keep WARNING until reset.
