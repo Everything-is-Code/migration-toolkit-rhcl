@@ -20,7 +20,7 @@ import {
 import { CheckCircleIcon, ExclamationTriangleIcon, TimesCircleIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { servicesApi } from '../api/client';
-import { CompatibilityResult, CompatibilityItem } from '../api/types';
+import { CompatibilityResult } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { loadSupportedPolicies } from './SupportedPoliciesPage';
@@ -45,7 +45,7 @@ const ScoreColor = (score: number): ProgressVariant => {
   return ProgressVariant.danger;
 };
 
-const CompatibilityPage: React.FC<Props> = ({ appState, setAppState }) => {
+const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppState }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [results, setResults] = useState<CompatibilityResult[]>([]);

@@ -112,8 +112,8 @@ const ValidationPage: React.FC<Props> = ({ appState }) => {
                 <CardTitle>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     {result.valid
-                      ? <CheckCircleIcon color="#3e8635" size="md" />
-                      : <TimesCircleIcon color="#c9190b" size="md" />}
+                      ? <CheckCircleIcon color="#3e8635" />
+                      : <TimesCircleIcon color="#c9190b" />}
                     <Title headingLevel="h3" size="lg">{service}</Title>
                     <Label color={result.valid ? 'green' : 'red'}>
                       {result.valid ? 'VALID' : 'INVALID'}

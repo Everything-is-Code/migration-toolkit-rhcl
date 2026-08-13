@@ -176,7 +176,7 @@ const RedHatLogo: React.FC = () => (
 /* ── サイドバー用 Red Hat ロゴ ──
    公式ブランド「赤背景用ロゴ (Logo A reverse)」の白ハット + ワードマークを
    透過背景で使用。背景はメニューと同じ濃いグレー (#212427) に統一。 */
-const SidebarRedHatBrand: React.FC = () => (
+const _SidebarRedHatBrand: React.FC = () => (
   <div style={{
     background: '#212427',
     padding: '20px 20px 16px',

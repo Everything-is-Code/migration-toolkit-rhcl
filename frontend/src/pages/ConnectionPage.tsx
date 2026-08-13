@@ -7,6 +7,9 @@ import {
   CardBody,
   Form,
   FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   TextInput,
   InputGroup,
   InputGroupItem,
@@ -145,8 +148,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               />
             )}
             <Form>
-              <FormGroup label="3scale URL" isRequired fieldId="url"
-                helperText={domainError || t('connection.urlHelper')}>
+              <FormGroup label="3scale URL" isRequired fieldId="url">
                 <InputGroup>
                   <InputGroupItem isFill>
                     <TextInput
@@ -169,25 +171,16 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     </Button>
                   </InputGroupItem>
                 </InputGroup>
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>{domainError || t('connection.urlHelper')}</HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
               </FormGroup>
               <FormGroup
                 label={t('connection.labelToken')}
                 isRequired
                 fieldId="token"
-                helperText={
-                  <span>
-                    {t('connection.tokenHelper')}
-                    {' — '}
-                    <a
-                      href="https://3scale-admin.apps.cluster-ghj25.ghj25.sandbox5408.opentlc.com/p/admin/user/access_tokens"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: '#0066cc' }}
-                    >
-                      {t('connection.openTokenPage')}
-                    </a>
-                  </span>
-                }
               >
                 <InputGroup>
                   <InputGroupItem isFill>
@@ -211,18 +204,39 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     </Button>
                   </InputGroupItem>
                 </InputGroup>
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>
+                      <span>
+                        {t('connection.tokenHelper')}
+                        {' — '}
+                        <a
+                          href="https://3scale-admin.apps.cluster-ghj25.ghj25.sandbox5408.opentlc.com/p/admin/user/access_tokens"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: '#0066cc' }}
+                        >
+                          {t('connection.openTokenPage')}
+                        </a>
+                      </span>
+                    </HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
               </FormGroup>
-              <FormGroup label={t('connection.labelTenant')} fieldId="tenant"
-                helperText={t('connection.tenantHelper')}>
+              <FormGroup label={t('connection.labelTenant')} fieldId="tenant">
                 <TextInput
                   id="tenant"
                   value={tenant}
                   onChange={(_e, val) => setTenant(val)}
                   placeholder={t('connection.tenantPlaceholder')}
                 />
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>{t('connection.tenantHelper')}</HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
               </FormGroup>
-              <FormGroup label={t('connection.labelNamespace')} isRequired fieldId="namespace"
-                helperText={t('connection.namespaceHelper')}>
+              <FormGroup label={t('connection.labelNamespace')} isRequired fieldId="namespace">
                 <TextInput
                   id="namespace"
                   value={namespace}
@@ -230,6 +244,11 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   placeholder="default"
                   isRequired
                 />
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>{t('connection.namespaceHelper')}</HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
               </FormGroup>
               <ActionGroup>
                 <Button

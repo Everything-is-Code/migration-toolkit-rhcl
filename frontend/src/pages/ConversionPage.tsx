@@ -21,6 +21,9 @@ import {
   Checkbox,
   TextInput,
   FormGroup,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   Form,
   Radio,
 } from '@patternfly/react-core';
@@ -154,7 +157,6 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                           label={t('conversion.externalBackendUrl', '外部バックエンド URL')}
                           fieldId="external-backend-url"
                           isRequired
-                          helperText={t('conversion.externalBackendUrlHelp', '例: https://foo.ecs.us-east-2.on.aws')}
                         >
                           <TextInput
                             id="external-backend-url"
@@ -163,6 +165,13 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                             onChange={(_e, val) => setExternalBackendUrl(val)}
                             placeholder="https://your-service.ecs.us-east-2.on.aws"
                           />
+                          <FormHelperText>
+                            <HelperText>
+                              <HelperTextItem>
+                                {t('conversion.externalBackendUrlHelp', '例: https://foo.ecs.us-east-2.on.aws')}
+                              </HelperTextItem>
+                            </HelperText>
+                          </FormHelperText>
                         </FormGroup>
                         <div style={{
                           marginTop: '12px',
