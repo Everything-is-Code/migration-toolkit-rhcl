@@ -78,4 +78,9 @@ public interface ThreeScaleClient {
     @Path("/admin/api/services/{serviceId}/application_plans.json")
     Map<String, Object> getApplicationPlans(@PathParam("serviceId") String serviceId,
                                              @QueryParam("access_token") String accessToken);
+
+    @GET
+    @Path("/admin/api/application_plans/{planId}/limits.json")
+    Map<String, Object> getApplicationPlanLimits(@PathParam("planId") String planId,
+                                                  @QueryParam("access_token") String accessToken);
 }

@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 import com.redhat.migrationtoolkit.rhcl.dto.ConnectionRequest;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
+import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -194,6 +195,98 @@ class ThreeScaleExportServiceTest {
         assertEquals(1, apps.size());
         assertEquals("real-id", apps.get(0).appId);
         assertEquals(List.of("real-key"), apps.get(0).keys);
+    }
+
+    // ── fetchApplicationPlans() + limits (PR3) ────────────────────────────────
+
+    @Test
+    void fetchApplicationPlans_mapsPlansAndLimits() throws Exception {
+        Method fetchPlans = ThreeScaleExportService.class
+                .getDeclaredMethod("fetchApplicationPlans",
+                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
+                        String.class, String.class);
+        fetchPlans.setAccessible(true);
+
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        Map<String, Object> planBody = new HashMap<>();
+        planBody.put("id", 7);
+        planBody.put("name", "Basic");
+        planBody.put("system_name", "basic");
+        Map<String, Object> plansResp = Map.of(
+                "plans", List.of(Map.of("application_plan", planBody)));
+        org.mockito.Mockito.when(client.getApplicationPlans(anyString(), anyString()))
+                .thenReturn(plansResp);
+
+        Map<String, Object> limitBody = new HashMap<>();
+        limitBody.put("id", 1);
+        limitBody.put("metric_id", 10);
+        limitBody.put("metric_system_name", "hits");
+        limitBody.put("period", "minute");
+        limitBody.put("value", 120);
+        Map<String, Object> limitsResp = Map.of(
+                "limits", List.of(Map.of("limit", limitBody)));
+        org.mockito.Mockito.when(client.getApplicationPlanLimits(anyString(), anyString()))
+                .thenReturn(limitsResp);
+
+        @SuppressWarnings("unchecked")
+        List<ApplicationPlan> plans =
+                (List<ApplicationPlan>) fetchPlans.invoke(service, client, "svc-1", "tok");
+        assertEquals(1, plans.size());
+        assertEquals("7", plans.get(0).id);
+        assertEquals("Basic", plans.get(0).name);
+        assertEquals("basic", plans.get(0).systemName);
+        assertNotNull(plans.get(0).limits);
+        assertFalse(plans.get(0).limits.isEmpty(), "PR3 must populate plan limits from Admin API");
+        Map<String, Object> firstLimit = plans.get(0).limits.get(0);
+        assertEquals("minute", firstLimit.get("period"));
+        assertEquals(120, ((Number) firstLimit.get("value")).intValue());
+    }
+
+    @Test
+    void fetchApplicationPlans_emptyOnClientFailure() throws Exception {
+        Method fetchPlans = ThreeScaleExportService.class
+                .getDeclaredMethod("fetchApplicationPlans",
+                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
+                        String.class, String.class);
+        fetchPlans.setAccessible(true);
+
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient failing =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        org.mockito.Mockito.when(failing.getApplicationPlans(anyString(), anyString()))
+                .thenThrow(new RuntimeException("boom"));
+
+        @SuppressWarnings("unchecked")
+        List<ApplicationPlan> plans =
+                (List<ApplicationPlan>) fetchPlans.invoke(service, failing, "svc-1", "tok");
+        assertTrue(plans.isEmpty());
+    }
+
+    @Test
+    void fetchApplicationPlans_limitsFetchFailure_stillReturnsPlanWithEmptyLimits() throws Exception {
+        Method fetchPlans = ThreeScaleExportService.class
+                .getDeclaredMethod("fetchApplicationPlans",
+                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
+                        String.class, String.class);
+        fetchPlans.setAccessible(true);
+
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        Map<String, Object> planBody = Map.of("id", 3, "name", "Gold", "system_name", "gold");
+        org.mockito.Mockito.when(client.getApplicationPlans(anyString(), anyString()))
+                .thenReturn(Map.of("application_plans", List.of(Map.of("plan", planBody))));
+        org.mockito.Mockito.when(client.getApplicationPlanLimits(anyString(), anyString()))
+                .thenThrow(new RuntimeException("limits boom"));
+
+        @SuppressWarnings("unchecked")
+        List<ApplicationPlan> plans =
+                (List<ApplicationPlan>) fetchPlans.invoke(service, client, "svc-1", "tok");
+        assertEquals(1, plans.size());
+        assertEquals("gold", plans.get(0).systemName);
+        assertNotNull(plans.get(0).limits);
+        assertTrue(plans.get(0).limits.isEmpty(),
+                "Failed limits fetch must leave empty limits, not invent values");
     }
 
     // ── exportService() error handling ────────────────────────────────────────
