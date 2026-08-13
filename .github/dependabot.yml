@@ -1,0 +1,62 @@
+version: 2
+updates:
+  - package-ecosystem: "maven"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "pcastelo"
+      - "fmenesesg"
+    labels:
+      - "dependencies"
+      - "backend"
+
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "pcastelo"
+      - "fmenesesg"
+    labels:
+      - "dependencies"
+      - "frontend"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "pcastelo"
+      - "fmenesesg"
+    labels:
+      - "dependencies"
+      - "devops"
+
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "monthly"
+    reviewers:
+      - "pcastelo"
+      - "fmenesesg"
+    labels:
+      - "dependencies"
+      - "devops"
+
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+    reviewers:
+      - "pcastelo"
+      - "fmenesesg"
+    labels:
+      - "dependencies"
+      - "devops"
