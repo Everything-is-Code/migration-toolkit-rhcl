@@ -723,6 +723,89 @@ class ConversionServiceTest {
     }
 
     @Test
+    void convert_ipCheck_authPolicyOpaMode_usesSourceAddressNotXff() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("input.attributes.source.address"),
+                "OPA Rego must use Envoy source.address (non-spoofable)");
+        assertFalse(policy.contains("x-forwarded-for"),
+                "OPA Rego must not use spoofable X-Forwarded-For header");
+        assertFalse(policy.contains("X-Forwarded-For"));
+    }
+
+    @Test
+    void convert_ipCheck_authPolicyOpaMode_blacklistAlsoUsesSourceAddress() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("blacklist", List.of("10.0.0.1")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("input.attributes.source.address"));
+        assertFalse(policy.contains("x-forwarded-for"));
+        assertTrue(policy.contains("denied") || policy.contains("not denied"),
+                "blacklist path must still emit deny Rego");
+    }
+
+    @Test
+    void convert_ipCheck_blankCidrSkipped_authzKeepsValidEntry() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("", "  ", "203.0.113.10")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authorizationPolicy";
+        String authz = service.convert(svc, "ns", null, opts).get("authorizationpolicy.yaml");
+
+        assertNotNull(authz);
+        assertTrue(authz.contains("203.0.113.10") || authz.contains("203.0.113.10/32"));
+        // Blank entries must not collapse to allow-all while a valid CIDR exists
+        assertFalse(authz.contains("0.0.0.0/0"),
+                "blank CIDRs must be skipped; must not emit 0.0.0.0/0 alongside valid IPs");
+    }
+
+    @Test
+    void convert_ipCheck_blankCidrSkipped_opaKeepsValidEntry() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("", "192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("192.0.2.1"));
+        assertFalse(policy.contains("0.0.0.0/0"),
+                "blank CIDR must not become allow-all in OPA cidrs list");
+    }
+
+    @Test
+    void convert_ipCheck_allBlankCidrs_authzAllowAllOnlyWhenEmpty() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("", "   ")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authorizationPolicy";
+        String authz = service.convert(svc, "ns", null, opts).get("authorizationpolicy.yaml");
+
+        assertNotNull(authz);
+        assertTrue(authz.contains("0.0.0.0/0"),
+                "empty-after-filter AuthorizationPolicy keeps intentional allow-all");
+    }
+
+    @Test
     void convert_noIpCheck_noAuthorizationPolicyFile() {
         ApiService svc = basicService("No IP", "no-ip");
         svc.authentication = auth("jwt");
@@ -733,6 +816,39 @@ class ConversionServiceTest {
     }
 
     // ── App ID/App Key AuthPolicy + real Secret (PR2) ─────────────────────────
+
+    @Test
+    void convert_apiKeyAuth_secretSelectorIsNamespaceScoped() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("apiKey");
+        String policy = service.convert(svc, "ns").get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("api-key-auth") || policy.contains("apiKey"));
+        assertFalse(policy.contains("allNamespaces"),
+                "apiKey AuthPolicy Secret selector must be namespace-scoped");
+        assertTrue(policy.contains("selector:") && policy.contains("matchLabels:"),
+                "apiKey AuthPolicy must retain label selector");
+    }
+
+    @Test
+    void convert_appIdKey_secretSelectorIsNamespaceScoped() {
+        ApiService svc = basicService("App ID API", "app-id-api");
+        svc.authentication = auth("appIdKey");
+        Application app = new Application();
+        app.id = "42";
+        app.appId = "real-app-id-abc";
+        app.keys = List.of("real-app-key-xyz");
+        svc.applications = List.of(app);
+
+        String policy = service.convert(svc, "ns").get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("app-id-key") || policy.contains("app-id-key-auth"));
+        assertFalse(policy.contains("allNamespaces"),
+                "appIdKey AuthPolicy Secret selector must be namespace-scoped");
+        assertTrue(policy.contains("selector:") && policy.contains("matchLabels:"));
+    }
 
     @Test
     void convert_appIdKey_withRealCredentials_emitsAuthPolicyAndSecret() {

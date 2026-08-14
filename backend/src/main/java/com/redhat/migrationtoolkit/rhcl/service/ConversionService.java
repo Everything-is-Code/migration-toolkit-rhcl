@@ -917,7 +917,6 @@ spec:
     authentication:
       api-key-auth:
         apiKey:
-          allNamespaces: true
           selector:
             matchLabels:
               app: %s
@@ -947,7 +946,6 @@ spec:
     authentication:
       app-id-key-auth:
         apiKey:
-          allNamespaces: true
           selector:
             matchLabels:
               app: %s
@@ -1018,10 +1016,16 @@ spec:
         StringBuilder cidrList = new StringBuilder();
         for (String ip : ips) {
             String cidr = normalizeCidr(ip);
+            if (cidr == null) {
+                continue;
+            }
             if (cidrList.length() > 0) {
                 cidrList.append(", ");
             }
             cidrList.append("\"").append(cidr).append("\"");
+        }
+        if (cidrList.length() == 0) {
+            return "";
         }
         boolean whitelist = !"blacklist".equalsIgnoreCase(checkType)
                 && !"deny".equalsIgnoreCase(checkType);
@@ -1050,7 +1054,7 @@ spec:
             package ipcheck
             import future.keywords
             cidrs := [%s]
-            client_ip := input.attributes.request.http.headers["x-forwarded-for"]
+            client_ip := input.attributes.source.address
 %s""".formatted(cidrList, allowBody);
     }
 
@@ -1359,7 +1363,11 @@ spec:
 
         StringBuilder remoteIps = new StringBuilder();
         for (String ip : ips) {
-            remoteIps.append("        - \"").append(normalizeCidr(ip)).append("\"\n");
+            String cidr = normalizeCidr(ip);
+            if (cidr == null) {
+                continue;
+            }
+            remoteIps.append("        - \"").append(cidr).append("\"\n");
         }
         if (remoteIps.length() == 0) {
             remoteIps.append("        - \"0.0.0.0/0\"\n");
@@ -1385,9 +1393,14 @@ spec:
 %s""".formatted(name, namespace, name, checkType, action, remoteIps);
     }
 
+    /**
+     * Normalize a host or CIDR string. Returns {@code null} for null/blank input
+     * (callers must skip); never maps blank entries to {@code 0.0.0.0/0}.
+     */
     private static String normalizeCidr(String ip) {
         if (ip == null || ip.isBlank()) {
-            return "0.0.0.0/0";
+            LOG.warn("Skipping blank/null CIDR entry in IP check policy");
+            return null;
         }
         String trimmed = ip.trim();
         if (trimmed.contains("/")) {
