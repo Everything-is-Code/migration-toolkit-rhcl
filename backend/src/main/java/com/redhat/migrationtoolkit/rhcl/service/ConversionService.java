@@ -9,10 +9,15 @@ import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
+import java.net.URI;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @ApplicationScoped
 public class ConversionService {
@@ -123,7 +128,7 @@ public class ConversionService {
         if (loggingPolicy != null) {
             boolean isGateway = !"workload".equals(loggingTarget);
             files.put("telemetry.yaml", generateTelemetry(name, namespace, loggingPolicy, isGateway));
-            java.util.List<Map<String, Object>> jsonCfgCheck =
+            List<Map<String, Object>> jsonCfgCheck =
                     parseJsonObjectConfig(loggingPolicy.configuration != null
                             ? loggingPolicy.configuration.get("json_object_config") : null);
             if (!jsonCfgCheck.isEmpty()) {
@@ -134,7 +139,7 @@ public class ConversionService {
 
         Policy urlRewritingPolicy = findUrlRewritingPolicy(service);
         if (urlRewritingPolicy != null) {
-            java.util.List<Map<String, Object>> rewriteCommands = parseJsonObjectConfig(
+            List<Map<String, Object>> rewriteCommands = parseJsonObjectConfig(
                     urlRewritingPolicy.configuration != null
                             ? urlRewritingPolicy.configuration.get("commands") : null);
             if (!rewriteCommands.isEmpty()) {
@@ -207,7 +212,7 @@ public class ConversionService {
             if (!s.contains("://")) {
                 s = "https://" + s;
             }
-            return new java.net.URI(s).getHost();
+            return new URI(s).getHost();
         } catch (Exception e) {
             return null;
         }
@@ -237,7 +242,7 @@ public class ConversionService {
             if (!s.contains("://")) {
                 s = "http://" + s;
             }
-            int port = new java.net.URI(s).getPort();
+            int port = new URI(s).getPort();
             return port > 0 ? port : defaultPort;
         } catch (Exception e) {
             return defaultPort;
@@ -330,13 +335,13 @@ metadata:
 
         String timeoutsBlock = buildTimeoutsBlock(service);
         boolean hasCors = findCorsPolicy(service) != null;
-        java.util.LinkedHashSet<String> pathsForOptions = new java.util.LinkedHashSet<>();
+        LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             // For HTTP methods that already have a "/" (catch-all) Mapping Rule,
             // skip any subsequent rules for the same method since they are always subsumed by "/".
-            java.util.Set<String> catchAllMethods = new java.util.HashSet<>();
-            java.util.Set<String> emitted = new java.util.LinkedHashSet<>();
+            Set<String> catchAllMethods = new HashSet<>();
+            Set<String> emitted = new LinkedHashSet<>();
             for (MappingRule rule : service.mappingRules) {
                 String path   = toGatewayApiPathPrefix(rule.pattern);
                 String method = rule.httpMethod != null ? rule.httpMethod : "GET";
@@ -375,7 +380,7 @@ metadata:
 
         // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
         if (hasCors) {
-            java.util.Set<String> emittedOptions = new java.util.HashSet<>();
+            Set<String> emittedOptions = new HashSet<>();
             if (service.mappingRules != null) {
                 for (MappingRule rule : service.mappingRules) {
                     if (rule.httpMethod != null && "OPTIONS".equalsIgnoreCase(rule.httpMethod)) {
@@ -438,7 +443,7 @@ metadata:
 
         for (String direction : new String[]{"response", "request"}) {
             Object raw = policy.configuration.get(direction);
-            if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) {
+            if (!(raw instanceof List<?> list) || list.isEmpty()) {
                 continue;
             }
 
@@ -547,15 +552,15 @@ metadata:
         }
         Map<String, Object> cfg = cors.configuration;
 
-        java.util.List<String> originList = toStringList(cfg.get("allow_origin")).stream()
+        List<String> originList = toStringList(cfg.get("allow_origin")).stream()
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .toList();
-        java.util.List<String> methodList = toStringList(cfg.get("allow_methods")).stream()
+        List<String> methodList = toStringList(cfg.get("allow_methods")).stream()
                 .map(s -> s.trim().toUpperCase())
                 .filter(s -> !s.isBlank())
                 .toList();
-        java.util.List<String> headerList = toStringList(cfg.get("allow_headers")).stream()
+        List<String> headerList = toStringList(cfg.get("allow_headers")).stream()
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .toList();
@@ -580,9 +585,9 @@ metadata:
         return buildCorsResponseHeaderModifier(originList, methodList, headerList, credentials, maxAge);
     }
 
-    private static String buildNativeCorsFilter(java.util.List<String> originList,
-                                                java.util.List<String> methodList,
-                                                java.util.List<String> headerList,
+    private static String buildNativeCorsFilter(List<String> originList,
+                                                List<String> methodList,
+                                                List<String> headerList,
                                                 boolean credentials,
                                                 Integer maxAge) {
         StringBuilder sb = new StringBuilder();
@@ -618,9 +623,9 @@ metadata:
         return sb.toString();
     }
 
-    private static String buildCorsResponseHeaderModifier(java.util.List<String> originList,
-                                                          java.util.List<String> methodList,
-                                                          java.util.List<String> headerList,
+    private static String buildCorsResponseHeaderModifier(List<String> originList,
+                                                          List<String> methodList,
+                                                          List<String> headerList,
                                                           boolean credentials,
                                                           Integer maxAge) {
         String allowOrigin = "*";
@@ -666,12 +671,12 @@ metadata:
         return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
-    private static java.util.List<String> toStringList(Object raw) {
-        java.util.List<String> out = new java.util.ArrayList<>();
+    private static List<String> toStringList(Object raw) {
+        List<String> out = new ArrayList<>();
         if (raw == null) {
             return out;
         }
-        if (raw instanceof java.util.List<?> list) {
+        if (raw instanceof List<?> list) {
             for (Object item : list) {
                 if (item != null) {
                     out.add(item.toString());
@@ -1280,7 +1285,6 @@ spec:
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static String edgeLimiterName(Map<String, Object> limiter, String prefix, int idx) {
         Object keyObj = limiter.get("key");
         if (keyObj instanceof Map<?, ?> keyMap) {
@@ -1490,7 +1494,7 @@ spec:
      * Lua patterns must be manually verified.
      */
     private String generateUrlRewritingEnvoyFilter(String name, String namespace,
-            java.util.List<Map<String, Object>> commands) {
+            List<Map<String, Object>> commands) {
         StringBuilder rules = new StringBuilder();
         for (Map<String, Object> cmd : commands) {
             String op = String.valueOf(cmd.getOrDefault("op", "sub"));
@@ -1595,23 +1599,23 @@ spec:
     }
 
     @SuppressWarnings("unchecked")
-    private java.util.List<Map<String, Object>> parseJsonObjectConfig(Object raw) {
-        if (raw instanceof java.util.List) {
-            return (java.util.List<Map<String, Object>>) raw;
+    private List<Map<String, Object>> parseJsonObjectConfig(Object raw) {
+        if (raw instanceof List) {
+            return (List<Map<String, Object>>) raw;
         }
         if (raw instanceof String str && !str.isBlank()) {
             try {
                 com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
                 com.fasterxml.jackson.databind.JavaType type = om.getTypeFactory()
-                        .constructCollectionType(java.util.List.class,
+                        .constructCollectionType(List.class,
                                 om.getTypeFactory().constructMapType(
-                                        java.util.LinkedHashMap.class, String.class, Object.class));
+                                        LinkedHashMap.class, String.class, Object.class));
                 return om.readValue(str, type);
             } catch (Exception e) {
                 LOG.warnf("Failed to parse json_object_config string: %s", e.getMessage());
             }
         }
-        return java.util.List.of();
+        return List.of();
     }
 
     private String generateTelemetry(String name, String namespace, Policy policy, boolean isGateway) {
@@ -1649,7 +1653,7 @@ spec:
 
     @SuppressWarnings("checkstyle:LineLength")
     private String generateLoggingEnvoyFilter(String name, String namespace,
-            java.util.List<Map<String, Object>> jsonCfg, boolean isGateway) {
+            List<Map<String, Object>> jsonCfg, boolean isGateway) {
         StringBuilder jsonFormat = new StringBuilder();
         for (Map<String, Object> entry : jsonCfg) {
             String key        = String.valueOf(entry.getOrDefault("key", ""));
