@@ -1,4 +1,5 @@
-FROM node:22-alpine AS builder
+# Pin: node:22-alpine — refresh digests via CONTRIBUTING.md / AGENTS.md
+FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS builder
 USER 0
 WORKDIR /opt/app-root/src
 COPY package.json package-lock.json ./
@@ -6,8 +7,14 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM registry.access.redhat.com/ubi9/nginx-124:1
+# Pin: ubi9/nginx-124:1
+FROM registry.access.redhat.com/ubi9/nginx-124:1@sha256:d0dea12c26ab29734d15590f2a931180f68d6c276dffdf9e3f1e8eeb9ab3be59
 COPY --from=builder /opt/app-root/src/build/ /opt/app-root/src/
 COPY nginx/nginx.conf "${NGINX_CONF_PATH}"
 EXPOSE 8080
+USER 1001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:8080/ || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]
