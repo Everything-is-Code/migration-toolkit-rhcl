@@ -44,7 +44,7 @@ class ExportControllerTest {
         versions.capabilities.timeoutsSupported = true;
         versions.source = "default";
         versions.profile = "auto";
-        when(clusterVersionService.resolve(anyString(), org.mockito.ArgumentMatchers.anyBoolean()))
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(versions);
     }
 

@@ -520,6 +520,59 @@ class ClusterVersionServiceTest {
         assertFalse(response.capabilities.ossmMatchesOcp);
     }
 
+    // ── WU2: resolveFromSettings (I4/I5/S1/I6) ────────────────────────────────
+
+    @Test
+    void resolveFromSettings_usesProfileFromReadClusterProfile() {
+        ClusterVersionService withSettings = new SettingsProfileService(
+                null, ClusterVersionService.PROFILE_OCP_419);
+
+        ClusterVersionsResponse response = withSettings.resolveFromSettings(true);
+
+        assertEquals(ClusterVersionService.PROFILE_OCP_419, response.profile);
+        assertEquals("profile", response.source);
+        assertTrue(response.ocp.startsWith("4.19"));
+    }
+
+    @Test
+    void resolveFromSettings_whenReadFails_fallsBackToAuto() {
+        ClusterVersionService failing = new SettingsProfileService(null, null) {
+            @Override
+            protected String readClusterProfile() {
+                throw new RuntimeException("Panache unavailable");
+            }
+        };
+
+        ClusterVersionsResponse response = failing.resolveFromSettings(true);
+
+        assertEquals(ClusterVersionService.PROFILE_AUTO, response.profile);
+        assertEquals("default", response.source);
+        assertSoftFailOssmNullButExpected(response);
+    }
+
+    @Test
+    void resolveFromSettings_blankSettings_usesAuto() {
+        ClusterVersionService blank = new SettingsProfileService(null, "   ");
+
+        ClusterVersionsResponse response = blank.resolveFromSettings(true);
+
+        assertEquals(ClusterVersionService.PROFILE_AUTO, response.profile);
+        assertEquals("default", response.source);
+    }
+
+    @Test
+    void resolveFromSettings_ocp421_wiresCapabilities() {
+        ClusterVersionService withSettings = new SettingsProfileService(
+                null, ClusterVersionService.PROFILE_OCP_421);
+
+        ClusterVersionsResponse response = withSettings.resolveFromSettings(false);
+
+        assertEquals(ClusterVersionService.PROFILE_OCP_421, response.profile);
+        assertEquals("profile", response.source);
+        assertTrue(response.ocp.startsWith("4.21"));
+        assertTrue(response.capabilities.corsNative);
+    }
+
     /** Test double with injectable clock for TTL assertions. */
     private static final class MutableClockService extends ClusterVersionService {
         long now;
@@ -532,6 +585,24 @@ class ClusterVersionServiceTest {
         @Override
         protected long nowMs() {
             return now;
+        }
+    }
+
+    /** Test double with overridable settings profile (avoids Panache). */
+    private static class SettingsProfileService extends ClusterVersionService {
+        private final String profileValue;
+
+        SettingsProfileService(KubernetesClient client, String profileValue) {
+            super(client);
+            this.profileValue = profileValue;
+        }
+
+        @Override
+        protected String readClusterProfile() {
+            if (profileValue == null || profileValue.isBlank()) {
+                return PROFILE_AUTO;
+            }
+            return profileValue.trim();
         }
     }
 }

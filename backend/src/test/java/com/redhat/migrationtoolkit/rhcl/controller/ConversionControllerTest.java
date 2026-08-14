@@ -71,7 +71,7 @@ class ConversionControllerTest {
         versions.capabilities.timeoutsSupported = true;
         versions.source = "default";
         versions.profile = "auto";
-        when(clusterVersionService.resolve(anyString(), org.mockito.ArgumentMatchers.anyBoolean()))
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(versions);
     }
     @Test
@@ -373,7 +373,7 @@ class ConversionControllerTest {
         versions.capabilities.timeoutsSupported = true;
         versions.source = "default";
         versions.profile = "auto";
-        when(clusterVersionService.resolve(anyString(), org.mockito.ArgumentMatchers.anyBoolean()))
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean()))
                 .thenReturn(versions);
 
         ApiService svc = buildService("svc-1", "CORS API", "jwt");

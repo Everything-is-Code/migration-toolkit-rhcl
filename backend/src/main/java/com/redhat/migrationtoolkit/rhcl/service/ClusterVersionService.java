@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
+import com.redhat.migrationtoolkit.rhcl.entity.AppSettingsEntity;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceList;
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition;
@@ -78,6 +79,33 @@ public class ClusterVersionService {
     /** Overridable clock for TTL unit tests. */
     protected long nowMs() {
         return System.currentTimeMillis();
+    }
+
+    /**
+     * Resolve using {@code clusterProfile} from app settings.
+     * On settings read failure: WARN and fall back to {@link #PROFILE_AUTO}.
+     */
+    public ClusterVersionsResponse resolveFromSettings(boolean refresh) {
+        String profile = PROFILE_AUTO;
+        try {
+            profile = readClusterProfile();
+        } catch (Exception e) {
+            LOG.warnf("clusterProfile setting unavailable: %s", e.getMessage());
+            profile = PROFILE_AUTO;
+        }
+        return resolve(profile, refresh);
+    }
+
+    /**
+     * Read {@code clusterProfile} from {@link AppSettingsEntity}.
+     * Overridable for unit tests / Panache isolation.
+     */
+    protected String readClusterProfile() {
+        AppSettingsEntity entity = AppSettingsEntity.findById(SETTINGS_KEY_CLUSTER_PROFILE);
+        if (entity != null && entity.value != null && !entity.value.isBlank()) {
+            return entity.value.trim();
+        }
+        return PROFILE_AUTO;
     }
 
     public ClusterVersionsResponse resolve(String profile, boolean refresh) {
