@@ -60,7 +60,8 @@ class ConversionControllerTest {
                 .body("{\"serviceIds\":[], \"namespace\":\"test\", \"threescaleUrl\":\"https://x.com\", \"accessToken\":\"tok\"}")
                 .when().post("/api/convert")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -70,7 +71,8 @@ class ConversionControllerTest {
                 .body("{\"namespace\":\"test\", \"threescaleUrl\":\"https://x.com\", \"accessToken\":\"tok\"}")
                 .when().post("/api/convert")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -87,7 +89,8 @@ class ConversionControllerTest {
                         """)
                 .when().post("/api/convert")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -104,7 +107,8 @@ class ConversionControllerTest {
                         """)
                 .when().post("/api/convert")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 
     @Test
