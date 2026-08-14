@@ -165,6 +165,20 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
                             <div>
                               <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</div>
                               <div style={{ fontSize: '0.8rem', color: '#6a6e73' }}>{item.message}</div>
+                              {(item.requiredVersion || item.capability) && (
+                                <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#8a8d90' }}>
+                                  {item.capability && (
+                                    <span style={{ marginRight: 8 }}>
+                                      {t('compatibility.capability', { capability: item.capability })}
+                                    </span>
+                                  )}
+                                  {item.requiredVersion && (
+                                    <span>
+                                      {t('compatibility.requiredVersion', { version: item.requiredVersion })}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </GridItem>
