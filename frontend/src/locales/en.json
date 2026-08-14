@@ -47,7 +47,32 @@
     "errorDefault": "Connection failed. Please check your URL and access token.",
     "btnFetchDomain": "Auto-detect URL",
     "domainNotFound": "Could not detect cluster domain",
-    "domainError": "Failed to fetch cluster domain — check cluster connection"
+    "domainError": "Failed to fetch cluster domain — check cluster connection",
+    "versionsTitle": "Cluster versions & capabilities",
+    "versionsDescription": "Detected OpenShift, Gateway API, Kuadrant/RHCL, and OSSM versions used for conversion gating. OSSM is tied to the resolved OCP version.",
+    "versionsLoading": "Loading cluster versions...",
+    "versionsRefreshing": "Refreshing...",
+    "btnRefreshVersions": "Refresh versions",
+    "versionsError": "Failed to load cluster versions",
+    "versionsSoftFail": "Detection notes (convert still available)",
+    "labelProfile": "Cluster profile override",
+    "profileHelper": "Optional. Overrides live detection for capability gating (CORS native vs fallback).",
+    "profileSaveError": "Failed to save cluster profile",
+    "profile": {
+      "auto": "Auto (detect from cluster)",
+      "ocp419": "OCP 4.19 / Gateway API 1.2.1",
+      "ocp421": "OCP 4.21 / Gateway API ≥ 1.3"
+    },
+    "sourceDetected": "Source: detected",
+    "sourceProfile": "Source: profile override",
+    "sourceDefault": "Source: default (soft-fail)",
+    "labelOcp": "OpenShift (OCP)",
+    "labelGatewayApi": "Gateway API",
+    "labelKuadrant": "Kuadrant / RHCL",
+    "labelOssm": "OpenShift Service Mesh (OSSM)",
+    "ossmExpected": "expected for OCP: {{version}}",
+    "capCorsNative": "CORS: native filter",
+    "capCorsFallback": "CORS: ResponseHeaderModifier fallback"
   },
   "apiSelection": {
     "title": "API List",
@@ -80,7 +105,9 @@
     "btnRecheck": "Re-check",
     "btnNext": "Next: Generate YAML",
     "btnGenerateYaml": "Generate YAML",
-    "errorCheck": "Compatibility check failed"
+    "errorCheck": "Compatibility check failed",
+    "capability": "Capability: {{capability}}",
+    "requiredVersion": "Required: {{version}}"
   },
   "conversion": {
     "title": "Generate YAML",
@@ -120,7 +147,9 @@
     "anonymousTargetGateway": "Gateway",
     "anonymousTargetGatewayDesc": "targetRef.kind: Gateway — applies to all routes through the Gateway",
     "anonymousTargetHttpRoute": "HTTPRoute (recommended)",
-    "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — applies only to the specific route"
+    "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — applies only to the specific route",
+    "corsFallbackHint": "Native Gateway API CORS is unavailable for this cluster profile. CORS policies will use ResponseHeaderModifier Access-Control-* headers plus OPTIONS matches.",
+    "corsNativeHint": "Native Gateway API CORS filter (type: CORS) will be used for CORS policies on this cluster profile."
   },
   "yamlViewer": {
     "title": "YAML Preview",

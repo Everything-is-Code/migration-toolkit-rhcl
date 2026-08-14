@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   PageSection,
   PageSectionVariants,
@@ -7,25 +7,29 @@ import {
   CardBody,
   Form,
   FormGroup,
-  FormHelperText,
-  HelperText,
-  HelperTextItem,
   TextInput,
-  InputGroup,
-  InputGroupItem,
-  ActionGroup,
   Button,
   Alert,
   AlertVariant,
   Spinner,
+  ActionGroup,
+  InputGroup,
+  InputGroupItem,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   DescriptionList,
   DescriptionListGroup,
   DescriptionListTerm,
   DescriptionListDescription,
+  FormSelect,
+  FormSelectOption,
+  Label,
 } from '@patternfly/react-core';
-import { CheckCircleIcon, EyeIcon, EyeSlashIcon } from '@patternfly/react-icons';
+import { CheckCircleIcon, EyeIcon, EyeSlashIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import { connectionApi, clusterApi, defaultsApi } from '../api/client';
+import { connectionApi, clusterApi, defaultsApi, settingsApi } from '../api/client';
+import { ClusterProfile, ClusterVersionsResponse } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,6 +37,11 @@ interface Props {
   appState: AppState;
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;
 }
+
+const PROFILE_OPTIONS: ClusterProfile[] = ['auto', 'ocp-4.19', 'ocp-4.21'];
+
+const displayOrDash = (value: string | null | undefined) =>
+  value && value.trim() ? value : '—';
 
 const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const { t } = useTranslation();
@@ -49,6 +58,30 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [domainError, setDomainError] = useState<string | null>(null);
   const [clusterDomain, setClusterDomain] = useState<string | null>(null);
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  const applyVersions = useCallback((versions: ClusterVersionsResponse) => {
+    setAppState(prev => ({
+      ...prev,
+      clusterVersions: versions,
+      clusterProfile: versions.profile || prev.clusterProfile,
+    }));
+  }, [setAppState]);
+
+  const loadVersions = useCallback(async (refresh = false) => {
+    setVersionsLoading(true);
+    setVersionsError(null);
+    try {
+      const res = await clusterApi.getVersions(refresh);
+      applyVersions(res.data);
+    } catch (e: any) {
+      setVersionsError(e?.response?.data?.error || e?.message || 'Failed to load cluster versions');
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, [applyVersions]);
 
   useEffect(() => {
     if (defaultsLoaded || appState.connection.connected) return;
@@ -61,6 +94,13 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     }).catch(() => {
       // Defaults endpoint unavailable — fields stay empty
     }).finally(() => setDefaultsLoaded(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Only load versions on mount when already connected from a previous session
+  useEffect(() => {
+    if (appState.connection.connected) {
+      loadVersions(false);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildUrlFromNamespace = (ns: string, domain: string) =>
@@ -110,6 +150,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
         connection: { url, accessToken, tenant, connected: true },
         namespace,
       }));
+      // Refresh cluster versions on reconnect
+      await loadVersions(true);
     } catch (e: any) {
       setError(e.response?.data?.message || t('connection.errorDefault'));
       setAppState(prev => ({
@@ -120,6 +162,29 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       setLoading(false);
     }
   };
+
+  const handleProfileChange = async (_e: React.FormEvent, value: string) => {
+    const profile = value as ClusterProfile;
+    setProfileSaving(true);
+    setVersionsError(null);
+    try {
+      await settingsApi.put('clusterProfile', profile);
+      setAppState(prev => ({ ...prev, clusterProfile: profile }));
+      await loadVersions(true);
+    } catch (e: any) {
+      setVersionsError(e?.response?.data?.message || e?.message || t('connection.profileSaveError'));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const versions = appState.clusterVersions;
+  const sourceLabelKey =
+    versions?.source === 'profile'
+      ? 'connection.sourceProfile'
+      : versions?.source === 'default'
+        ? 'connection.sourceDefault'
+        : 'connection.sourceDetected';
 
   return (
     <>
@@ -256,6 +321,119 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
             </Form>
           </CardBody>
         </Card>
+
+        {appState.connection.connected && (
+          <Card style={{ marginTop: '16px' }}>
+            <CardBody>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <Title headingLevel="h3" size="lg">
+                  {t('connection.versionsTitle')}
+                </Title>
+                <Button
+                  variant="secondary"
+                  onClick={() => loadVersions(true)}
+                  isDisabled={versionsLoading || profileSaving}
+                  icon={<SyncAltIcon />}
+                >
+                  {versionsLoading ? t('connection.versionsRefreshing') : t('connection.btnRefreshVersions')}
+                </Button>
+              </div>
+              <p style={{ marginTop: '8px', color: '#6a6e73', fontSize: '0.9rem' }}>
+                {t('connection.versionsDescription')}
+              </p>
+
+              {versionsError && (
+                <Alert variant="warning" isInline title={versionsError} style={{ marginTop: '12px' }} />
+              )}
+
+              <FormGroup
+                label={t('connection.labelProfile')}
+                fieldId="cluster-profile"
+                style={{ marginTop: '16px', maxWidth: 360 }}
+              >
+                <FormSelect
+                  id="cluster-profile"
+                  value={appState.clusterProfile}
+                  onChange={handleProfileChange}
+                  isDisabled={profileSaving || versionsLoading}
+                  aria-label={t('connection.labelProfile')}
+                >
+                  {PROFILE_OPTIONS.map(opt => (
+                    <FormSelectOption
+                      key={opt}
+                      value={opt}
+                      label={t(`connection.profile.${opt === 'ocp-4.19' ? 'ocp419' : opt === 'ocp-4.21' ? 'ocp421' : 'auto'}`)}
+                    />
+                  ))}
+                </FormSelect>
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>{t('connection.profileHelper')}</HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              </FormGroup>
+
+              {versionsLoading && !versions ? (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                  <Spinner size="md" /> {t('connection.versionsLoading')}
+                </div>
+              ) : versions ? (
+                <>
+                  <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <Label color={versions.source === 'detected' ? 'green' : versions.source === 'profile' ? 'blue' : 'orange'}>
+                      {t(sourceLabelKey)}
+                    </Label>
+                    {versions.capabilities?.corsNative ? (
+                      <Label color="green">{t('connection.capCorsNative')}</Label>
+                    ) : (
+                      <Label color="orange">{t('connection.capCorsFallback')}</Label>
+                    )}
+                  </div>
+                  <DescriptionList style={{ marginTop: '16px' }} isHorizontal>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelOcp')}</DescriptionListTerm>
+                      <DescriptionListDescription>{displayOrDash(versions.ocp)}</DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelGatewayApi')}</DescriptionListTerm>
+                      <DescriptionListDescription>{displayOrDash(versions.gatewayApi)}</DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelKuadrant')}</DescriptionListTerm>
+                      <DescriptionListDescription>{displayOrDash(versions.kuadrant)}</DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelOssm')}</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        {displayOrDash(versions.ossm)}
+                        {versions.ossmExpectedForOcp && (
+                          <span style={{ marginLeft: 8, color: '#6a6e73', fontSize: '0.85rem' }}>
+                            ({t('connection.ossmExpected', { version: versions.ossmExpectedForOcp })})
+                          </span>
+                        )}
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                  </DescriptionList>
+                  {versions.errors && versions.errors.length > 0 && (
+                    <Alert
+                      variant="info"
+                      isInline
+                      title={t('connection.versionsSoftFail')}
+                      style={{ marginTop: '16px' }}
+                    >
+                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                        {versions.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </Alert>
+                  )}
+                </>
+              ) : null}
+            </CardBody>
+          </Card>
+        )}
+
         {appState.connection.connected && (
           <Card style={{ marginTop: '16px' }}>
             <CardBody>

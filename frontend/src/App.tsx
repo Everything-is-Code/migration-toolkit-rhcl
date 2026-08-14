@@ -49,7 +49,13 @@ import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import SupportedPoliciesPage from './pages/SupportedPoliciesPage';
 
-import { ConnectionRequest, ApiService, ConversionResultItem } from './api/types';
+import {
+  ConnectionRequest,
+  ApiService,
+  ConversionResultItem,
+  ClusterVersionsResponse,
+  ClusterProfile,
+} from './api/types';
 
 /* ── Root-level Error Boundary ──
    Even if a page component crashes,
@@ -105,6 +111,10 @@ export interface AppState {
   selectedServices: ApiService[];
   conversionResults: ConversionResultItem[];
   namespace: string;
+  /** Resolved cluster versions + capabilities from GET /api/cluster/versions. */
+  clusterVersions: ClusterVersionsResponse | null;
+  /** Selected profile override (auto | ocp-4.19 | ocp-4.21). */
+  clusterProfile: ClusterProfile;
 }
 
 /* ── Language switcher tabs ── */
@@ -208,6 +218,8 @@ const AppContent: React.FC = () => {
     selectedServices: [],
     conversionResults: [],
     namespace: 'default',
+    clusterVersions: null,
+    clusterProfile: 'auto',
   });
 
   const workflowItems = [

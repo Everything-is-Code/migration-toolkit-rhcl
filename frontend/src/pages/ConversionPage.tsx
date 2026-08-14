@@ -62,6 +62,9 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
       && (p.name === 'default_credentials' || p.name === 'anonymous_access')));
   const hasIpCheckPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'ip_check'));
+  const hasCorsPolicy = appState.selectedServices.some(svc =>
+    svc.policies?.some(p => p.enabled && p.name === 'cors'));
+  const corsNative = appState.clusterVersions?.capabilities?.corsNative === true;
 
   const handleConvert = async () => {
     setLoading(true);
@@ -114,6 +117,17 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
       </PageSection>
       <PageSection>
         <Stack hasGutter>
+          {hasCorsPolicy && (
+            <StackItem>
+              <Alert
+                variant={corsNative ? 'info' : 'warning'}
+                isInline
+                title={corsNative
+                  ? t('conversion.corsNativeHint')
+                  : t('conversion.corsFallbackHint')}
+              />
+            </StackItem>
+          )}
           <StackItem>
             <Card>
               <CardBody>
