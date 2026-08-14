@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { loadSupportedPolicies } from './SupportedPoliciesPage';
+import { corsConversionHintKey } from './clusterCapabilityUi';
 import {
   PageSection,
   PageSectionVariants,
@@ -65,6 +66,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const hasCorsPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'cors'));
   const corsNative = appState.clusterVersions?.capabilities?.corsNative === true;
+  const corsHintKey = corsConversionHintKey(hasCorsPolicy, corsNative);
 
   const handleConvert = async () => {
     setLoading(true);
@@ -117,14 +119,12 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
       </PageSection>
       <PageSection>
         <Stack hasGutter>
-          {hasCorsPolicy && (
+          {corsHintKey && (
             <StackItem>
               <Alert
                 variant={corsNative ? 'info' : 'warning'}
                 isInline
-                title={corsNative
-                  ? t('conversion.corsNativeHint')
-                  : t('conversion.corsFallbackHint')}
+                title={t(corsHintKey)}
               />
             </StackItem>
           )}

@@ -32,6 +32,7 @@ import { connectionApi, clusterApi, defaultsApi, settingsApi } from '../api/clie
 import { ClusterProfile, ClusterVersionsResponse } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import { shouldShowClusterVersionsCard } from './clusterCapabilityUi';
 
 interface Props {
   appState: AppState;
@@ -338,7 +339,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
           </CardBody>
         </Card>
 
-        {appState.connection.connected && (
+        {shouldShowClusterVersionsCard(appState.connection.connected) && (
           <Card style={{ marginTop: '16px' }}>
             <CardBody>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>

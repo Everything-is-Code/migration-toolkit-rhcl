@@ -337,6 +337,71 @@ class ConversionControllerTest {
         assertEquals("authorizationPolicy", optsCaptor.getValue().ipCheckMode);
     }
 
+    @Test
+    void convert_threadsCorsNativeFalseFromClusterCapabilities() {
+        ApiService svc = buildService("svc-1", "CORS API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals(false, optsCaptor.getValue().corsNative);
+    }
+
+    @Test
+    void convert_threadsCorsNativeTrueFromClusterCapabilities() {
+        ClusterVersionsResponse versions = new ClusterVersionsResponse();
+        versions.capabilities = new ClusterCapabilities();
+        versions.capabilities.corsNative = true;
+        versions.capabilities.timeoutsSupported = true;
+        versions.source = "default";
+        versions.profile = "auto";
+        when(clusterVersionService.resolve(anyString(), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(versions);
+
+        ApiService svc = buildService("svc-1", "CORS API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals(true, optsCaptor.getValue().corsNative);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private ApiService buildService(String id, String name, String authType) {
