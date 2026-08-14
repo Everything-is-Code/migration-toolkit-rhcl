@@ -643,10 +643,8 @@ metadata:
                     yamlDoubleQuoted(String.join(", ", headerList))));
         }
         if (credentials) {
-            setHeaders.append("""
-                              - name: Access-Control-Allow-Credentials
-                                value: "true"
-            """);
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Allow-Credentials%n                value: \"true\"%n"));
         }
         if (maxAge != null) {
             setHeaders.append(String.format(
@@ -1811,7 +1809,17 @@ stringData:
 
         Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
         if (tokenIntrospection != null) {
-            return generateTokenIntrospectionSecret(name, namespace, tokenIntrospection);
+            Map<String, Object> cfg = tokenIntrospection.configuration != null
+                    ? tokenIntrospection.configuration : Map.of();
+            String endpoint = firstNonBlank(
+                    cfg.get("introspection_url"),
+                    cfg.get("introspectionEndpoint"),
+                    cfg.get("endpoint"));
+            // Same URL gate as AuthPolicy: incomplete introspection must not emit
+            // a mismatched oauth2-introspection Secret while policy falls through.
+            if (endpoint != null) {
+                return generateTokenIntrospectionSecret(name, namespace, tokenIntrospection);
+            }
         }
 
         if ("appIdKey".equals(authType)) {
@@ -1853,23 +1861,16 @@ stringData:
 
     /**
      * Secret for Authorino oauth2Introspection credentialsRef (clientID / clientSecret).
-     * Incomplete policy (no introspection_url) emits a WARNING and does not claim full support.
+     * Caller must only invoke when introspection_url is present (same gate as AuthPolicy).
+     * Missing client credentials emit a WARNING with REPLACE_ME placeholders.
      */
     private String generateTokenIntrospectionSecret(String name, String namespace, Policy policy) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
-        String endpoint = firstNonBlank(
-                cfg.get("introspection_url"),
-                cfg.get("introspectionEndpoint"),
-                cfg.get("endpoint"));
         String clientId = firstNonBlank(cfg.get("client_id"), cfg.get("clientID"));
         String clientSecret = firstNonBlank(cfg.get("client_secret"), cfg.get("clientSecret"));
 
         String warning = "";
-        if (endpoint == null) {
-            warning = "# WARNING: token_introspection missing introspection_url — "
-                    + "incomplete; not claiming full oauth2Introspection support\n";
-            LOG.warnf("token_introspection policy incomplete: missing introspection_url");
-        } else if (clientId == null || clientSecret == null) {
+        if (clientId == null || clientSecret == null) {
             warning = "# WARNING: token_introspection credentials incomplete — "
                     + "fill clientID/clientSecret before apply\n";
         }

@@ -324,6 +324,56 @@ class ConversionServiceTest {
     }
 
     @Test
+    void convert_corsPolicy_credentialsIndent_matchesSiblingAccessControlHeaders() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"),
+                List.of("GET", "POST"),
+                List.of("Authorization"),
+                true,
+                600));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = false;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+
+        String originItem = "              - name: Access-Control-Allow-Origin";
+        String credentialsItem = "              - name: Access-Control-Allow-Credentials";
+        String credentialsValue = "                value: \"true\"";
+        assertTrue(httproute.contains(originItem),
+                "Allow-Origin sibling must use 14-space list-item indent");
+        assertTrue(httproute.contains(credentialsItem),
+                "Allow-Credentials must align at 14 spaces like sibling Access-Control-* headers");
+        assertTrue(httproute.contains(credentialsItem + "\n" + credentialsValue),
+                "Allow-Credentials value must use 16-space indent matching sibling headers");
+        assertFalse(httproute.contains("                  - name: Access-Control-Allow-Credentials"),
+                "must not over-indent Allow-Credentials relative to siblings");
+    }
+
+    @Test
+    void convert_corsPolicy_credentialsIndent_withMaxAgeStillAligned() {
+        ApiService svc = basicService("cors-age", "cors-age");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"),
+                List.of("GET"),
+                List.of(),
+                true,
+                3600));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = false;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+
+        assertTrue(httproute.contains(
+                        "              - name: Access-Control-Allow-Credentials\n"
+                                + "                value: \"true\"\n"
+                                + "              - name: Access-Control-Max-Age"),
+                "credentials block must sit between siblings at the same indent as Max-Age");
+    }
+
+    @Test
     void convert_corsPolicy_wildcardOrigin_nativeIsYamlQuoted() {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
@@ -1043,14 +1093,39 @@ class ConversionServiceTest {
 
         Map<String, String> files = service.convert(svc, "ns");
         String policy = files.get("policy.yaml");
+        String secret = files.get("secret.yaml");
         String readme = files.get("README.md");
         assertFalse(policy != null && policy.contains("oauth2Introspection"),
                 "Incomplete token_introspection must NOT emit full oauth2Introspection");
+        assertFalse(secret != null && secret.contains("oauth2-introspection"),
+                "Incomplete token_introspection must NOT emit oauth2-introspection Secret");
+        assertTrue(secret != null && secret.contains("incomplete-introspect-credentials"),
+                "Without introspection URL, Secret must fall through to JWT/auth-type credentials");
         assertTrue((readme != null && readme.toLowerCase().contains("warn"))
-                        || (policy != null && policy.contains("WARNING"))
-                        || (files.get("secret.yaml") != null
-                        && files.get("secret.yaml").contains("WARNING")),
+                        || (policy != null && policy.contains("WARNING")),
                 "Incomplete config must warn and not claim full support");
+    }
+
+    @Test
+    void convert_tokenIntrospection_incomplete_apiKey_fallsThroughToApiKeySecret() {
+        ApiService svc = basicService("Incomplete ApiKey", "incomplete-apikey");
+        svc.authentication = auth("apiKey");
+        Policy incomplete = new Policy();
+        incomplete.name = "token_introspection";
+        incomplete.enabled = true;
+        incomplete.configuration = new HashMap<>();
+        // missing introspection_url — same gate as AuthPolicy
+        svc.policies = List.of(incomplete);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        String secret = files.get("secret.yaml");
+        assertFalse(policy.contains("oauth2Introspection"));
+        assertFalse(secret.contains("oauth2-introspection"),
+                "Secret kind must match AuthPolicy fallthrough (no mismatched oauth2 Secret)");
+        assertTrue(secret.contains("incomplete-apikey-api-key")
+                        || secret.contains("api_key:"),
+                "Fallthrough auth-type apiKey must emit api-key Secret");
     }
 
     @Test
