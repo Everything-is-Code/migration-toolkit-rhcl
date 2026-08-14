@@ -1,12 +1,16 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
+import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
 import com.redhat.migrationtoolkit.rhcl.service.CompatibilityService;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -29,6 +33,21 @@ class ExportControllerTest {
     @InjectMock
     CompatibilityService compatibilityService;
 
+    @InjectMock
+    ClusterVersionService clusterVersionService;
+
+    @BeforeEach
+    void stubClusterVersions() {
+        ClusterVersionsResponse versions = new ClusterVersionsResponse();
+        versions.capabilities = new ClusterCapabilities();
+        versions.capabilities.corsNative = false;
+        versions.capabilities.timeoutsSupported = true;
+        versions.source = "default";
+        versions.profile = "auto";
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(versions);
+    }
+
     @Test
     void getServices_missingParams_returns400() {
         given()
@@ -46,7 +65,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -58,7 +77,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -69,7 +88,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -81,7 +100,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -89,7 +108,7 @@ class ExportControllerTest {
         ApiService svc = new ApiService();
         svc.id = "1";
         svc.name = "Test API";
-        when(exportService.exportServices(eq("https://3scale.example.com"), eq("token123")))
+        when(exportService.listServices(eq("https://3scale.example.com"), eq("token123")))
                 .thenReturn(List.of(svc));
 
         given()
@@ -101,7 +120,7 @@ class ExportControllerTest {
                 .body("$", hasSize(1))
                 .body("[0].id", equalTo("1"));
 
-        verify(exportService).exportServices("https://3scale.example.com", "token123");
+        verify(exportService).listServices("https://3scale.example.com", "token123");
     }
 
     @Test
@@ -109,7 +128,7 @@ class ExportControllerTest {
         ApiService svc = new ApiService();
         svc.id = "1";
         svc.name = "Test API";
-        when(exportService.exportServices(eq("https://3scale.example.com"), eq("header-token")))
+        when(exportService.listServices(eq("https://3scale.example.com"), eq("header-token")))
                 .thenReturn(List.of(svc));
 
         given()
@@ -120,8 +139,8 @@ class ExportControllerTest {
                 .then()
                 .statusCode(200);
 
-        verify(exportService).exportServices("https://3scale.example.com", "header-token");
-        verify(exportService, never()).exportServices(anyString(), eq("query-token"));
+        verify(exportService).listServices("https://3scale.example.com", "header-token");
+        verify(exportService, never()).listServices(anyString(), eq("query-token"));
     }
 
     @Test
@@ -156,7 +175,7 @@ class ExportControllerTest {
         result.items = List.of();
 
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
-        when(compatibilityService.check(any(), any())).thenReturn(result);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities.class))).thenReturn(result);
 
         given()
                 .header("Authorization", "Bearer token123")

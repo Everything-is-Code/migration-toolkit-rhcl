@@ -230,10 +230,11 @@ class ConversionServiceTest {
                 "When both names present, first enabled policy in list order wins");
     }
 
-    // ── CORS policy → ResponseHeaderModifier (OCP 4.19 / GAPI 1.2.1) + OPTIONS ─
+    // ── CORS policy → RHM+OPTIONS (corsNative=false) or type: CORS (corsNative=true) ─
 
-    @Test
-    void convert_corsPolicy_emitsResponseHeaderModifierAndOptions() {
+    @ParameterizedTest(name = "corsNative={0}")
+    @ValueSource(booleans = {false, true})
+    void convert_corsPolicy_branchesOnCorsNative(boolean corsNative) {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
         MappingRule rule = new MappingRule();
@@ -247,29 +248,57 @@ class ConversionServiceTest {
                 true,
                 600));
 
-        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = corsNative;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
 
-        // Must NOT use native type: CORS (unsupported on OCP 4.19 Gateway API 1.2.1)
-        assertFalse(httproute.contains("type: CORS"),
-                "type: CORS requires Gateway API ≥ 1.3; OCP 4.19 ships 1.2.1");
-        assertFalse(httproute.contains("\n          cors:"),
-                "native cors: block must not appear under OCP 4.19 / RHCL 1.4 minimum");
-
-        // migration-pilot pattern: ResponseHeaderModifier + Access-Control-* + OPTIONS
-        assertTrue(httproute.contains("type: ResponseHeaderModifier"));
-        assertTrue(httproute.contains("Access-Control-Allow-Origin"));
-        assertTrue(httproute.contains("https://app.example.com"));
-        assertTrue(httproute.contains("Access-Control-Allow-Methods"));
-        assertTrue(httproute.contains("GET, POST") || httproute.contains("GET,POST"));
-        assertTrue(httproute.contains("Access-Control-Allow-Headers"));
-        assertTrue(httproute.contains("Authorization"));
         assertTrue(httproute.contains("method: OPTIONS"),
                 "cors must add OPTIONS preflight on product path(s)");
         assertTrue(httproute.contains("/api/users"));
+        assertTrue(httproute.contains("https://app.example.com"));
+
+        if (corsNative) {
+            assertTrue(httproute.contains("type: CORS"),
+                    "corsNative=true must emit Gateway API CORS filter");
+            assertTrue(httproute.contains("\n          cors:"));
+            assertTrue(httproute.contains("allowOrigins:"));
+            assertTrue(httproute.contains("allowMethods:"));
+            assertFalse(httproute.contains("Access-Control-Allow-Origin"),
+                    "native CORS must not use ResponseHeaderModifier Access-Control-* for CORS");
+        } else {
+            // Default / OCP 4.19 / GAPI 1.2.1 path
+            assertFalse(httproute.contains("type: CORS"),
+                    "type: CORS requires Gateway API ≥ 1.3; OCP 4.19 ships 1.2.1");
+            assertFalse(httproute.contains("\n          cors:"),
+                    "native cors: block must not appear when corsNative=false");
+            assertTrue(httproute.contains("type: ResponseHeaderModifier"));
+            assertTrue(httproute.contains("Access-Control-Allow-Origin"));
+            assertTrue(httproute.contains("Access-Control-Allow-Methods"));
+            assertTrue(httproute.contains("GET, POST") || httproute.contains("GET,POST"));
+            assertTrue(httproute.contains("Access-Control-Allow-Headers"));
+            assertTrue(httproute.contains("Authorization"));
+        }
     }
 
     @Test
-    void convert_corsPolicy_includesCredentialsAndMaxAge() {
+    void convert_corsPolicy_defaultOptions_neverEmitsNativeCors() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"),
+                List.of("GET"),
+                List.of("Authorization"),
+                false,
+                600));
+
+        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        assertFalse(httproute.contains("type: CORS"),
+                "ConversionOptions.corsNative defaults false — never emit type: CORS");
+        assertTrue(httproute.contains("type: ResponseHeaderModifier"));
+    }
+
+    @Test
+    void convert_corsPolicy_includesCredentialsAndMaxAge_fallback() {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
         svc.policies = List.of(corsPolicy(
@@ -279,13 +308,108 @@ class ConversionServiceTest {
                 true,
                 86400));
 
-        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = false;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
         assertFalse(httproute.contains("type: CORS"));
         assertTrue(httproute.contains("Access-Control-Allow-Credentials"),
                 "credentials must map to Access-Control-Allow-Credentials header");
         assertTrue(httproute.contains("Access-Control-Max-Age"));
         assertTrue(httproute.contains("86400"),
                 "max-age must map to Access-Control-Max-Age header value");
+        assertTrue(httproute.contains("value: \"*\""),
+                "wildcard Allow-Origin must be YAML-quoted (bare * is an alias)");
+        assertFalse(httproute.matches("(?s).*value:\\s+\\*(?:\\s|$).*"),
+                "must not emit unquoted value: *");
+    }
+
+    @Test
+    void convert_corsPolicy_wildcardOrigin_nativeIsYamlQuoted() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("*"),
+                List.of("GET", "POST", "OPTIONS"),
+                List.of("Authorization", "Content-Type"),
+                true,
+                600));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = true;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+
+        assertTrue(httproute.contains("type: CORS"));
+        assertTrue(httproute.contains("allowOrigins:\n              - \"*\""),
+                "native CORS wildcard origin must be double-quoted for valid YAML");
+        assertFalse(httproute.contains("allowOrigins:\n              - *\n"),
+                "unquoted - * is invalid YAML (alias indicator)");
+        assertTrue(httproute.contains("- \"Authorization\""));
+        assertTrue(httproute.contains("- \"Content-Type\""));
+    }
+
+    @Test
+    void yamlDoubleQuoted_escapesBackslashAndQuotes() {
+        assertEquals("\"*\"", ConversionService.yamlDoubleQuoted("*"));
+        assertEquals("\"https://app.example.com\"",
+                ConversionService.yamlDoubleQuoted("https://app.example.com"));
+        assertEquals("\"a\\\"b\"", ConversionService.yamlDoubleQuoted("a\"b"));
+        assertEquals("\"a\\\\b\"", ConversionService.yamlDoubleQuoted("a\\b"));
+        assertEquals("\"\"", ConversionService.yamlDoubleQuoted(null));
+    }
+
+    @Test
+    void convert_corsPolicy_includesCredentialsAndMaxAge_native() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"),
+                List.of("GET"),
+                List.of(),
+                true,
+                86400));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = true;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+        assertTrue(httproute.contains("type: CORS"));
+        assertTrue(httproute.contains("allowCredentials: true"));
+        assertTrue(httproute.contains("maxAge: 86400"));
+        assertFalse(httproute.contains("Access-Control-Allow-Credentials"));
+    }
+
+    @Test
+    void convert_corsNativeFromProfile421_matrixOnly_noClusterSideEffects() {
+        // Profile override only widens emit caps; convert path needs no Kubernetes client.
+        var caps = ClusterVersionService.capabilitiesFrom("4.21.0", "1.3.0", null, null, null);
+        assertTrue(caps.corsNative);
+
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"), List.of("GET"), List.of(), false, 60));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = caps.corsNative;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+        assertTrue(httproute.contains("type: CORS"));
+        assertFalse(httproute.contains("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    void convert_corsNativeFromProfile419_matrixFallback() {
+        var caps = ClusterVersionService.capabilitiesFrom("4.19.0", "1.2.1", null, null, null);
+        assertFalse(caps.corsNative);
+
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"), List.of("GET"), List.of(), false, 60));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = caps.corsNative;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+        assertFalse(httproute.contains("type: CORS"));
+        assertTrue(httproute.contains("ResponseHeaderModifier"));
     }
 
     @Test
@@ -298,7 +422,9 @@ class ConversionServiceTest {
         svc.mappingRules = List.of(rule);
         svc.policies = List.of(headerPolicy("headers", "X-Only", "v"));
 
-        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = true; // even with native capability, no CORS policy → no CORS filter
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
         assertFalse(httproute.contains("type: CORS"));
         assertFalse(httproute.contains("Access-Control-Allow-Origin"));
         assertFalse(httproute.contains("method: OPTIONS"),

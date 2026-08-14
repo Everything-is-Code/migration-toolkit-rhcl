@@ -1,4 +1,4 @@
-import React, { useState, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
@@ -49,7 +49,14 @@ import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import SupportedPoliciesPage from './pages/SupportedPoliciesPage';
 
-import { ConnectionRequest, ApiService, ConversionResultItem } from './api/types';
+import {
+  ConnectionRequest,
+  ApiService,
+  ConversionResultItem,
+  ClusterVersionsResponse,
+  ClusterProfile,
+} from './api/types';
+import { loadPersistedConnection, savePersistedConnection } from './utils/appStateStorage';
 
 /* ── Root-level Error Boundary ──
    Even if a page component crashes,
@@ -105,6 +112,10 @@ export interface AppState {
   selectedServices: ApiService[];
   conversionResults: ConversionResultItem[];
   namespace: string;
+  /** Resolved cluster versions + capabilities from GET /api/cluster/versions. */
+  clusterVersions: ClusterVersionsResponse | null;
+  /** Selected profile override (auto | ocp-4.19 | ocp-4.21). */
+  clusterProfile: ClusterProfile;
 }
 
 /* ── Language switcher tabs ── */
@@ -203,12 +214,31 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const [settingsExpanded, setSettingsExpanded] = useState(() => location.pathname.startsWith('/settings'));
 
-  const [appState, setAppState] = useState<AppState>({
-    connection: { url: '', accessToken: '', tenant: '', connected: false },
-    selectedServices: [],
-    conversionResults: [],
-    namespace: 'default',
+  const [appState, setAppState] = useState<AppState>(() => {
+    const persisted = loadPersistedConnection();
+    return {
+      connection: {
+        url: persisted?.connection?.url ?? '',
+        accessToken: persisted?.connection?.accessToken ?? '',
+        tenant: persisted?.connection?.tenant ?? '',
+        connected: Boolean(persisted?.connection?.connected),
+      },
+      selectedServices: [],
+      conversionResults: [],
+      namespace: persisted?.namespace || 'default',
+      clusterVersions: null,
+      clusterProfile: persisted?.clusterProfile || 'auto',
+    };
   });
+
+  // Keep 3scale connection across route changes / HMR remounts for this browser tab.
+  useEffect(() => {
+    savePersistedConnection({
+      connection: appState.connection,
+      namespace: appState.namespace,
+      clusterProfile: appState.clusterProfile,
+    });
+  }, [appState.connection, appState.namespace, appState.clusterProfile]);
 
   const workflowItems = [
     { path: '/',            label: t('nav.connection'),   icon: <PluggedIcon /> },

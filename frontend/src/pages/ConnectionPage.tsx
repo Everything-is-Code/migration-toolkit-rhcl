@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   PageSection,
   PageSectionVariants,
@@ -7,31 +7,61 @@ import {
   CardBody,
   Form,
   FormGroup,
-  FormHelperText,
-  HelperText,
-  HelperTextItem,
   TextInput,
-  InputGroup,
-  InputGroupItem,
-  ActionGroup,
   Button,
   Alert,
   AlertVariant,
   Spinner,
+  ActionGroup,
+  InputGroup,
+  InputGroupItem,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
   DescriptionList,
   DescriptionListGroup,
   DescriptionListTerm,
   DescriptionListDescription,
+  FormSelect,
+  FormSelectOption,
+  Label,
 } from '@patternfly/react-core';
-import { CheckCircleIcon, EyeIcon, EyeSlashIcon } from '@patternfly/react-icons';
+import { CheckCircleIcon, EyeIcon, EyeSlashIcon, SyncAltIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import { connectionApi, clusterApi, defaultsApi } from '../api/client';
+import { connectionApi, clusterApi, defaultsApi, settingsApi } from '../api/client';
+import { ClusterProfile, ClusterVersionsResponse } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import { clusterProfileI18nKey, shouldShowClusterVersionsCard } from './clusterCapabilityUi';
 
 interface Props {
   appState: AppState;
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;
+}
+
+const PROFILE_OPTIONS: ClusterProfile[] = ['auto', 'ocp-4.19', 'ocp-4.21'];
+
+/** PF v5 tokens — muted text / spacers used by versions-related UI (I8). */
+const PF_COLOR_MUTED = 'var(--pf-v5-global--Color--200)';
+const PF_SPACER_SM = 'var(--pf-v5-global--spacer--sm)';
+const PF_SPACER_MD = 'var(--pf-v5-global--spacer--md)';
+
+const displayOrDash = (value: string | null | undefined) =>
+  value && value.trim() ? value : '—';
+
+/** Narrow unknown catch values from axios / Error (I9). */
+function apiErrorMessage(e: unknown, fallback: string): string {
+  if (e && typeof e === 'object') {
+    const err = e as {
+      message?: string;
+      response?: { data?: { error?: string; message?: string } };
+    };
+    return err.response?.data?.error || err.response?.data?.message || err.message || fallback;
+  }
+  if (typeof e === 'string' && e.trim()) {
+    return e;
+  }
+  return fallback;
 }
 
 const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
@@ -43,12 +73,52 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [namespace, setNamespace] = useState(appState.namespace);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState(appState.connection.connected);
   const [showToken, setShowToken] = useState(false);
   const [fetchingDomain, setFetchingDomain] = useState(false);
   const [domainError, setDomainError] = useState<string | null>(null);
   const [clusterDomain, setClusterDomain] = useState<string | null>(null);
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [profileSaving, setProfileSaving] = useState(false);
+
+  // Re-sync local form when returning to this page with a saved connection.
+  useEffect(() => {
+    if (!appState.connection.connected) return;
+    setUrl(appState.connection.url);
+    setAccessToken(appState.connection.accessToken);
+    setTenant(appState.connection.tenant || '');
+    setNamespace(appState.namespace);
+    setSuccess(true);
+  }, [
+    appState.connection.connected,
+    appState.connection.url,
+    appState.connection.accessToken,
+    appState.connection.tenant,
+    appState.namespace,
+  ]);
+
+  const applyVersions = useCallback((versions: ClusterVersionsResponse) => {
+    setAppState(prev => ({
+      ...prev,
+      clusterVersions: versions,
+      clusterProfile: versions.profile || prev.clusterProfile,
+    }));
+  }, [setAppState]);
+
+  const loadVersions = useCallback(async (refresh = false) => {
+    setVersionsLoading(true);
+    setVersionsError(null);
+    try {
+      const res = await clusterApi.getVersions(refresh);
+      applyVersions(res.data);
+    } catch (e: unknown) {
+      setVersionsError(apiErrorMessage(e, 'Failed to load cluster versions'));
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, [applyVersions]);
 
   useEffect(() => {
     if (defaultsLoaded || appState.connection.connected) return;
@@ -61,6 +131,13 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     }).catch(() => {
       // Defaults endpoint unavailable — fields stay empty
     }).finally(() => setDefaultsLoaded(true));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Only load versions on mount when already connected from a previous session
+  useEffect(() => {
+    if (appState.connection.connected) {
+      loadVersions(false);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buildUrlFromNamespace = (ns: string, domain: string) =>
@@ -90,8 +167,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       } else {
         setDomainError(t('connection.domainNotFound'));
       }
-    } catch (e: any) {
-      const detail = e?.response?.data?.error || e?.message || '';
+    } catch (e: unknown) {
+      const detail = apiErrorMessage(e, '');
       setDomainError(`${t('connection.domainError')}: ${detail}`);
     } finally {
       setFetchingDomain(false);
@@ -110,8 +187,10 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
         connection: { url, accessToken, tenant, connected: true },
         namespace,
       }));
-    } catch (e: any) {
-      setError(e.response?.data?.message || t('connection.errorDefault'));
+      // Refresh cluster versions on reconnect
+      await loadVersions(true);
+    } catch (e: unknown) {
+      setError(apiErrorMessage(e, t('connection.errorDefault')));
       setAppState(prev => ({
         ...prev,
         connection: { url, accessToken, tenant, connected: false },
@@ -121,11 +200,34 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     }
   };
 
+  const handleProfileChange = async (_e: React.FormEvent, value: string) => {
+    const profile = value as ClusterProfile;
+    setProfileSaving(true);
+    setVersionsError(null);
+    try {
+      await settingsApi.put('clusterProfile', profile);
+      setAppState(prev => ({ ...prev, clusterProfile: profile }));
+      await loadVersions(true);
+    } catch (e: unknown) {
+      setVersionsError(apiErrorMessage(e, t('connection.profileSaveError')));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const versions = appState.clusterVersions;
+  const sourceLabelKey =
+    versions?.source === 'profile'
+      ? 'connection.sourceProfile'
+      : versions?.source === 'default'
+        ? 'connection.sourceDefault'
+        : 'connection.sourceDetected';
+
   return (
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('connection.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+        <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED }}>
           {t('connection.description')}
         </p>
       </PageSection>
@@ -256,13 +358,126 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
             </Form>
           </CardBody>
         </Card>
+
+        {shouldShowClusterVersionsCard(appState.connection.connected) && (
+          <Card style={{ marginTop: PF_SPACER_MD }}>
+            <CardBody>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: PF_SPACER_SM }}>
+                <Title headingLevel="h3" size="lg">
+                  {t('connection.versionsTitle')}
+                </Title>
+                <Button
+                  variant="secondary"
+                  onClick={() => loadVersions(true)}
+                  isDisabled={versionsLoading || profileSaving}
+                  icon={<SyncAltIcon />}
+                >
+                  {versionsLoading ? t('connection.versionsRefreshing') : t('connection.btnRefreshVersions')}
+                </Button>
+              </div>
+              <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: '0.9rem' }}>
+                {t('connection.versionsDescription')}
+              </p>
+
+              {versionsError && (
+                <Alert variant="warning" isInline title={versionsError} style={{ marginTop: PF_SPACER_SM }} />
+              )}
+
+              <FormGroup
+                label={t('connection.labelProfile')}
+                fieldId="cluster-profile"
+                style={{ marginTop: PF_SPACER_MD, maxWidth: 360 }}
+              >
+                <FormSelect
+                  id="cluster-profile"
+                  value={appState.clusterProfile}
+                  onChange={handleProfileChange}
+                  isDisabled={profileSaving || versionsLoading}
+                  aria-label={t('connection.labelProfile')}
+                >
+                  {PROFILE_OPTIONS.map(opt => (
+                    <FormSelectOption
+                      key={opt}
+                      value={opt}
+                      label={t(clusterProfileI18nKey(opt))}
+                    />
+                  ))}
+                </FormSelect>
+                <FormHelperText>
+                  <HelperText>
+                    <HelperTextItem>{t('connection.profileHelper')}</HelperTextItem>
+                  </HelperText>
+                </FormHelperText>
+              </FormGroup>
+
+              {versionsLoading && !versions ? (
+                <div style={{ textAlign: 'center', padding: PF_SPACER_MD }}>
+                  <Spinner size="md" /> {t('connection.versionsLoading')}
+                </div>
+              ) : versions ? (
+                <>
+                  <div style={{ marginTop: PF_SPACER_MD, display: 'flex', alignItems: 'center', gap: PF_SPACER_SM, flexWrap: 'wrap' }}>
+                    <Label color={versions.source === 'detected' ? 'green' : versions.source === 'profile' ? 'blue' : 'orange'}>
+                      {t(sourceLabelKey)}
+                    </Label>
+                    {versions.capabilities?.corsNative ? (
+                      <Label color="green">{t('connection.capCorsNative')}</Label>
+                    ) : (
+                      <Label color="orange">{t('connection.capCorsFallback')}</Label>
+                    )}
+                  </div>
+                  <DescriptionList style={{ marginTop: PF_SPACER_MD }} isHorizontal>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelOcp')}</DescriptionListTerm>
+                      <DescriptionListDescription>{displayOrDash(versions.ocp)}</DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelGatewayApi')}</DescriptionListTerm>
+                      <DescriptionListDescription>{displayOrDash(versions.gatewayApi)}</DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelKuadrant')}</DescriptionListTerm>
+                      <DescriptionListDescription>{displayOrDash(versions.kuadrant)}</DescriptionListDescription>
+                    </DescriptionListGroup>
+                    <DescriptionListGroup>
+                      <DescriptionListTerm>{t('connection.labelOssm')}</DescriptionListTerm>
+                      <DescriptionListDescription>
+                        {displayOrDash(versions.ossm)}
+                        {versions.ossmExpectedForOcp && (
+                          <span style={{ marginLeft: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: '0.85rem' }}>
+                            ({t('connection.ossmExpected', { version: versions.ossmExpectedForOcp })})
+                          </span>
+                        )}
+                      </DescriptionListDescription>
+                    </DescriptionListGroup>
+                  </DescriptionList>
+                  {versions.errors && versions.errors.length > 0 && (
+                    <Alert
+                      variant="info"
+                      isInline
+                      title={t('connection.versionsSoftFail')}
+                      style={{ marginTop: PF_SPACER_MD }}
+                    >
+                      <ul style={{ margin: 0, paddingLeft: 18 }}>
+                        {versions.errors.map((err, i) => (
+                          <li key={i}>{err}</li>
+                        ))}
+                      </ul>
+                    </Alert>
+                  )}
+                </>
+              ) : null}
+            </CardBody>
+          </Card>
+        )}
+
         {appState.connection.connected && (
-          <Card style={{ marginTop: '16px' }}>
+          <Card style={{ marginTop: PF_SPACER_MD }}>
             <CardBody>
               <Title headingLevel="h3" size="lg">
                 <CheckCircleIcon color="green" /> {t('connection.infoTitle')}
               </Title>
-              <DescriptionList style={{ marginTop: '16px' }}>
+              <DescriptionList style={{ marginTop: PF_SPACER_MD }}>
                 <DescriptionListGroup>
                   <DescriptionListTerm>3scale URL</DescriptionListTerm>
                   <DescriptionListDescription>{appState.connection.url}</DescriptionListDescription>

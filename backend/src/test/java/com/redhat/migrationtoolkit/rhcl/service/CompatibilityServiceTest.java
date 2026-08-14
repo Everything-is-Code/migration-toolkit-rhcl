@@ -1,8 +1,10 @@
 package com.redhat.migrationtoolkit.rhcl.service;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
+import com.redhat.migrationtoolkit.rhcl.model.CompatibilityItem;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
@@ -447,6 +449,139 @@ class CompatibilityServiceTest {
         CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertNotNull(result.level);
         assertTrue(result.score >= 0 && result.score <= 100);
+    }
+
+    // ── Version / capability-aware warnings (WU2) ─────────────────────────────
+
+    @Test
+    void check_corsWithoutNativeCapability_warnsFallback() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.corsNative = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("CORS Request Handling"), caps);
+        CompatibilityItem cors = result.items.stream()
+                .filter(i -> i.name != null && i.name.contains("CORS"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", cors.status);
+        assertTrue(cors.message.toLowerCase().contains("fallback")
+                || cors.message.contains("ResponseHeaderModifier"));
+        assertEquals("corsNative", cors.capability);
+        assertNotNull(cors.requiredVersion);
+        assertTrue(cors.requiredVersion.contains("1.3") || cors.requiredVersion.contains("4.21"));
+    }
+
+    /**
+     * I7: capability-tagged CORS fallback WARNING must not require CORS in supportedPolicies.
+     * Without native CORS, enabled cors always gets the fallback hint (capability + requiredVersion).
+     */
+    @Test
+    void check_corsWithoutNativeCapability_warnsFallback_evenWhenNotInSupportedPolicies() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.corsNative = false;
+        caps.timeoutsSupported = true;
+
+        // Custom list intentionally omits CORS — fallback warning must still fire with capability tags.
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"), caps);
+        CompatibilityItem cors = result.items.stream()
+                .filter(i -> i.name != null && i.name.contains("CORS"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", cors.status);
+        assertTrue(cors.message.toLowerCase().contains("fallback")
+                || cors.message.contains("ResponseHeaderModifier"),
+                "Expected native-missing fallback message, not generic unsupported-list warning");
+        assertEquals("corsNative", cors.capability);
+        assertNotNull(cors.requiredVersion);
+        assertTrue(cors.requiredVersion.contains("1.3") || cors.requiredVersion.contains("4.21"));
+    }
+
+    @Test
+    void check_corsWithNativeCapability_supported() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.corsNative = true;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("CORS Request Handling"), caps);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && i.name.contains("CORS")));
+        assertTrue(result.items.stream().noneMatch(i -> "WARNING".equals(i.status)
+                && i.name.contains("CORS")
+                && i.capability != null));
+    }
+
+    @Test
+    void check_missingKuadrant_warnsWithoutBlocking() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.kuadrantPresent = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("Edge Limiting"), caps);
+        CompatibilityItem kuadrant = result.items.stream()
+                .filter(i -> "kuadrantPresent".equals(i.capability))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", kuadrant.status);
+        assertNotNull(kuadrant.requiredVersion);
+        // Still not blocking: score/level remain computable and conversion allowed
+        assertNotNull(result.level);
+        assertTrue(result.score >= 0);
+    }
+
+    @Test
+    void check_kuadrantPresent_noKuadrantWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.kuadrantPresent = true;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("Edge Limiting"), caps);
+        assertTrue(result.items.stream().noneMatch(i -> "kuadrantPresent".equals(i.capability)));
+    }
+
+    @Test
+    void check_ossmMismatch_warns() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.ossmPresent = true;
+        caps.ossmMatchesOcp = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES, caps);
+        CompatibilityItem ossm = result.items.stream()
+                .filter(i -> "ossmMatchesOcp".equals(i.capability))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", ossm.status);
+        assertNotNull(ossm.message);
+    }
+
+    @Test
+    void check_nullCapabilities_preservesLegacyBehavior() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        CompatibilityResult legacy = service.check(svc, Set.of("CORS Request Handling"));
+        CompatibilityResult withNull = service.check(svc, Set.of("CORS Request Handling"), null);
+        assertEquals(legacy.score, withNull.score);
+        assertTrue(withNull.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && i.name.contains("CORS")));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -1,11 +1,14 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionRequest;
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
 import com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
+import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
 import com.redhat.migrationtoolkit.rhcl.service.CompatibilityService;
 import com.redhat.migrationtoolkit.rhcl.service.ConversionService;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
@@ -47,6 +50,9 @@ public class ConversionController {
     @Inject
     ValidationService validationService;
 
+    @Inject
+    ClusterVersionService clusterVersionService;
+
     @POST
     @Transactional
     @Operation(summary = "Convert selected 3scale services")
@@ -59,6 +65,8 @@ public class ConversionController {
         project.tenant = request.tenant;
         project.persist();
 
+        ClusterCapabilities caps = resolveCapabilities();
+
         List<Map<String, Object>> results = new ArrayList<>();
 
         for (String serviceId : request.serviceIds) {
@@ -68,13 +76,15 @@ public class ConversionController {
                 Set<String> supportedPolicies = (request.supportedPolicies != null)
                         ? new HashSet<>(request.supportedPolicies)
                         : Set.of();
-                CompatibilityResult compatibility = compatibilityService.check(service, supportedPolicies);
+                CompatibilityResult compatibility = compatibilityService.check(
+                        service, supportedPolicies, caps);
                 ConversionOptions opts = new ConversionOptions();
                 opts.loggingTarget = "workload".equals(request.loggingTarget) ? "workload" : "gateway";
                 opts.anonymousTarget = "gateway".equals(request.anonymousTarget) ? "gateway" : "httproute";
                 opts.includeMigratedFromLabel = !Boolean.FALSE.equals(request.includeMigratedFromLabel);
                 opts.ipCheckMode = "authPolicyOpa".equals(request.ipCheckMode)
                         ? "authPolicyOpa" : "authorizationPolicy";
+                opts.corsNative = caps != null && caps.corsNative;
                 Map<String, String> yamlFiles = conversionService.convert(
                         service, namespace, request.externalBackendUrl, opts);
 
@@ -120,5 +130,10 @@ public class ConversionController {
                 "projectId", project.id,
                 "results", results
         )).build();
+    }
+
+    private ClusterCapabilities resolveCapabilities() {
+        ClusterVersionsResponse versions = clusterVersionService.resolveFromSettings(false);
+        return versions != null ? versions.capabilities : null;
     }
 }

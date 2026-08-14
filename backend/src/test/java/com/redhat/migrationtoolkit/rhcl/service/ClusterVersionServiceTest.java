@@ -63,6 +63,7 @@ class ClusterVersionServiceTest {
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
         assertTrue(response.capabilities.timeoutsSupported);
+        assertSoftFailOssmNullButExpected(response);
         assertNotNull(response.errors);
         assertFalse(response.errors.isEmpty());
         assertErrorsContainNoSecrets(response.errors);
@@ -79,6 +80,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.ocp.startsWith("4.19"));
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
+        assertSoftFailOssmNullButExpected(response);
         assertErrorsContainNoSecrets(response.errors);
     }
 
@@ -107,6 +109,19 @@ class ClusterVersionServiceTest {
         assertTrue(response.ocp.startsWith("4.19"));
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
+        assertSoftFailOssmNullButExpected(response);
+    }
+
+    @Test
+    void softFailDefault_ossmNullAndNotPresent_whileExpectedKept() {
+        ClusterVersionService offline = new ClusterVersionService(null);
+        ClusterVersionsResponse response = offline.resolve("auto", true);
+
+        assertEquals("default", response.source);
+        assertNull(response.ossm);
+        assertFalse(response.capabilities.ossmPresent);
+        assertEquals("2.6", response.ossmExpectedForOcp);
+        assertFalse(response.capabilities.ossmMatchesOcp);
     }
 
     // ── 1.2 Missing SMCP RBAC still resolves via CSV or OCP→OSSM map ─────────
@@ -127,6 +142,10 @@ class ClusterVersionServiceTest {
         assertFalse(response.ossm.toLowerCase().contains("istio"));
         assertTrue(response.capabilities.ossmPresent);
         assertEquals("2.6", response.ossmExpectedForOcp);
+        assertTrue(response.capabilities.ossmMatchesOcp);
+        // CSV already supplied OSSM — SMCP must not be consulted / must not warn
+        assertTrue(response.errors == null || response.errors.stream()
+                .noneMatch(e -> e.toLowerCase().contains("smcp")));
     }
 
     @Test
@@ -171,7 +190,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.ossmExpectedForOcp.startsWith("3."));
     }
 
-    // ── Cache refresh ────────────────────────────────────────────────────────
+    // ── Cache refresh + TTL ──────────────────────────────────────────────────
 
     @Test
     void resolve_refreshFalse_returnsCachedResult() {
@@ -194,6 +213,66 @@ class ClusterVersionServiceTest {
 
         assertNotSame(first, second);
         assertEquals(first.source, second.source);
+    }
+
+    @Test
+    void resolve_withinTtl_returnsCachedResult() {
+        when(client.genericKubernetesResources(any(ResourceDefinitionContext.class)))
+                .thenThrow(new KubernetesClientException("Forbidden", HttpURLConnection.HTTP_FORBIDDEN, null));
+
+        MutableClockService clocked = new MutableClockService(client, 1_000_000L);
+        ClusterVersionsResponse first = clocked.resolve("auto", true);
+        clocked.now = 1_000_000L + (4 * 60 * 1000L); // still within 5m
+        ClusterVersionsResponse second = clocked.resolve("auto", false);
+
+        assertSame(first, second);
+    }
+
+    @Test
+    void resolve_afterTtlExpires_reResolves() {
+        when(client.genericKubernetesResources(any(ResourceDefinitionContext.class)))
+                .thenThrow(new KubernetesClientException("Forbidden", HttpURLConnection.HTTP_FORBIDDEN, null));
+
+        MutableClockService clocked = new MutableClockService(client, 1_000_000L);
+        ClusterVersionsResponse first = clocked.resolve("auto", true);
+        clocked.now = 1_000_000L + (5 * 60 * 1000L); // exactly at TTL boundary → stale
+        ClusterVersionsResponse second = clocked.resolve("auto", false);
+
+        assertNotSame(first, second);
+        assertEquals(first.source, second.source);
+    }
+
+    @Test
+    void resolve_refreshTrue_bypassesEvenWithinTtl() {
+        when(client.genericKubernetesResources(any(ResourceDefinitionContext.class)))
+                .thenThrow(new KubernetesClientException("Forbidden", HttpURLConnection.HTTP_FORBIDDEN, null));
+
+        MutableClockService clocked = new MutableClockService(client, 1_000_000L);
+        ClusterVersionsResponse first = clocked.resolve("auto", true);
+        clocked.now = 1_000_000L + 1_000L;
+        ClusterVersionsResponse second = clocked.resolve("auto", true);
+
+        assertNotSame(first, second);
+    }
+
+    // ── CSV listed once per detect ───────────────────────────────────────────
+
+    @Test
+    void resolve_listsClusterServiceVersionsOnce() {
+        stubCluster(
+                "4.19.3",
+                "1.2.1",
+                csv("kuadrant-operator.v1.4.0", "1.4.0"),
+                csv("servicemeshoperator.v2.6.5", "2.6.5"),
+                SmcpMode.EMPTY);
+
+        ClusterVersionsResponse response = service.resolve("auto", true);
+
+        assertEquals("detected", response.source);
+        assertEquals("1.4.0", response.kuadrant);
+        assertEquals("2.6.5", response.ossm);
+        verify(client, times(1)).genericKubernetesResources(argThat(
+                ctx -> ctx != null && "clusterserviceversions".equals(ctx.getPlural())));
     }
 
     // ── OSSM mapping ─────────────────────────────────────────────────────────
@@ -263,6 +342,16 @@ class ClusterVersionServiceTest {
         assertTrue(high.kuadrantPresent);
         assertTrue(high.ossmPresent);
         assertTrue(high.ossmMatchesOcp);
+
+        // OSSM newer than the OCP minimum (e.g. 3.4.1 vs expected 3.0) still matches
+        ClusterCapabilities newer = ClusterVersionService.capabilitiesFrom(
+                "4.21.27", "1.3.0", "1.4.2", "3.4.1", "3.0");
+        assertTrue(newer.ossmMatchesOcp);
+
+        // Below the minimum does not match
+        ClusterCapabilities older = ClusterVersionService.capabilitiesFrom(
+                "4.21.0", "1.3.0", "1.4.0", "2.6.5", "3.0");
+        assertFalse(older.ossmMatchesOcp);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -421,5 +510,99 @@ class ClusterVersionServiceTest {
         csv.setMetadata(meta);
         csv.setAdditionalProperty("spec", Map.of("version", version));
         return csv;
+    }
+
+    private static void assertSoftFailOssmNullButExpected(ClusterVersionsResponse response) {
+        assertNull(response.ossm, "soft-fail must not present expected OSSM as detected");
+        assertFalse(response.capabilities.ossmPresent);
+        assertNotNull(response.ossmExpectedForOcp);
+        assertEquals("2.6", response.ossmExpectedForOcp);
+        assertFalse(response.capabilities.ossmMatchesOcp);
+    }
+
+    // ── WU2: resolveFromSettings (I4/I5/S1/I6) ────────────────────────────────
+
+    @Test
+    void resolveFromSettings_usesProfileFromReadClusterProfile() {
+        ClusterVersionService withSettings = new SettingsProfileService(
+                null, ClusterVersionService.PROFILE_OCP_419);
+
+        ClusterVersionsResponse response = withSettings.resolveFromSettings(true);
+
+        assertEquals(ClusterVersionService.PROFILE_OCP_419, response.profile);
+        assertEquals("profile", response.source);
+        assertTrue(response.ocp.startsWith("4.19"));
+    }
+
+    @Test
+    void resolveFromSettings_whenReadFails_fallsBackToAuto() {
+        ClusterVersionService failing = new SettingsProfileService(null, null) {
+            @Override
+            protected String readClusterProfile() {
+                throw new RuntimeException("Panache unavailable");
+            }
+        };
+
+        ClusterVersionsResponse response = failing.resolveFromSettings(true);
+
+        assertEquals(ClusterVersionService.PROFILE_AUTO, response.profile);
+        assertEquals("default", response.source);
+        assertSoftFailOssmNullButExpected(response);
+    }
+
+    @Test
+    void resolveFromSettings_blankSettings_usesAuto() {
+        ClusterVersionService blank = new SettingsProfileService(null, "   ");
+
+        ClusterVersionsResponse response = blank.resolveFromSettings(true);
+
+        assertEquals(ClusterVersionService.PROFILE_AUTO, response.profile);
+        assertEquals("default", response.source);
+    }
+
+    @Test
+    void resolveFromSettings_ocp421_wiresCapabilities() {
+        ClusterVersionService withSettings = new SettingsProfileService(
+                null, ClusterVersionService.PROFILE_OCP_421);
+
+        ClusterVersionsResponse response = withSettings.resolveFromSettings(false);
+
+        assertEquals(ClusterVersionService.PROFILE_OCP_421, response.profile);
+        assertEquals("profile", response.source);
+        assertTrue(response.ocp.startsWith("4.21"));
+        assertTrue(response.capabilities.corsNative);
+    }
+
+    /** Test double with injectable clock for TTL assertions. */
+    private static final class MutableClockService extends ClusterVersionService {
+        long now;
+
+        MutableClockService(KubernetesClient client, long nowMs) {
+            super(client);
+            this.now = nowMs;
+        }
+
+        @Override
+        protected long nowMs() {
+            return now;
+        }
+    }
+
+    /** Test double with overridable settings profile (avoids Panache). */
+    private static class SettingsProfileService extends ClusterVersionService {
+        private final String profileValue;
+
+        SettingsProfileService(KubernetesClient client, String profileValue) {
+            super(client);
+            this.profileValue = profileValue;
+        }
+
+        @Override
+        protected String readClusterProfile() {
+            if (profileValue == null || profileValue.isBlank()) {
+                return PROFILE_AUTO;
+            }
+            return profileValue.trim();
+        }
     }
 }

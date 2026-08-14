@@ -58,6 +58,38 @@ export interface CompatibilityItem {
   name: string;
   status: 'SUPPORTED' | 'WARNING' | 'UNSUPPORTED';
   message: string;
+  /** Optional capability flag id (e.g. corsNative, kuadrantPresent). */
+  capability?: string;
+  /** Optional human-readable version requirement when a capability is missing. */
+  requiredVersion?: string;
+}
+
+/** Capability flags from GET /api/cluster/versions. */
+export interface ClusterCapabilities {
+  corsNative: boolean;
+  kuadrantPresent: boolean;
+  ossmPresent: boolean;
+  ossmMatchesOcp: boolean;
+  timeoutsSupported: boolean;
+}
+
+/** Profile override for cluster version resolution. */
+export type ClusterProfile = 'auto' | 'ocp-4.19' | 'ocp-4.21';
+
+/** Version resolution source. */
+export type ClusterVersionsSource = 'detected' | 'profile' | 'default';
+
+/** Response for GET /api/cluster/versions. */
+export interface ClusterVersionsResponse {
+  ocp: string;
+  gatewayApi: string;
+  kuadrant: string | null;
+  ossm: string | null;
+  ossmExpectedForOcp: string | null;
+  capabilities: ClusterCapabilities;
+  source: ClusterVersionsSource;
+  profile: ClusterProfile;
+  errors?: string[];
 }
 
 export interface CompatibilityResult {

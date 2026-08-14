@@ -1,5 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.service;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityItem;
@@ -18,6 +19,10 @@ public class CompatibilityService {
     private static final int SCORE_SUPPORTED = 20;
     private static final int SCORE_WARNING = 10;
     private static final int SCORE_UNSUPPORTED = 0;
+
+    private static final String REQUIRED_CORS_NATIVE = "Gateway API ≥ 1.3 or OCP ≥ 4.21";
+    private static final String REQUIRED_KUADRANT = "Kuadrant / RHCL operator";
+    private static final String REQUIRED_OSSM_MATCH = "OSSM version matching OCP↔OSSM matrix";
 
     // Mapping from 3scale policy system name → display name shown in the UI
     private static final Map<String, String> POLICY_DISPLAY_NAMES = Map.ofEntries(
@@ -60,16 +65,32 @@ public class CompatibilityService {
         Map.entry("url_rewriting_captures",     "URL Rewriting with Captures")
     );
 
+    /** Policies / auth that typically emit Kuadrant AuthPolicy or RateLimitPolicy resources. */
+    private static final Set<String> KUADRANT_BOUND_POLICIES = Set.of(
+            "edge_limiting",
+            "token_introspection",
+            "anonymous_access",
+            "default_credentials",
+            "jwt_claim_check",
+            "rate_limit_headers"
+    );
+
     public CompatibilityResult check(ApiService service, Set<String> supportedPolicies) {
+        return check(service, supportedPolicies, null);
+    }
+
+    public CompatibilityResult check(ApiService service, Set<String> supportedPolicies,
+                                     ClusterCapabilities capabilities) {
         CompatibilityResult result = new CompatibilityResult();
         result.serviceId = service.id;
         result.serviceName = service.name;
         result.items = new ArrayList<>();
 
         checkAuthentication(service, result.items);
-        checkPolicies(service, result.items, supportedPolicies);
+        checkPolicies(service, result.items, supportedPolicies, capabilities);
         checkMappingRules(service, result.items);
         checkBackend(service, result.items);
+        checkCapabilityWarnings(service, result.items, capabilities);
 
         result.score = calculateScore(result.items);
         result.level = scoreToLevel(result.score);
@@ -99,7 +120,8 @@ public class CompatibilityService {
         }
     }
 
-    private void checkPolicies(ApiService service, List<CompatibilityItem> items, Set<String> supportedPolicies) {
+    private void checkPolicies(ApiService service, List<CompatibilityItem> items,
+                               Set<String> supportedPolicies, ClusterCapabilities capabilities) {
         if (service.policies == null || service.policies.isEmpty()) {
             return;
         }
@@ -120,6 +142,17 @@ public class CompatibilityService {
                 continue;
             }
 
+            // I7: capability-tagged fallback must not depend on supportedPolicies membership.
+            if ("cors".equals(systemName) && capabilities != null && !capabilities.corsNative) {
+                items.add(new CompatibilityItem(
+                        displayName,
+                        "WARNING",
+                        "Native Gateway API CORS filter unavailable; ResponseHeaderModifier + OPTIONS fallback will be used",
+                        "corsNative",
+                        REQUIRED_CORS_NATIVE));
+                continue;
+            }
+
             if (supportedPolicies.contains(displayName)) {
                 items.add(new CompatibilityItem(displayName, "SUPPORTED",
                         "Policy is in the supported policy list"));
@@ -128,6 +161,47 @@ public class CompatibilityService {
                         "Policy is not in the supported policy list — manual review required"));
             }
         }
+    }
+
+    private void checkCapabilityWarnings(ApiService service, List<CompatibilityItem> items,
+                                         ClusterCapabilities capabilities) {
+        if (capabilities == null) {
+            return;
+        }
+
+        if (!capabilities.kuadrantPresent && needsKuadrant(service)) {
+            items.add(new CompatibilityItem(
+                    "Kuadrant / RHCL",
+                    "WARNING",
+                    "Kuadrant/RHCL operator not detected; AuthPolicy/RateLimitPolicy features may be unavailable — conversion is still allowed",
+                    "kuadrantPresent",
+                    REQUIRED_KUADRANT));
+        }
+
+        if (capabilities.ossmPresent && !capabilities.ossmMatchesOcp) {
+            items.add(new CompatibilityItem(
+                    "OpenShift Service Mesh",
+                    "WARNING",
+                    "Detected OSSM version does not match the expected OSSM version for the resolved OCP",
+                    "ossmMatchesOcp",
+                    REQUIRED_OSSM_MATCH));
+        }
+    }
+
+    private boolean needsKuadrant(ApiService service) {
+        if (service.authentication != null) {
+            String type = service.authentication.type;
+            if ("jwt".equals(type) || "apiKey".equals(type) || "appIdKey".equals(type)) {
+                return true;
+            }
+        }
+        if (service.policies == null) {
+            return false;
+        }
+        return service.policies.stream()
+                .filter(p -> !Boolean.FALSE.equals(p.enabled))
+                .map(p -> p.name != null ? p.name.toLowerCase() : "")
+                .anyMatch(KUADRANT_BOUND_POLICIES::contains);
     }
 
     private boolean hasJsonObjectConfig(Policy policy) {

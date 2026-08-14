@@ -1,7 +1,10 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
+import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
 import com.redhat.migrationtoolkit.rhcl.service.CompatibilityService;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import jakarta.inject.Inject;
@@ -36,8 +39,11 @@ public class ExportController {
     @Inject
     CompatibilityService compatibilityService;
 
+    @Inject
+    ClusterVersionService clusterVersionService;
+
     @GET
-    @Operation(summary = "Get all services from 3scale")
+    @Operation(summary = "List services (summary for selection UI)")
     public Response getServices(@QueryParam("url") String url,
                                  @HeaderParam("Authorization") String authorization) {
         String accessToken = extractBearerToken(authorization);
@@ -46,7 +52,7 @@ public class ExportController {
                     .entity("url query parameter and Authorization Bearer token are required")
                     .build();
         }
-        List<ApiService> services = exportService.exportServices(url, accessToken);
+        List<ApiService> services = exportService.listServices(url, accessToken);
         return Response.ok(services).build();
     }
 
@@ -84,8 +90,14 @@ public class ExportController {
         if (supportedPoliciesParam != null && !supportedPoliciesParam.isBlank()) {
             supportedPolicies.addAll(Arrays.asList(supportedPoliciesParam.split("\\|")));
         }
-        CompatibilityResult result = compatibilityService.check(service, supportedPolicies);
+        CompatibilityResult result = compatibilityService.check(
+                service, supportedPolicies, resolveCapabilities());
         return Response.ok(result).build();
+    }
+
+    private ClusterCapabilities resolveCapabilities() {
+        ClusterVersionsResponse versions = clusterVersionService.resolveFromSettings(false);
+        return versions != null ? versions.capabilities : null;
     }
 
     /**

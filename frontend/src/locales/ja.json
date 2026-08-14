@@ -47,7 +47,32 @@
     "errorDefault": "接続に失敗しました。URLとアクセストークンを確認してください。",
     "btnFetchDomain": "URLを自動取得",
     "domainNotFound": "クラスタードメインを取得できませんでした",
-    "domainError": "クラスタードメインの取得に失敗しました — クラスター接続を確認してください"
+    "domainError": "クラスタードメインの取得に失敗しました — クラスター接続を確認してください",
+    "versionsTitle": "クラスターバージョンと機能",
+    "versionsDescription": "変換の機能判定に使用する OpenShift、Gateway API、Kuadrant/RHCL、OSSM のバージョンです。OSSM は解決済みの OCP バージョンに紐づきます。",
+    "versionsLoading": "クラスターバージョンを読み込み中...",
+    "versionsRefreshing": "更新中...",
+    "btnRefreshVersions": "バージョンを更新",
+    "versionsError": "クラスターバージョンの取得に失敗しました",
+    "versionsSoftFail": "検出メモ（変換は利用可能です）",
+    "labelProfile": "クラスタープロファイル上書き",
+    "profileHelper": "任意。ライブ検出を上書きして機能判定（CORS ネイティブ / フォールバック）を切り替えます。",
+    "profileSaveError": "クラスタープロファイルの保存に失敗しました",
+    "profile": {
+      "auto": "自動（クラスターから検出）",
+      "ocp419": "OCP 4.19 / Gateway API 1.2.1",
+      "ocp421": "OCP 4.21 / Gateway API ≥ 1.3"
+    },
+    "sourceDetected": "ソース: 検出",
+    "sourceProfile": "ソース: プロファイル上書き",
+    "sourceDefault": "ソース: デフォルト（ソフトフェイル）",
+    "labelOcp": "OpenShift (OCP)",
+    "labelGatewayApi": "Gateway API",
+    "labelKuadrant": "Kuadrant / RHCL",
+    "labelOssm": "OpenShift Service Mesh (OSSM)",
+    "ossmExpected": "OCP 向け期待値: {{version}}",
+    "capCorsNative": "CORS: ネイティブフィルター",
+    "capCorsFallback": "CORS: ResponseHeaderModifier フォールバック"
   },
   "apiSelection": {
     "title": "API一覧",
@@ -63,6 +88,11 @@
     "emptyTitle": "APIが見つかりません",
     "emptyBody": "3scaleにAPIが登録されていないか、検索条件に一致するAPIがありません。",
     "ariaLabel": "API一覧",
+    "colName": "API",
+    "colState": "状態",
+    "colAuth": "認証",
+    "colPolicies": "ポリシー",
+    "colBackends": "バックエンド",
     "backendCount": "バックエンド: {{count}}",
     "btnBack": "戻る",
     "btnNext": "次へ: 互換性チェック",
@@ -80,7 +110,9 @@
     "btnRecheck": "再チェック",
     "btnNext": "次へ: YAML生成",
     "btnGenerateYaml": "YAML生成",
-    "errorCheck": "互換性チェックに失敗しました"
+    "errorCheck": "互換性チェックに失敗しました",
+    "capability": "機能: {{capability}}",
+    "requiredVersion": "必要: {{version}}"
   },
   "conversion": {
     "title": "YAML生成",
@@ -120,7 +152,9 @@
     "anonymousTargetGateway": "Gateway",
     "anonymousTargetGatewayDesc": "targetRef.kind: Gateway — Gateway 経由の全ルートに適用",
     "anonymousTargetHttpRoute": "HTTPRoute（推奨）",
-    "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — 特定ルートのみに適用"
+    "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — 特定ルートのみに適用",
+    "corsFallbackHint": "このクラスタープロファイルではネイティブ Gateway API CORS が利用できません。CORS ポリシーは ResponseHeaderModifier の Access-Control-* ヘッダーと OPTIONS マッチで出力されます。",
+    "corsNativeHint": "このクラスタープロファイルでは CORS ポリシーにネイティブ Gateway API CORS フィルター（type: CORS）が使用されます。"
   },
   "yamlViewer": {
     "title": "YAML プレビュー",
@@ -131,7 +165,8 @@
     "btnNext": "次へ: バリデーション",
     "btnReset": "変更をリセット",
     "btnEdit": "編集",
-    "btnViewMode": "表示に戻る"
+    "btnViewMode": "表示に戻る",
+    "previewWithLineNumbers": "行番号付きYAMLプレビュー"
   },
   "validation": {
     "title": "バリデーション",

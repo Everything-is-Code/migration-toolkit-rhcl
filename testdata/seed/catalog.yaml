@@ -1,0 +1,144 @@
+# RHCL migration toolkit — 3scale lab seed catalog
+# One product + one backend + one focused policy (or auth mode) per conversion case.
+# Consumed by: threescale-seed --fixtures <this-file>
+# Tool: https://github.com/Everything-is-Code/3scaleextract (threescale-seed)
+
+account:
+  org_name: RHCL Migration Seed Org
+  username: rhcl_seed_user
+  email: rhcl-seed@example.com
+  password: RhclSeedPass123!
+
+backends:
+  - system_name: rhcl_seed_upstream
+    name: RHCL Seed Upstream
+    private_endpoint: "https://httpbin.org:443"
+    description: Shared dummy upstream for single-backend RHCL conversion cases
+
+products:
+  # ── CORS → ResponseHeaderModifier / native type:CORS (capability-gated) ──
+  - system_name: rhcl_seed_cors
+    name: RHCL Seed CORS
+    description: Single policy cors for Gateway API CORS conversion
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [cors]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-cors-app
+        plan: basic
+    coverage:
+      - "policy: cors"
+      - "conversion: ResponseHeaderModifier or type:CORS"
+
+  # ── headers / header_modification → HTTPRoute HeaderModifier ──
+  - system_name: rhcl_seed_headers
+    name: RHCL Seed Headers
+    description: Single policy headers (request/response header modification)
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [headers]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-headers-app
+        plan: basic
+    coverage:
+      - "policy: headers"
+      - "conversion: RequestHeaderModifier / ResponseHeaderModifier"
+
+  - system_name: rhcl_seed_header_modification
+    name: RHCL Seed Header Modification Alias
+    description: Alias header_modification (same converter as headers)
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [header_modification]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-header-mod-app
+        plan: basic
+    coverage:
+      - "policy: header_modification"
+      - "conversion: same as headers"
+
+  # ── ip_check → AuthorizationPolicy / AuthPolicy OPA ──
+  - system_name: rhcl_seed_ip_check
+    name: RHCL Seed IP Check
+    description: Single policy ip_check for dual-mode IP allowlist conversion
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [ip_check]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-ip-check-app
+        plan: basic
+    coverage:
+      - "policy: ip_check"
+      - "conversion: AuthorizationPolicy or AuthPolicy OPA"
+
+  # ── edge_limiting → RateLimitPolicy ──
+  - system_name: rhcl_seed_edge_limiting
+    name: RHCL Seed Edge Limiting
+    description: Single policy edge_limiting for RateLimitPolicy conversion
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [edge_limiting]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 500
+    applications:
+      - name: rhcl-edge-limiting-app
+        plan: basic
+    coverage:
+      - "policy: edge_limiting"
+      - "conversion: RateLimitPolicy"
+
+  # ── token_introspection → AuthPolicy oauth2Introspection ──
+  - system_name: rhcl_seed_token_introspection
+    name: RHCL Seed Token Introspection
+    description: Single policy token_introspection for oauth2Introspection AuthPolicy
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [token_introspection]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-token-intro-app
+        plan: basic
+    coverage:
+      - "policy: token_introspection"
+      - "conversion: AuthPolicy oauth2Introspection"
+
+  # ── App ID auth + real application secrets (no extra policy) ──
+  - system_name: rhcl_seed_app_id
+    name: RHCL Seed App ID Auth
+    description: App ID + App Key auth with applications for Secret generation
+    auth_mode: app_id
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: []
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-app-id-01
+        plan: basic
+      - name: rhcl-app-id-02
+        plan: basic
+    coverage:
+      - "auth: app_id"
+      - "conversion: Application Secrets from Admin API"

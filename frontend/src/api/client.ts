@@ -1,5 +1,6 @@
 import axios from 'axios';
 import i18n from '../i18n';
+import { ClusterVersionsResponse } from './types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -100,6 +101,10 @@ export const settingsApi = {
 
 export const clusterApi = {
   getDomain: () => api.get<{ domain: string }>('/api/cluster/domain'),
+  getVersions: (refresh = false) =>
+    api.get<ClusterVersionsResponse>('/api/cluster/versions', {
+      params: refresh ? { refresh: true } : undefined,
+    }),
 };
 
 export const historyApi = {
