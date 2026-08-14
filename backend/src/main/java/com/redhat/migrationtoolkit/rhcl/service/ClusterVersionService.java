@@ -363,9 +363,17 @@ public class ClusterVersionService {
                     }
                 }
             } catch (KubernetesClientException e) {
+<<<<<<< HEAD
                 // 404: API group not installed (e.g. maistra on OSSM 3). 403: no RBAC.
                 // Both are soft — try next group; never fail the whole detect path.
                 LOG.debugf("SMCP group %s not usable (%s): %s", group, e.getCode(), e.getMessage());
+=======
+                if (e.getCode() == 403 || e.getCode() == 404) {
+                    LOG.debugf("SMCP group %s returned %d, trying next", group, e.getCode());
+                    continue;
+                }
+                LOG.debugf("SMCP group %s not usable: %s", group, e.getMessage());
+>>>>>>> origin/main
             }
         }
         return null;
@@ -396,8 +404,7 @@ public class ClusterVersionService {
                 && compareVersions(stripLeadingV(ossm), stripLeadingV(ossmExpected)) >= 0;
         boolean gapiTimeouts = gatewayApi != null && compareVersions(stripLeadingV(gatewayApi), "1.1") >= 0;
         boolean ocpTimeouts = ocp != null && compareVersions(majorMinor(ocp), "4.18") >= 0;
-        caps.timeoutsSupported = gapiTimeouts || ocpTimeouts
-                || (ocp != null && compareVersions(majorMinor(ocp), "4.19") >= 0);
+        caps.timeoutsSupported = gapiTimeouts || ocpTimeouts;
         return caps;
     }
 
