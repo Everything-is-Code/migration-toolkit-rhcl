@@ -33,6 +33,7 @@ import { ClusterProfile, ClusterVersionsResponse } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { clusterProfileI18nKey, shouldShowClusterVersionsCard } from './clusterCapabilityUi';
+import { clearPersistedConnection } from '../utils/appStateStorage';
 
 interface Props {
   appState: AppState;
@@ -191,6 +192,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       await loadVersions(true);
     } catch (e: unknown) {
       setError(apiErrorMessage(e, t('connection.errorDefault')));
+      // I-3: clear persisted connection on connect failure / disconnect.
+      clearPersistedConnection();
       setAppState(prev => ({
         ...prev,
         connection: { url, accessToken, tenant, connected: false },
