@@ -1,12 +1,16 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
+import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
 import com.redhat.migrationtoolkit.rhcl.service.CompatibilityService;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -28,6 +32,21 @@ class ExportControllerTest {
 
     @InjectMock
     CompatibilityService compatibilityService;
+
+    @InjectMock
+    ClusterVersionService clusterVersionService;
+
+    @BeforeEach
+    void stubClusterVersions() {
+        ClusterVersionsResponse versions = new ClusterVersionsResponse();
+        versions.capabilities = new ClusterCapabilities();
+        versions.capabilities.corsNative = false;
+        versions.capabilities.timeoutsSupported = true;
+        versions.source = "default";
+        versions.profile = "auto";
+        when(clusterVersionService.resolve(anyString(), org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(versions);
+    }
 
     @Test
     void getServices_missingParams_returns400() {
@@ -156,7 +175,7 @@ class ExportControllerTest {
         result.items = List.of();
 
         when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
-        when(compatibilityService.check(any(), any())).thenReturn(result);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities.class))).thenReturn(result);
 
         given()
                 .header("Authorization", "Bearer token123")

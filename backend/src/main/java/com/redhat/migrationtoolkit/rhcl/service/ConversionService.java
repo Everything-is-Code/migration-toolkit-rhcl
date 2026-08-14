@@ -99,7 +99,8 @@ public class ConversionService {
 
         files.put("gateway.yaml", generateGateway(name, namespace));
         files.put("httproute.yaml",  generateHttpRoute(
-                name, namespace, service, backendType, externalHost, internalService, internalPort, externalPort));
+                name, namespace, service, backendType, externalHost, internalService,
+                internalPort, externalPort, opts.corsNative));
         files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
         files.put("configmap.yaml",  generateConfigMap(name, namespace, service, effectiveBackendUrl));
@@ -285,7 +286,8 @@ spec:
 
     private String generateHttpRoute(String name, String namespace, ApiService service,
                                      BackendType backendType, String externalHost,
-                                     String internalService, int internalPort, int externalPort) {
+                                     String internalService, int internalPort, int externalPort,
+                                     boolean corsNative) {
         int backendPort   = backendType == BackendType.EXTERNAL ? externalPort : internalPort;
         String backendSvc = backendType == BackendType.EXTERNAL
                 ? (name + "-backend")
@@ -301,7 +303,7 @@ spec:
 """.formatted(externalHost));
         }
         filterItems.append(buildHeaderModificationFilters(service));
-        filterItems.append(buildCorsFilters(service));
+        filterItems.append(buildCorsFilters(service, corsNative));
 
         String filtersBlock = filterItems.length() > 0
                 ? "      filters:\n" + filterItems
@@ -531,14 +533,14 @@ metadata:
     }
 
     /**
-     * Maps 3scale {@code cors} to HTTPRoute {@code ResponseHeaderModifier} (+ OPTIONS rules elsewhere).
-     * <p>
-     * Does <strong>not</strong> emit Gateway API {@code type: CORS}: that filter needs Gateway API ≥ 1.3
-     * and is unsupported on OpenShift 4.19 (Gateway API 1.2.1) / RHCL 1.4 minimum. Aligns with
-     * migration-pilot {@code pilot_cors_ip} ({@code Access-Control-*} via ResponseHeaderModifier).
-     * Static headers carry one Allow-Origin: {@code *} wins if present, otherwise the first origin.
+     * Maps 3scale {@code cors} to Gateway API CORS handling.
+     * <ul>
+     *   <li>{@code corsNative=true}: emit {@code type: CORS} (Gateway API ≥ 1.3 / OCP ≥ 4.21)</li>
+     *   <li>{@code corsNative=false} (default): ResponseHeaderModifier Access-Control-*
+     *       (+ OPTIONS rules elsewhere), matching migration-pilot {@code pilot_cors_ip}</li>
+     * </ul>
      */
-    private String buildCorsFilters(ApiService service) {
+    private String buildCorsFilters(ApiService service, boolean corsNative) {
         Policy cors = findCorsPolicy(service);
         if (cors == null || cors.configuration == null) {
             return "";
@@ -572,6 +574,54 @@ metadata:
             }
         }
 
+        if (corsNative) {
+            return buildNativeCorsFilter(originList, methodList, headerList, credentials, maxAge);
+        }
+        return buildCorsResponseHeaderModifier(originList, methodList, headerList, credentials, maxAge);
+    }
+
+    private static String buildNativeCorsFilter(java.util.List<String> originList,
+                                                java.util.List<String> methodList,
+                                                java.util.List<String> headerList,
+                                                boolean credentials,
+                                                Integer maxAge) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("        - type: CORS\n");
+        sb.append("          cors:\n");
+        sb.append("            allowOrigins:\n");
+        if (originList.isEmpty()) {
+            sb.append("              - \"*\"\n");
+        } else {
+            for (String origin : originList) {
+                sb.append("              - ").append(origin).append('\n');
+            }
+        }
+        if (!methodList.isEmpty()) {
+            sb.append("            allowMethods:\n");
+            for (String method : methodList) {
+                sb.append("              - ").append(method).append('\n');
+            }
+        }
+        if (!headerList.isEmpty()) {
+            sb.append("            allowHeaders:\n");
+            for (String header : headerList) {
+                sb.append("              - ").append(header).append('\n');
+            }
+        }
+        if (credentials) {
+            sb.append("            allowCredentials: true\n");
+        }
+        if (maxAge != null) {
+            sb.append("            maxAge: ").append(maxAge).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String buildCorsResponseHeaderModifier(java.util.List<String> originList,
+                                                          java.util.List<String> methodList,
+                                                          java.util.List<String> headerList,
+                                                          boolean credentials,
+                                                          Integer maxAge) {
         String allowOrigin = "*";
         if (!originList.isEmpty()) {
             allowOrigin = originList.stream().anyMatch("*"::equals) ? "*" : originList.get(0);
