@@ -127,6 +127,10 @@ class ClusterVersionServiceTest {
         assertFalse(response.ossm.toLowerCase().contains("istio"));
         assertTrue(response.capabilities.ossmPresent);
         assertEquals("2.6", response.ossmExpectedForOcp);
+        assertTrue(response.capabilities.ossmMatchesOcp);
+        // CSV already supplied OSSM — SMCP must not be consulted / must not warn
+        assertTrue(response.errors == null || response.errors.stream()
+                .noneMatch(e -> e.toLowerCase().contains("smcp")));
     }
 
     @Test
@@ -263,6 +267,16 @@ class ClusterVersionServiceTest {
         assertTrue(high.kuadrantPresent);
         assertTrue(high.ossmPresent);
         assertTrue(high.ossmMatchesOcp);
+
+        // OSSM newer than the OCP minimum (e.g. 3.4.1 vs expected 3.0) still matches
+        ClusterCapabilities newer = ClusterVersionService.capabilitiesFrom(
+                "4.21.27", "1.3.0", "1.4.2", "3.4.1", "3.0");
+        assertTrue(newer.ossmMatchesOcp);
+
+        // Below the minimum does not match
+        ClusterCapabilities older = ClusterVersionService.capabilitiesFrom(
+                "4.21.0", "1.3.0", "1.4.0", "2.6.5", "3.0");
+        assertFalse(older.ossmMatchesOcp);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

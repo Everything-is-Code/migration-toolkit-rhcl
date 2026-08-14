@@ -170,14 +170,18 @@ public class ClusterVersionService {
             errors.add(sanitize("OSSM CSV detect failed: " + safeMessage(e)));
         }
 
-        try {
-            String smcp = detectSmcpVersion();
-            if (ossm == null && smcp != null) {
-                ossm = smcp;
+        // SMCP/Istio CR is only a fallback when OLM CSV did not yield an OSSM version.
+        // OSSM 3 (Sail) has no maistra.io SMCP API — skipping avoids noisy 404 warnings.
+        if (ossm == null) {
+            try {
+                String smcp = detectSmcpVersion();
+                if (smcp != null) {
+                    ossm = smcp;
+                }
+            } catch (Exception e) {
+                LOG.warnf("SMCP detect failed (CSV/map fallback ok): %s", e.getMessage());
+                errors.add(sanitize("SMCP detect failed: " + safeMessage(e)));
             }
-        } catch (Exception e) {
-            LOG.warnf("SMCP detect failed (CSV/map fallback ok): %s", e.getMessage());
-            errors.add(sanitize("SMCP detect failed: " + safeMessage(e)));
         }
 
         if (hardFail || ocp == null) {
@@ -324,8 +328,9 @@ public class ClusterVersionService {
     }
 
     /**
-     * Optional SMCP read. Tries {@code maistra.io} then {@code sailoperator.io}.
-     * Missing RBAC soft-fails to caller (CSV / OCP map).
+     * Optional SMCP read for OSSM 2.x ({@code maistra.io}).
+     * OSSM 3 / Sail does not install SMCP — a 404 API-group miss is normal and skipped.
+     * Missing RBAC (403) soft-continues to the next group / CSV / OCP map.
      */
     @SuppressWarnings("unchecked")
     private String detectSmcpVersion() {
@@ -358,10 +363,9 @@ public class ClusterVersionService {
                     }
                 }
             } catch (KubernetesClientException e) {
-                if (e.getCode() == 403 || e.getCode() == 404) {
-                    throw e;
-                }
-                LOG.debugf("SMCP group %s not usable: %s", group, e.getMessage());
+                // 404: API group not installed (e.g. maistra on OSSM 3). 403: no RBAC.
+                // Both are soft — try next group; never fail the whole detect path.
+                LOG.debugf("SMCP group %s not usable (%s): %s", group, e.getCode(), e.getMessage());
             }
         }
         return null;
@@ -387,8 +391,9 @@ public class ClusterVersionService {
         caps.corsNative = gapiNative || ocpNative;
         caps.kuadrantPresent = kuadrant != null && !kuadrant.isBlank();
         caps.ossmPresent = ossm != null && !ossm.isBlank();
+        // Minimum expected for the OCP line (e.g. 3.0 on 4.21): any OSSM >= expected matches.
         caps.ossmMatchesOcp = caps.ossmPresent && ossmExpected != null
-                && compareVersions(majorMinor(ossm), majorMinor(ossmExpected)) == 0;
+                && compareVersions(stripLeadingV(ossm), stripLeadingV(ossmExpected)) >= 0;
         boolean gapiTimeouts = gatewayApi != null && compareVersions(stripLeadingV(gatewayApi), "1.1") >= 0;
         boolean ocpTimeouts = ocp != null && compareVersions(majorMinor(ocp), "4.18") >= 0;
         caps.timeoutsSupported = gapiTimeouts || ocpTimeouts
