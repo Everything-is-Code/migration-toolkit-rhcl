@@ -19,4 +19,11 @@ public class ConversionOptions {
      * Only the selected target is emitted.
      */
     public String ipCheckMode = "authorizationPolicy";
+
+    /**
+     * When true, emit Gateway API HTTPRoute {@code type: CORS} filter.
+     * When false (default — OCP 4.19 / GAPI 1.2.1), emit ResponseHeaderModifier
+     * Access-Control-* headers plus OPTIONS matches.
+     */
+    public boolean corsNative = false;
 }

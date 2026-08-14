@@ -1,7 +1,11 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
+import com.redhat.migrationtoolkit.rhcl.entity.AppSettingsEntity;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
+import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
 import com.redhat.migrationtoolkit.rhcl.service.CompatibilityService;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import jakarta.inject.Inject;
@@ -16,6 +20,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.jboss.logging.Logger;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -28,6 +33,7 @@ import java.util.Set;
 @Tag(name = "Services", description = "3scale service export")
 public class ExportController {
 
+    private static final Logger LOG = Logger.getLogger(ExportController.class);
     private static final String BEARER_PREFIX = "Bearer ";
 
     @Inject
@@ -35,6 +41,9 @@ public class ExportController {
 
     @Inject
     CompatibilityService compatibilityService;
+
+    @Inject
+    ClusterVersionService clusterVersionService;
 
     @GET
     @Operation(summary = "Get all services from 3scale")
@@ -84,8 +93,24 @@ public class ExportController {
         if (supportedPoliciesParam != null && !supportedPoliciesParam.isBlank()) {
             supportedPolicies.addAll(Arrays.asList(supportedPoliciesParam.split("\\|")));
         }
-        CompatibilityResult result = compatibilityService.check(service, supportedPolicies);
+        CompatibilityResult result = compatibilityService.check(
+                service, supportedPolicies, resolveCapabilities());
         return Response.ok(result).build();
+    }
+
+    private ClusterCapabilities resolveCapabilities() {
+        String profile = ClusterVersionService.PROFILE_AUTO;
+        try {
+            AppSettingsEntity entity = AppSettingsEntity.findById(
+                    ClusterVersionService.SETTINGS_KEY_CLUSTER_PROFILE);
+            if (entity != null && entity.value != null && !entity.value.isBlank()) {
+                profile = entity.value.trim();
+            }
+        } catch (Exception e) {
+            LOG.debugf("clusterProfile setting unavailable: %s", e.getMessage());
+        }
+        ClusterVersionsResponse versions = clusterVersionService.resolve(profile, false);
+        return versions != null ? versions.capabilities : null;
     }
 
     /**
