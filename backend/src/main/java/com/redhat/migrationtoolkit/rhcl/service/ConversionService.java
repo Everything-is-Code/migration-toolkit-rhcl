@@ -590,10 +590,11 @@ metadata:
         sb.append("          cors:\n");
         sb.append("            allowOrigins:\n");
         if (originList.isEmpty()) {
-            sb.append("              - \"*\"\n");
+            sb.append("              - ").append(yamlDoubleQuoted("*")).append('\n');
         } else {
             for (String origin : originList) {
-                sb.append("              - ").append(origin).append('\n');
+                // Bare "*" is a YAML alias indicator and fails parse; always quote origins.
+                sb.append("              - ").append(yamlDoubleQuoted(origin)).append('\n');
             }
         }
         if (!methodList.isEmpty()) {
@@ -605,7 +606,7 @@ metadata:
         if (!headerList.isEmpty()) {
             sb.append("            allowHeaders:\n");
             for (String header : headerList) {
-                sb.append("              - ").append(header).append('\n');
+                sb.append("              - ").append(yamlDoubleQuoted(header)).append('\n');
             }
         }
         if (credentials) {
@@ -630,16 +631,16 @@ metadata:
         StringBuilder setHeaders = new StringBuilder();
         setHeaders.append(String.format(
                 "              - name: Access-Control-Allow-Origin%n                value: %s%n",
-                allowOrigin));
+                yamlDoubleQuoted(allowOrigin)));
         if (!methodList.isEmpty()) {
             setHeaders.append(String.format(
                     "              - name: Access-Control-Allow-Methods%n                value: %s%n",
-                    String.join(", ", methodList)));
+                    yamlDoubleQuoted(String.join(", ", methodList))));
         }
         if (!headerList.isEmpty()) {
             setHeaders.append(String.format(
                     "              - name: Access-Control-Allow-Headers%n                value: %s%n",
-                    String.join(", ", headerList)));
+                    yamlDoubleQuoted(String.join(", ", headerList))));
         }
         if (credentials) {
             setHeaders.append("""
@@ -657,6 +658,14 @@ metadata:
                 + "          responseHeaderModifier:\n"
                 + "            set:\n"
                 + setHeaders;
+    }
+
+    /** Double-quote a YAML scalar so values like {@code *} do not parse as aliases. */
+    static String yamlDoubleQuoted(String value) {
+        if (value == null) {
+            return "\"\"";
+        }
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     private static java.util.List<String> toStringList(Object raw) {

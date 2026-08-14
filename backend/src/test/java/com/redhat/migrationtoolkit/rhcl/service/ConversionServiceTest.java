@@ -317,6 +317,44 @@ class ConversionServiceTest {
         assertTrue(httproute.contains("Access-Control-Max-Age"));
         assertTrue(httproute.contains("86400"),
                 "max-age must map to Access-Control-Max-Age header value");
+        assertTrue(httproute.contains("value: \"*\""),
+                "wildcard Allow-Origin must be YAML-quoted (bare * is an alias)");
+        assertFalse(httproute.matches("(?s).*value:\\s+\\*(?:\\s|$).*"),
+                "must not emit unquoted value: *");
+    }
+
+    @Test
+    void convert_corsPolicy_wildcardOrigin_nativeIsYamlQuoted() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("*"),
+                List.of("GET", "POST", "OPTIONS"),
+                List.of("Authorization", "Content-Type"),
+                true,
+                600));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = true;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+
+        assertTrue(httproute.contains("type: CORS"));
+        assertTrue(httproute.contains("allowOrigins:\n              - \"*\""),
+                "native CORS wildcard origin must be double-quoted for valid YAML");
+        assertFalse(httproute.contains("allowOrigins:\n              - *\n"),
+                "unquoted - * is invalid YAML (alias indicator)");
+        assertTrue(httproute.contains("- \"Authorization\""));
+        assertTrue(httproute.contains("- \"Content-Type\""));
+    }
+
+    @Test
+    void yamlDoubleQuoted_escapesBackslashAndQuotes() {
+        assertEquals("\"*\"", ConversionService.yamlDoubleQuoted("*"));
+        assertEquals("\"https://app.example.com\"",
+                ConversionService.yamlDoubleQuoted("https://app.example.com"));
+        assertEquals("\"a\\\"b\"", ConversionService.yamlDoubleQuoted("a\"b"));
+        assertEquals("\"a\\\\b\"", ConversionService.yamlDoubleQuoted("a\\b"));
+        assertEquals("\"\"", ConversionService.yamlDoubleQuoted(null));
     }
 
     @Test
