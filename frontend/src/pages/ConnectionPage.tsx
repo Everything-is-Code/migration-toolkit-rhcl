@@ -52,7 +52,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [namespace, setNamespace] = useState(appState.namespace);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState(appState.connection.connected);
   const [showToken, setShowToken] = useState(false);
   const [fetchingDomain, setFetchingDomain] = useState(false);
   const [domainError, setDomainError] = useState<string | null>(null);
@@ -61,6 +61,22 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionsError, setVersionsError] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
+
+  // Re-sync local form when returning to this page with a saved connection.
+  useEffect(() => {
+    if (!appState.connection.connected) return;
+    setUrl(appState.connection.url);
+    setAccessToken(appState.connection.accessToken);
+    setTenant(appState.connection.tenant || '');
+    setNamespace(appState.namespace);
+    setSuccess(true);
+  }, [
+    appState.connection.connected,
+    appState.connection.url,
+    appState.connection.accessToken,
+    appState.connection.tenant,
+    appState.namespace,
+  ]);
 
   const applyVersions = useCallback((versions: ClusterVersionsResponse) => {
     setAppState(prev => ({

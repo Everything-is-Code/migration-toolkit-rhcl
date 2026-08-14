@@ -88,6 +88,11 @@
     "emptyTitle": "No APIs found",
     "emptyBody": "No APIs are registered in 3scale, or none match the search criteria.",
     "ariaLabel": "API list",
+    "colName": "API",
+    "colState": "State",
+    "colAuth": "Auth",
+    "colPolicies": "Policies",
+    "colBackends": "Backends",
     "backendCount": "Backends: {{count}}",
     "btnBack": "Back",
     "btnNext": "Next: Compatibility Check",
@@ -160,7 +165,8 @@
     "btnNext": "Next: Validation",
     "btnReset": "Reset changes",
     "btnEdit": "Edit",
-    "btnViewMode": "View mode"
+    "btnViewMode": "View mode",
+    "previewWithLineNumbers": "YAML preview with line numbers"
   },
   "validation": {
     "title": "Validation",

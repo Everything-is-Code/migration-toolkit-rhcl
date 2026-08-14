@@ -131,15 +131,54 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
   ];
 
   const renderHighlightedYaml = (content: string) => {
-    const lines = content.split('\n');
-    return lines.map((line, i) => {
-      const isPolicy = POLICY_PATTERNS.some(p => p.test(line));
-      return (
-        <span key={i} style={isPolicy ? { color: '#ffa657' } : undefined}>
-          {line}{i < lines.length - 1 ? '\n' : ''}
-        </span>
-      );
-    });
+    const lines = content.length === 0 ? [''] : content.split('\n');
+    const gutterWidth = `${String(lines.length).length + 1}ch`;
+    return (
+      <table
+        aria-label={t('yamlViewer.previewWithLineNumbers')}
+        style={{
+          borderCollapse: 'collapse',
+          width: '100%',
+          tableLayout: 'fixed',
+        }}
+      >
+        <tbody>
+          {lines.map((line, i) => {
+            const isPolicy = POLICY_PATTERNS.some(p => p.test(line));
+            return (
+              <tr key={i}>
+                <td
+                  style={{
+                    width: gutterWidth,
+                    minWidth: gutterWidth,
+                    padding: '0 12px 0 0',
+                    textAlign: 'right',
+                    color: '#6a6e73',
+                    userSelect: 'none',
+                    verticalAlign: 'top',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {i + 1}
+                </td>
+                <td
+                  style={{
+                    padding: 0,
+                    verticalAlign: 'top',
+                    whiteSpace: 'pre',
+                    overflowWrap: 'normal',
+                    wordBreak: 'normal',
+                    color: isPolicy ? '#ffa657' : undefined,
+                  }}
+                >
+                  {line.length === 0 ? '\u00a0' : line}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
   };
 
   const saveAndNavigate = useCallback((path: string) => {
@@ -288,7 +327,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                           lineHeight: 1.6,
                           boxSizing: 'border-box',
                           overflowX: 'auto',
-                          whiteSpace: 'pre',
+                          whiteSpace: 'normal',
                           margin: 0,
                         }}>
                           {renderHighlightedYaml(currentEdits[filename] ?? originalFiles[i][1])}

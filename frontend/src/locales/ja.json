@@ -88,6 +88,11 @@
     "emptyTitle": "APIが見つかりません",
     "emptyBody": "3scaleにAPIが登録されていないか、検索条件に一致するAPIがありません。",
     "ariaLabel": "API一覧",
+    "colName": "API",
+    "colState": "状態",
+    "colAuth": "認証",
+    "colPolicies": "ポリシー",
+    "colBackends": "バックエンド",
     "backendCount": "バックエンド: {{count}}",
     "btnBack": "戻る",
     "btnNext": "次へ: 互換性チェック",
@@ -160,7 +165,8 @@
     "btnNext": "次へ: バリデーション",
     "btnReset": "変更をリセット",
     "btnEdit": "編集",
-    "btnViewMode": "表示に戻る"
+    "btnViewMode": "表示に戻る",
+    "previewWithLineNumbers": "行番号付きYAMLプレビュー"
   },
   "validation": {
     "title": "バリデーション",

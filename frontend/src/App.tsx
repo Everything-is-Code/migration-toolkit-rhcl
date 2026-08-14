@@ -1,4 +1,4 @@
-import React, { useState, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from './i18n';
@@ -56,6 +56,7 @@ import {
   ClusterVersionsResponse,
   ClusterProfile,
 } from './api/types';
+import { loadPersistedConnection, savePersistedConnection } from './utils/appStateStorage';
 
 /* ── Root-level Error Boundary ──
    Even if a page component crashes,
@@ -213,14 +214,31 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const [settingsExpanded, setSettingsExpanded] = useState(() => location.pathname.startsWith('/settings'));
 
-  const [appState, setAppState] = useState<AppState>({
-    connection: { url: '', accessToken: '', tenant: '', connected: false },
-    selectedServices: [],
-    conversionResults: [],
-    namespace: 'default',
-    clusterVersions: null,
-    clusterProfile: 'auto',
+  const [appState, setAppState] = useState<AppState>(() => {
+    const persisted = loadPersistedConnection();
+    return {
+      connection: {
+        url: persisted?.connection?.url ?? '',
+        accessToken: persisted?.connection?.accessToken ?? '',
+        tenant: persisted?.connection?.tenant ?? '',
+        connected: Boolean(persisted?.connection?.connected),
+      },
+      selectedServices: [],
+      conversionResults: [],
+      namespace: persisted?.namespace || 'default',
+      clusterVersions: null,
+      clusterProfile: persisted?.clusterProfile || 'auto',
+    };
   });
+
+  // Keep 3scale connection across route changes / HMR remounts for this browser tab.
+  useEffect(() => {
+    savePersistedConnection({
+      connection: appState.connection,
+      namespace: appState.namespace,
+      clusterProfile: appState.clusterProfile,
+    });
+  }, [appState.connection, appState.namespace, appState.clusterProfile]);
 
   const workflowItems = [
     { path: '/',            label: t('nav.connection'),   icon: <PluggedIcon /> },

@@ -176,8 +176,56 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 aria-label={t('apiSelection.ariaLabel')}
                 style={{ marginTop: '16px' }}
                 selectedDataListItemId={selectedId ?? undefined}
-                onSelectDataListItem={(_e, id) => setSelectedId(id === selectedId ? null : id)}
+                onSelectDataListItem={(_e, id) => {
+                  if (id === 'api-list-header') return;
+                  setSelectedId(id === selectedId ? null : id);
+                }}
               >
+                <DataListItem
+                  id="api-list-header"
+                  aria-labelledby="api-list-header-label"
+                  style={{
+                    pointerEvents: 'none',
+                    background: '#f0f0f0',
+                    borderLeft: '3px solid transparent',
+                    cursor: 'default',
+                  }}
+                >
+                  <DataListItemRow>
+                    <DataListItemCells
+                      dataListCells={[
+                        <DataListCell key="h-name" width={2}>
+                          <span
+                            id="api-list-header-label"
+                            style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}
+                          >
+                            {t('apiSelection.colName')}
+                          </span>
+                        </DataListCell>,
+                        <DataListCell key="h-state">
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                            {t('apiSelection.colState')}
+                          </span>
+                        </DataListCell>,
+                        <DataListCell key="h-auth">
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                            {t('apiSelection.colAuth')}
+                          </span>
+                        </DataListCell>,
+                        <DataListCell key="h-policy">
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                            {t('apiSelection.colPolicies')}
+                          </span>
+                        </DataListCell>,
+                        <DataListCell key="h-backends">
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                            {t('apiSelection.colBackends')}
+                          </span>
+                        </DataListCell>,
+                      ]}
+                    />
+                  </DataListItemRow>
+                </DataListItem>
                 {filtered.map(service => {
                   const isSelected = selectedId === service.id;
                   const allPolicies = service.policies ?? [];
