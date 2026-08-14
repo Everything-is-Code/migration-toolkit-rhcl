@@ -359,7 +359,8 @@ public class ClusterVersionService {
                 }
             } catch (KubernetesClientException e) {
                 if (e.getCode() == 403 || e.getCode() == 404) {
-                    throw e;
+                    LOG.debugf("SMCP group %s returned %d, trying next", group, e.getCode());
+                    continue;
                 }
                 LOG.debugf("SMCP group %s not usable: %s", group, e.getMessage());
             }
@@ -391,8 +392,7 @@ public class ClusterVersionService {
                 && compareVersions(majorMinor(ossm), majorMinor(ossmExpected)) == 0;
         boolean gapiTimeouts = gatewayApi != null && compareVersions(stripLeadingV(gatewayApi), "1.1") >= 0;
         boolean ocpTimeouts = ocp != null && compareVersions(majorMinor(ocp), "4.18") >= 0;
-        caps.timeoutsSupported = gapiTimeouts || ocpTimeouts
-                || (ocp != null && compareVersions(majorMinor(ocp), "4.19") >= 0);
+        caps.timeoutsSupported = gapiTimeouts || ocpTimeouts;
         return caps;
     }
 
