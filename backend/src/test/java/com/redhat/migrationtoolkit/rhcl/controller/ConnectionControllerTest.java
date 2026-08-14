@@ -7,7 +7,7 @@ import io.restassured.http.ContentType;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -56,7 +56,8 @@ class ConnectionControllerTest {
                         """)
                 .when().post("/api/connection/test")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -68,7 +69,8 @@ class ConnectionControllerTest {
                         """)
                 .when().post("/api/connection/test")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -80,6 +82,7 @@ class ConnectionControllerTest {
                         """)
                 .when().post("/api/connection/test")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 }

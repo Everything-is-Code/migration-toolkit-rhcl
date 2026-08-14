@@ -173,27 +173,6 @@ const RedHatLogo: React.FC = () => (
   </div>
 );
 
-/* ── Red Hat logo for Sidebar ──
-   Uses the official brand "Logo A reverse" (white hat + wordmark on
-   transparent background). Background matches the menu dark grey (#212427).
-   Prefixed with _ when unused to satisfy ESLint no-unused-vars. */
-const _SidebarRedHatBrand: React.FC = () => (
-  <div style={{
-    background: '#212427',
-    padding: '20px 20px 16px',
-    borderBottom: '1px solid #3c3f42',
-  }}>
-    <div style={{ borderTop: '1px solid #3c3f42', paddingTop: '10px' }}>
-      <p style={{
-        margin: 0, fontSize: '10.5px', fontWeight: 500,
-        color: '#b8bbbe', lineHeight: 1.45, letterSpacing: '0.01em',
-      }}>
-        Migration Toolkit for Red Hat Connectivity Link
-      </p>
-    </div>
-  </div>
-);
-
 /* ── Footer ── */
 const Footer: React.FC = () => (
   <div style={{

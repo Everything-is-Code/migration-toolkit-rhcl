@@ -207,18 +207,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 <FormHelperText>
                   <HelperText>
                     <HelperTextItem>
-                      <span>
-                        {t('connection.tokenHelper')}
-                        {' — '}
-                        <a
-                          href="https://3scale-admin.apps.cluster-ghj25.ghj25.sandbox5408.opentlc.com/p/admin/user/access_tokens"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{ color: '#0066cc' }}
-                        >
-                          {t('connection.openTokenPage')}
-                        </a>
-                      </span>
+                      {t('connection.tokenHelper')}
                     </HelperTextItem>
                   </HelperText>
                 </FormHelperText>

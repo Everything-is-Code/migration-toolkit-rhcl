@@ -8,8 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.*;
 
 /**
  * Runtime coverage for CORS_ORIGINS / quarkus.http.cors.origins override (Slice A).
@@ -22,7 +21,6 @@ class ExportCorsOriginsOverrideTest {
     public static class CorsOriginsOverrideProfile implements QuarkusTestProfile {
         @Override
         public Map<String, String> getConfigOverrides() {
-            // Simulates CORS_ORIGINS env / OCP demo override of the localhost default allowlist.
             return Map.of("quarkus.http.cors.origins", "https://demo.example.com");
         }
     }
@@ -34,7 +32,7 @@ class ExportCorsOriginsOverrideTest {
                 .header("Access-Control-Request-Method", "GET")
                 .when().options("/api/services")
                 .then()
-                .statusCode(anyOf(200, 204))
+                .statusCode(anyOf(is(200), is(204)))
                 .header("Access-Control-Allow-Origin", equalTo("https://demo.example.com"));
     }
 
@@ -46,9 +44,5 @@ class ExportCorsOriginsOverrideTest {
                 .when().options("/api/services")
                 .then()
                 .header("Access-Control-Allow-Origin", nullValue());
-    }
-
-    private static org.hamcrest.Matcher<Integer> anyOf(int a, int b) {
-        return org.hamcrest.Matchers.anyOf(equalTo(a), equalTo(b));
     }
 }
