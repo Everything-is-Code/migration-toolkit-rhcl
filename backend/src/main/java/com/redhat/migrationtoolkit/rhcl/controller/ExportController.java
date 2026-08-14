@@ -46,7 +46,7 @@ public class ExportController {
     ClusterVersionService clusterVersionService;
 
     @GET
-    @Operation(summary = "Get all services from 3scale")
+    @Operation(summary = "List services (summary for selection UI)")
     public Response getServices(@QueryParam("url") String url,
                                  @HeaderParam("Authorization") String authorization) {
         String accessToken = extractBearerToken(authorization);
@@ -55,7 +55,7 @@ public class ExportController {
                     .entity("url query parameter and Authorization Bearer token are required")
                     .build();
         }
-        List<ApiService> services = exportService.exportServices(url, accessToken);
+        List<ApiService> services = exportService.listServices(url, accessToken);
         return Response.ok(services).build();
     }
 

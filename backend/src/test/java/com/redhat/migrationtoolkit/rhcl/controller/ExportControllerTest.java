@@ -65,7 +65,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -77,7 +77,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -88,7 +88,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -100,7 +100,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).exportServices(anyString(), anyString());
+        verify(exportService, never()).listServices(anyString(), anyString());
     }
 
     @Test
@@ -108,7 +108,7 @@ class ExportControllerTest {
         ApiService svc = new ApiService();
         svc.id = "1";
         svc.name = "Test API";
-        when(exportService.exportServices(eq("https://3scale.example.com"), eq("token123")))
+        when(exportService.listServices(eq("https://3scale.example.com"), eq("token123")))
                 .thenReturn(List.of(svc));
 
         given()
@@ -120,7 +120,7 @@ class ExportControllerTest {
                 .body("$", hasSize(1))
                 .body("[0].id", equalTo("1"));
 
-        verify(exportService).exportServices("https://3scale.example.com", "token123");
+        verify(exportService).listServices("https://3scale.example.com", "token123");
     }
 
     @Test
@@ -128,7 +128,7 @@ class ExportControllerTest {
         ApiService svc = new ApiService();
         svc.id = "1";
         svc.name = "Test API";
-        when(exportService.exportServices(eq("https://3scale.example.com"), eq("header-token")))
+        when(exportService.listServices(eq("https://3scale.example.com"), eq("header-token")))
                 .thenReturn(List.of(svc));
 
         given()
@@ -139,8 +139,8 @@ class ExportControllerTest {
                 .then()
                 .statusCode(200);
 
-        verify(exportService).exportServices("https://3scale.example.com", "header-token");
-        verify(exportService, never()).exportServices(anyString(), eq("query-token"));
+        verify(exportService).listServices("https://3scale.example.com", "header-token");
+        verify(exportService, never()).listServices(anyString(), eq("query-token"));
     }
 
     @Test

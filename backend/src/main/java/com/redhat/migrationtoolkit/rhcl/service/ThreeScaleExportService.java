@@ -25,6 +25,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,6 +35,12 @@ import java.util.regex.Pattern;
 public class ThreeScaleExportService {
 
     private static final Logger LOG = Logger.getLogger(ThreeScaleExportService.class);
+
+    /** Page size for Admin API list endpoints. */
+    static final int LIST_PAGE_SIZE = 500;
+
+    /** Max concurrent Admin API enrich calls while listing services. */
+    static final int LIST_ENRICH_CONCURRENCY = 8;
 
     public boolean testConnection(ConnectionRequest req) {
         try {
@@ -126,49 +135,181 @@ public class ThreeScaleExportService {
         return null;
     }
 
-    public List<ApiService> exportServices(String url, String accessToken) {
+    /**
+     * Lightweight list for the selection UI: metadata + policies + backends only.
+     * Skips mapping rules, metrics, applications, plans, and proxy (loaded on convert).
+     */
+    public List<ApiService> listServices(String url, String accessToken) {
         ThreeScaleClient client = buildClient(url);
-        List<ApiService> services = new ArrayList<>();
+        return listServices(client, accessToken);
+    }
 
+    /**
+     * @deprecated Prefer {@link #listServices(String, String)} for the API list.
+     * Kept as an alias so older call sites keep working.
+     */
+    public List<ApiService> exportServices(String url, String accessToken) {
+        return listServices(url, accessToken);
+    }
+
+    /**
+     * Package-visible for unit tests with a mocked {@link ThreeScaleClient}.
+     */
+    @SuppressWarnings("unchecked")
+    List<ApiService> listServices(ThreeScaleClient client, String accessToken) {
         try {
-            Map<String, Object> response = client.getServices(accessToken, 1, 500);
-            List<Map<String, Object>> serviceList = extractList(response, "services");
+            List<Map<String, Object>> serviceList = fetchAllServicePages(client, accessToken);
+            Map<String, Backend> backendCatalog = fetchBackendCatalog(client, accessToken);
 
+            List<ApiService> services = new ArrayList<>();
             for (Map<String, Object> svcWrapper : serviceList) {
                 Map<String, Object> svc = (Map<String, Object>) svcWrapper.get("service");
                 if (svc == null) {
                     continue;
                 }
+                services.add(mapServiceSummary(svc));
+            }
 
-                ApiService service = new ApiService();
-                service.id = String.valueOf(svc.get("id"));
-                service.name = (String) svc.get("name");
-                service.description = (String) svc.get("description");
-                service.state = (String) svc.get("state");
-                service.systemName = (String) svc.get("system_name");
-                service.backendVersion = (String) svc.get("backend_version");
-                service.deploymentOption = (String) svc.get("deployment_option");
+            enrichListSummaries(client, accessToken, services, backendCatalog);
+            return services;
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to list services from 3scale: " + e.getMessage(), e);
+        }
+    }
 
-                service.policies = fetchPolicies(client, service.id, accessToken);
-                service.mappingRules = fetchMappingRules(client, service.id, accessToken);
-                service.metrics = fetchMetrics(client, service.id, accessToken);
-                service.authentication = extractAuthentication(svc);
-                service.backends = fetchBackendsForService(client, service.id, accessToken);
-                service.applications = fetchApplications(client, service.id, accessToken);
-                service.applicationPlans = fetchApplicationPlans(client, service.id, accessToken);
+    private ApiService mapServiceSummary(Map<String, Object> svc) {
+        ApiService service = new ApiService();
+        service.id = String.valueOf(svc.get("id"));
+        service.name = (String) svc.get("name");
+        service.description = (String) svc.get("description");
+        service.state = (String) svc.get("state");
+        service.systemName = (String) svc.get("system_name");
+        service.backendVersion = (String) svc.get("backend_version");
+        service.deploymentOption = (String) svc.get("deployment_option");
+        service.authentication = extractAuthentication(svc);
+        return service;
+    }
 
-                Map<String, Object> proxyConfig = safeGetProxyConfig(client, service.id, accessToken);
-                if (proxyConfig != null) {
-                    service.proxyEndpoint = extractProxyEndpoint(proxyConfig);
+    private void enrichListSummaries(ThreeScaleClient client, String accessToken,
+                                     List<ApiService> services, Map<String, Backend> backendCatalog) {
+        if (services.isEmpty()) {
+            return;
+        }
+        int poolSize = Math.min(LIST_ENRICH_CONCURRENCY, services.size());
+        ExecutorService pool = Executors.newFixedThreadPool(poolSize);
+        try {
+            List<CompletableFuture<Void>> futures = new ArrayList<>(services.size());
+            for (ApiService service : services) {
+                futures.add(CompletableFuture.runAsync(() -> {
+                    service.policies = fetchPolicies(client, service.id, accessToken);
+                    service.backends = resolveBackendsFromUsages(
+                            client, service.id, accessToken, backendCatalog);
+                }, pool));
+            }
+            CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    private List<Map<String, Object>> fetchAllServicePages(ThreeScaleClient client, String accessToken) {
+        List<Map<String, Object>> all = new ArrayList<>();
+        int page = 1;
+        while (true) {
+            Map<String, Object> response = client.getServices(accessToken, page, LIST_PAGE_SIZE);
+            List<Map<String, Object>> pageItems = extractList(response, "services");
+            all.addAll(pageItems);
+            if (pageItems.size() < LIST_PAGE_SIZE) {
+                break;
+            }
+            page++;
+        }
+        return all;
+    }
+
+    @SuppressWarnings("unchecked")
+    Map<String, Backend> fetchBackendCatalog(ThreeScaleClient client, String accessToken) {
+        Map<String, Backend> catalog = new LinkedHashMap<>();
+        try {
+            int page = 1;
+            while (true) {
+                Map<String, Object> response = client.getBackends(accessToken, page, LIST_PAGE_SIZE);
+                List<Map<String, Object>> pageItems = extractList(response, "backend_apis");
+                if (pageItems.isEmpty()) {
+                    pageItems = extractList(response, "backends");
                 }
-
-                services.add(service);
+                for (Map<String, Object> wrapper : pageItems) {
+                    Map<String, Object> b = wrapper;
+                    if (wrapper.get("backend_api") instanceof Map<?, ?> nested) {
+                        b = (Map<String, Object>) nested;
+                    } else if (wrapper.get("backend") instanceof Map<?, ?> nested) {
+                        b = (Map<String, Object>) nested;
+                    }
+                    Backend backend = new Backend();
+                    backend.id = String.valueOf(b.get("id"));
+                    backend.name = (String) b.get("name");
+                    backend.systemName = (String) b.get("system_name");
+                    backend.privateEndpoint = (String) b.get("private_endpoint");
+                    if (backend.id != null && !"null".equals(backend.id)) {
+                        catalog.put(backend.id, backend);
+                    }
+                }
+                if (pageItems.size() < LIST_PAGE_SIZE) {
+                    break;
+                }
+                page++;
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to export services from 3scale: " + e.getMessage(), e);
+            LOG.warnf("Failed to fetch backend catalog: %s", e.getMessage());
         }
+        return catalog;
+    }
 
-        return services;
+    @SuppressWarnings("unchecked")
+    List<Backend> resolveBackendsFromUsages(ThreeScaleClient client, String serviceId,
+                                            String accessToken, Map<String, Backend> catalog) {
+        try {
+            List<Map<String, Object>> usages = client.getBackendUsages(serviceId, accessToken);
+            List<Backend> backends = new ArrayList<>();
+            for (Map<String, Object> uw : usages) {
+                Map<String, Object> usage = (Map<String, Object>) uw.get("backend_usage");
+                if (usage == null) {
+                    continue;
+                }
+                Object backendIdObj = usage.get("backend_id");
+                if (backendIdObj == null) {
+                    continue;
+                }
+                String backendId = String.valueOf(backendIdObj);
+                Backend fromCatalog = catalog.get(backendId);
+                if (fromCatalog != null) {
+                    backends.add(fromCatalog);
+                    continue;
+                }
+                // Fallback only when catalog miss (should be rare)
+                try {
+                    Map<String, Object> bResp = client.getBackend(backendId, accessToken);
+                    Map<String, Object> b = (Map<String, Object>) bResp.get("backend_api");
+                    if (b == null) {
+                        continue;
+                    }
+                    Backend backend = new Backend();
+                    backend.id = String.valueOf(b.get("id"));
+                    backend.name = (String) b.get("name");
+                    backend.systemName = (String) b.get("system_name");
+                    backend.privateEndpoint = (String) b.get("private_endpoint");
+                    backends.add(backend);
+                } catch (Exception ex) {
+                    LOG.warnf("Failed to fetch backend %s: %s", backendId, ex.getMessage());
+                }
+            }
+            return backends;
+        } catch (Exception e) {
+            LOG.warnf("Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     public ApiService exportService(String url, String accessToken, String serviceId) {

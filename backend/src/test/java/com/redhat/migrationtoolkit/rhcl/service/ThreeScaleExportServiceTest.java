@@ -11,6 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 
 class ThreeScaleExportServiceTest {
 
@@ -297,11 +299,118 @@ class ThreeScaleExportServiceTest {
                 () -> service.exportService("invalid-url", "token", "svc-1"));
     }
 
-    // ── exportServices() error handling ──────────────────────────────────────
+    // ── listServices() / exportServices() error handling ─────────────────────
+
+    @Test
+    void listServices_invalidUrl_throwsRuntimeException() {
+        assertThrows(RuntimeException.class,
+                () -> service.listServices("invalid-url", "token"));
+    }
 
     @Test
     void exportServices_invalidUrl_throwsRuntimeException() {
         assertThrows(RuntimeException.class,
                 () -> service.exportServices("invalid-url", "token"));
+    }
+
+    // ── listServices(client) lightweight path ────────────────────────────────
+
+    @Test
+    void listServices_paginatesAndSkipsDeepFetches() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        // Page 1 full, page 2 partial → stops
+        List<Map<String, Object>> page1 = new ArrayList<>();
+        for (int i = 0; i < ThreeScaleExportService.LIST_PAGE_SIZE; i++) {
+            page1.add(Map.of("service", Map.of(
+                    "id", i + 1,
+                    "name", "Svc-" + (i + 1),
+                    "system_name", "svc_" + (i + 1),
+                    "backend_version", "1",
+                    "state", "published")));
+        }
+        Map<String, Object> svc2 = new HashMap<>();
+        svc2.put("id", ThreeScaleExportService.LIST_PAGE_SIZE + 1);
+        svc2.put("name", "Last");
+        svc2.put("system_name", "last");
+        svc2.put("backend_version", "2");
+        svc2.put("state", "published");
+        List<Map<String, Object>> page2 = List.of(Map.of("service", svc2));
+
+        org.mockito.Mockito.when(client.getServices(anyString(), eq(1), eq(ThreeScaleExportService.LIST_PAGE_SIZE)))
+                .thenReturn(Map.of("services", page1));
+        org.mockito.Mockito.when(client.getServices(anyString(), eq(2), eq(ThreeScaleExportService.LIST_PAGE_SIZE)))
+                .thenReturn(Map.of("services", page2));
+
+        Map<String, Object> backendBody = new HashMap<>();
+        backendBody.put("id", 9);
+        backendBody.put("name", "Upstream");
+        backendBody.put("system_name", "upstream");
+        backendBody.put("private_endpoint", "https://httpbin.org");
+        org.mockito.Mockito.when(client.getBackends(anyString(), eq(1), eq(ThreeScaleExportService.LIST_PAGE_SIZE)))
+                .thenReturn(Map.of("backend_apis", List.of(Map.of("backend_api", backendBody))));
+
+        org.mockito.Mockito.when(client.getPolicies(anyString(), anyString()))
+                .thenReturn(Map.of("policies_config", List.of(
+                        Map.of("name", "cors", "version", "builtin", "enabled", true))));
+        org.mockito.Mockito.when(client.getBackendUsages(anyString(), anyString()))
+                .thenReturn(List.of(Map.of("backend_usage", Map.of("backend_id", 9))));
+
+        List<ApiService> listed = service.listServices(client, "tok");
+
+        assertEquals(ThreeScaleExportService.LIST_PAGE_SIZE + 1, listed.size());
+        ApiService first = listed.get(0);
+        assertEquals("apiKey", first.authentication.type);
+        assertNotNull(first.policies);
+        assertEquals(1, first.policies.size());
+        assertEquals("cors", first.policies.get(0).name);
+        assertNotNull(first.backends);
+        assertEquals(1, first.backends.size());
+        assertEquals("Upstream", first.backends.get(0).name);
+        assertNull(first.mappingRules);
+        assertNull(first.metrics);
+        assertNull(first.applications);
+        assertNull(first.applicationPlans);
+        assertNull(first.proxyEndpoint);
+
+        ApiService last = listed.get(listed.size() - 1);
+        assertEquals("appIdKey", last.authentication.type);
+
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getApplications(anyString(), anyString(), anyInt(), anyInt());
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getApplicationPlans(anyString(), anyString());
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getMappingRules(anyString(), anyString());
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getMetrics(anyString(), anyString());
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getProxyConfig(anyString(), anyString());
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getBackend(anyString(), anyString());
+    }
+
+    @Test
+    void listServices_resolvesBackendsFromCatalogWithoutPerBackendGet() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        org.mockito.Mockito.when(client.getServices(anyString(), anyInt(), anyInt()))
+                .thenReturn(Map.of("services", List.of(Map.of("service", Map.of(
+                        "id", 1, "name", "A", "system_name", "a", "backend_version", "1")))));
+        org.mockito.Mockito.when(client.getBackends(anyString(), anyInt(), anyInt()))
+                .thenReturn(Map.of("backends", List.of(Map.of("backend", Map.of(
+                        "id", 3, "name", "Shared", "system_name", "shared")))));
+        org.mockito.Mockito.when(client.getPolicies(anyString(), anyString()))
+                .thenReturn(Map.of("policies_config", List.of()));
+        org.mockito.Mockito.when(client.getBackendUsages(anyString(), anyString()))
+                .thenReturn(List.of(Map.of("backend_usage", Map.of("backend_id", 3))));
+
+        List<ApiService> listed = service.listServices(client, "tok");
+        assertEquals(1, listed.size());
+        assertEquals("Shared", listed.get(0).backends.get(0).name);
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getBackend(anyString(), anyString());
     }
 }
