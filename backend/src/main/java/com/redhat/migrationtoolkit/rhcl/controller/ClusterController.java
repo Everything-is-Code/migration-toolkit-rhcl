@@ -1,12 +1,17 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
+import com.redhat.migrationtoolkit.rhcl.entity.AppSettingsEntity;
+import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -26,6 +31,9 @@ public class ClusterController {
 
     @Inject
     KubernetesClient client;
+
+    @Inject
+    ClusterVersionService clusterVersionService;
 
     /**
      * Obtains the cluster domain from the hostname of the backend's own OpenShift Route.
@@ -99,6 +107,30 @@ public class ClusterController {
             LOG.warnf("Failed to get cluster domain: %s", e.getMessage());
             return Response.status(500).entity(Map.of("error", e.getMessage())).build();
         }
+    }
+
+    /**
+     * Resolved cluster versions and capability matrix.
+     * Profile override is read from settings key {@code clusterProfile}
+     * ({@code auto}|{@code ocp-4.19}|{@code ocp-4.21}).
+     */
+    @GET
+    @Path("/versions")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Get detected or profile/default cluster versions and capabilities")
+    public Response getVersions(@QueryParam("refresh") @DefaultValue("false") boolean refresh) {
+        String profile = ClusterVersionService.PROFILE_AUTO;
+        try {
+            AppSettingsEntity entity = AppSettingsEntity.findById(
+                    ClusterVersionService.SETTINGS_KEY_CLUSTER_PROFILE);
+            if (entity != null && entity.value != null && !entity.value.isBlank()) {
+                profile = entity.value.trim();
+            }
+        } catch (Exception e) {
+            LOG.debugf("clusterProfile setting unavailable: %s", e.getMessage());
+        }
+        ClusterVersionsResponse versions = clusterVersionService.resolve(profile, refresh);
+        return Response.ok(versions).build();
     }
 
     @SuppressWarnings("unchecked")
