@@ -29,6 +29,14 @@ import { servicesApi } from '../api/client';
 import { ApiService, Policy } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import {
+  PF_BG_DEFAULT,
+  PF_COLOR_MUTED,
+  PF_FONT_SIZE_XS,
+  PF_PRIMARY,
+  PF_PRIMARY_BG,
+  PF_SPACER_SM,
+} from '../styles/pfTokens';
 
 interface Props {
   appState: AppState;
@@ -46,7 +54,7 @@ const PolicyPanel: React.FC<{ policies: Policy[] }> = ({ policies }) => {
   if (policies.length === 0) return null;
   return (
     <div style={{ marginTop: 10, padding: '10px 14px', background: '#f9f9f9', borderRadius: 4, border: '1px solid #e8e8e8' }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#6a6e73', marginBottom: 6 }}>{t('apiSelection.policyDefinitions', 'Policy Definitions')}</div>
+      <div style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, marginBottom: 6 }}>{t('apiSelection.policyDefinitions', 'Policy Definitions')}</div>
       {policies.map((p, i) => (
         <div key={i} style={{ marginBottom: i < policies.length - 1 ? 8 : 0, opacity: p.enabled ? 1 : 0.45 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
@@ -60,7 +68,7 @@ const PolicyPanel: React.FC<{ policies: Policy[] }> = ({ policies }) => {
             <div style={{ paddingLeft: 12 }}>
               {Object.entries(p.configuration).map(([k, v]) => (
                 <div key={k} style={{ fontSize: 12, color: '#3c3f42', lineHeight: 1.6 }}>
-                  <span style={{ color: '#6a6e73' }}>{k}:</span>{' '}
+                  <span style={{ color: PF_COLOR_MUTED }}>{k}:</span>{' '}
                   <span style={{ fontFamily: 'monospace' }}>{renderConfigValue(v)}</span>
                 </div>
               ))}
@@ -127,7 +135,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('apiSelection.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+        <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED }}>
           {t('apiSelection.description')}
         </p>
       </PageSection>
@@ -186,7 +194,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   aria-labelledby="api-list-header-label"
                   style={{
                     pointerEvents: 'none',
-                    background: '#f0f0f0',
+                    background: PF_BG_DEFAULT,
                     borderLeft: '3px solid transparent',
                     cursor: 'default',
                   }}
@@ -197,28 +205,28 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                         <DataListCell key="h-name" width={2}>
                           <span
                             id="api-list-header-label"
-                            style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}
+                            style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}
                           >
                             {t('apiSelection.colName')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-state">
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
                             {t('apiSelection.colState')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-auth">
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
                             {t('apiSelection.colAuth')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-policy">
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
                             {t('apiSelection.colPolicies')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-backends">
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6a6e73', textTransform: 'uppercase' }}>
+                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
                             {t('apiSelection.colBackends')}
                           </span>
                         </DataListCell>,
@@ -237,8 +245,8 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       aria-labelledby={`service-${service.id}`}
                       style={{
                         cursor: 'pointer',
-                        background: isSelected ? '#e7f3ff' : undefined,
-                        borderLeft: isSelected ? '3px solid #0066cc' : '3px solid transparent',
+                        background: isSelected ? PF_PRIMARY_BG : undefined,
+                        borderLeft: isSelected ? `3px solid ${PF_PRIMARY}` : '3px solid transparent',
                       }}
                     >
                       <DataListItemRow>
@@ -249,7 +257,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                                 {service.name}
                               </span>
                               <br />
-                              <small style={{ color: '#6a6e73' }}>{service.systemName}</small>
+                              <small style={{ color: PF_COLOR_MUTED }}>{service.systemName}</small>
                               {isSelected && allPolicies.length > 0 && (
                                 <PolicyPanel policies={allPolicies} />
                               )}

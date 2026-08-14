@@ -142,7 +142,7 @@ public class CompatibilityService {
                 continue;
             }
 
-            // I7: capability-tagged fallback must not depend on supportedPolicies membership.
+            // Capability-tagged CORS fallback WARNING is independent of supportedPolicies membership.
             if ("cors".equals(systemName) && capabilities != null && !capabilities.corsNative) {
                 items.add(new CompatibilityItem(
                         displayName,

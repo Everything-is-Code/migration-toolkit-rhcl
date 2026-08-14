@@ -327,7 +327,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                           lineHeight: 1.6,
                           boxSizing: 'border-box',
                           overflowX: 'auto',
-                          whiteSpace: 'normal',
+                          whiteSpace: 'pre-wrap',
                           margin: 0,
                         }}>
                           {renderHighlightedYaml(currentEdits[filename] ?? originalFiles[i][1])}
