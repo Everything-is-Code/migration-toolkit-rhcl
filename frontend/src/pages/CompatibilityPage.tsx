@@ -25,6 +25,20 @@ import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { loadSupportedPolicies } from './SupportedPoliciesPage';
 
+/** PF v5 tokens for status / muted text / spacing (I8). */
+const PF_SUCCESS = 'var(--pf-v5-global--success-color--100)';
+const PF_WARNING = 'var(--pf-v5-global--warning-color--100)';
+const PF_DANGER = 'var(--pf-v5-global--danger-color--100)';
+const PF_COLOR_MUTED = 'var(--pf-v5-global--Color--200)';
+const PF_COLOR_SUBTLE = 'var(--pf-v5-global--Color--400)';
+const PF_BG_DEFAULT = 'var(--pf-v5-global--BackgroundColor--200)';
+const PF_BG_WARNING = 'var(--pf-v5-global--palette--gold-50)';
+const PF_BG_DANGER = 'var(--pf-v5-global--palette--red-50)';
+const PF_SPACER_XS = 'var(--pf-v5-global--spacer--xs)';
+const PF_SPACER_SM = 'var(--pf-v5-global--spacer--sm)';
+const PF_SPACER_MD = 'var(--pf-v5-global--spacer--md)';
+const PF_BORDER_RADIUS = 'var(--pf-v5-global--BorderRadius--sm)';
+
 interface Props {
   appState: AppState;
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -32,11 +46,17 @@ interface Props {
 
 const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   switch (status) {
-    case 'SUPPORTED': return <CheckCircleIcon color="#3e8635" />;
-    case 'WARNING': return <ExclamationTriangleIcon color="#f0ab00" />;
-    case 'UNSUPPORTED': return <TimesCircleIcon color="#c9190b" />;
+    case 'SUPPORTED': return <CheckCircleIcon color={PF_SUCCESS} />;
+    case 'WARNING': return <ExclamationTriangleIcon color={PF_WARNING} />;
+    case 'UNSUPPORTED': return <TimesCircleIcon color={PF_DANGER} />;
     default: return null;
   }
+};
+
+const statusBackground = (status: string): string => {
+  if (status === 'SUPPORTED') return PF_BG_DEFAULT;
+  if (status === 'WARNING') return PF_BG_WARNING;
+  return PF_BG_DANGER;
 };
 
 const ScoreColor = (score: number): ProgressVariant => {
@@ -89,16 +109,16 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
   return (
     <>
       <PageSection variant={PageSectionVariants.light}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: PF_SPACER_MD }}>
           <div>
             <Title headingLevel="h1" size="2xl">{t('compatibility.title')}</Title>
             {!noServices && (
-              <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+              <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED }}>
                 {t('compatibility.description', { count: appState.selectedServices.length })}
               </p>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: PF_SPACER_SM, alignItems: 'center' }}>
             <Button variant="secondary" onClick={() => navigate('/services')}>{t('compatibility.btnCancel')}</Button>
             {!noServices && (
               <Button variant="secondary" onClick={checkAll} isDisabled={loading}>{t('compatibility.btnRecheck')}</Button>
@@ -119,7 +139,7 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
         ) : loading ? (
           <div style={{ textAlign: 'center', padding: '60px' }}>
             <Spinner size="xl" />
-            <p style={{ marginTop: '16px' }}>{t('compatibility.loading')}</p>
+            <p style={{ marginTop: PF_SPACER_MD }}>{t('compatibility.loading')}</p>
           </div>
         ) : error ? (
           <Alert variant="danger" title={error} />
@@ -145,7 +165,7 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
                     <Progress
                       value={result.score}
                       variant={ScoreColor(result.score)}
-                      style={{ marginTop: '8px' }}
+                      style={{ marginTop: PF_SPACER_SM }}
                     />
                   </CardTitle>
                   <CardBody>
@@ -155,20 +175,19 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
                           <div style={{
                             display: 'flex',
                             alignItems: 'flex-start',
-                            gap: '8px',
-                            padding: '8px',
-                            borderRadius: '4px',
-                            background: item.status === 'SUPPORTED' ? '#f4f4f4' :
-                              item.status === 'WARNING' ? '#fff7e6' : '#fdf2f2',
+                            gap: PF_SPACER_SM,
+                            padding: PF_SPACER_SM,
+                            borderRadius: PF_BORDER_RADIUS,
+                            background: statusBackground(item.status),
                           }}>
                             <StatusIcon status={item.status} />
                             <div>
                               <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</div>
-                              <div style={{ fontSize: '0.8rem', color: '#6a6e73' }}>{item.message}</div>
+                              <div style={{ fontSize: '0.8rem', color: PF_COLOR_MUTED }}>{item.message}</div>
                               {(item.requiredVersion || item.capability) && (
-                                <div style={{ marginTop: '4px', fontSize: '0.75rem', color: '#8a8d90' }}>
+                                <div style={{ marginTop: PF_SPACER_XS, fontSize: '0.75rem', color: PF_COLOR_SUBTLE }}>
                                   {item.capability && (
-                                    <span style={{ marginRight: 8 }}>
+                                    <span style={{ marginRight: PF_SPACER_SM }}>
                                       {t('compatibility.capability', { capability: item.capability })}
                                     </span>
                                   )}

@@ -1,7 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
-import com.redhat.migrationtoolkit.rhcl.entity.AppSettingsEntity;
 import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -119,17 +118,7 @@ public class ClusterController {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(summary = "Get detected or profile/default cluster versions and capabilities")
     public Response getVersions(@QueryParam("refresh") @DefaultValue("false") boolean refresh) {
-        String profile = ClusterVersionService.PROFILE_AUTO;
-        try {
-            AppSettingsEntity entity = AppSettingsEntity.findById(
-                    ClusterVersionService.SETTINGS_KEY_CLUSTER_PROFILE);
-            if (entity != null && entity.value != null && !entity.value.isBlank()) {
-                profile = entity.value.trim();
-            }
-        } catch (Exception e) {
-            LOG.debugf("clusterProfile setting unavailable: %s", e.getMessage());
-        }
-        ClusterVersionsResponse versions = clusterVersionService.resolve(profile, refresh);
+        ClusterVersionsResponse versions = clusterVersionService.resolveFromSettings(refresh);
         return Response.ok(versions).build();
     }
 

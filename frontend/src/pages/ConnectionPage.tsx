@@ -32,7 +32,7 @@ import { connectionApi, clusterApi, defaultsApi, settingsApi } from '../api/clie
 import { ClusterProfile, ClusterVersionsResponse } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
-import { shouldShowClusterVersionsCard } from './clusterCapabilityUi';
+import { clusterProfileI18nKey, shouldShowClusterVersionsCard } from './clusterCapabilityUi';
 
 interface Props {
   appState: AppState;
@@ -41,8 +41,28 @@ interface Props {
 
 const PROFILE_OPTIONS: ClusterProfile[] = ['auto', 'ocp-4.19', 'ocp-4.21'];
 
+/** PF v5 tokens — muted text / spacers used by versions-related UI (I8). */
+const PF_COLOR_MUTED = 'var(--pf-v5-global--Color--200)';
+const PF_SPACER_SM = 'var(--pf-v5-global--spacer--sm)';
+const PF_SPACER_MD = 'var(--pf-v5-global--spacer--md)';
+
 const displayOrDash = (value: string | null | undefined) =>
   value && value.trim() ? value : '—';
+
+/** Narrow unknown catch values from axios / Error (I9). */
+function apiErrorMessage(e: unknown, fallback: string): string {
+  if (e && typeof e === 'object') {
+    const err = e as {
+      message?: string;
+      response?: { data?: { error?: string; message?: string } };
+    };
+    return err.response?.data?.error || err.response?.data?.message || err.message || fallback;
+  }
+  if (typeof e === 'string' && e.trim()) {
+    return e;
+  }
+  return fallback;
+}
 
 const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const { t } = useTranslation();
@@ -93,8 +113,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     try {
       const res = await clusterApi.getVersions(refresh);
       applyVersions(res.data);
-    } catch (e: any) {
-      setVersionsError(e?.response?.data?.error || e?.message || 'Failed to load cluster versions');
+    } catch (e: unknown) {
+      setVersionsError(apiErrorMessage(e, 'Failed to load cluster versions'));
     } finally {
       setVersionsLoading(false);
     }
@@ -147,8 +167,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       } else {
         setDomainError(t('connection.domainNotFound'));
       }
-    } catch (e: any) {
-      const detail = e?.response?.data?.error || e?.message || '';
+    } catch (e: unknown) {
+      const detail = apiErrorMessage(e, '');
       setDomainError(`${t('connection.domainError')}: ${detail}`);
     } finally {
       setFetchingDomain(false);
@@ -169,8 +189,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       }));
       // Refresh cluster versions on reconnect
       await loadVersions(true);
-    } catch (e: any) {
-      setError(e.response?.data?.message || t('connection.errorDefault'));
+    } catch (e: unknown) {
+      setError(apiErrorMessage(e, t('connection.errorDefault')));
       setAppState(prev => ({
         ...prev,
         connection: { url, accessToken, tenant, connected: false },
@@ -188,8 +208,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       await settingsApi.put('clusterProfile', profile);
       setAppState(prev => ({ ...prev, clusterProfile: profile }));
       await loadVersions(true);
-    } catch (e: any) {
-      setVersionsError(e?.response?.data?.message || e?.message || t('connection.profileSaveError'));
+    } catch (e: unknown) {
+      setVersionsError(apiErrorMessage(e, t('connection.profileSaveError')));
     } finally {
       setProfileSaving(false);
     }
@@ -207,7 +227,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('connection.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+        <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED }}>
           {t('connection.description')}
         </p>
       </PageSection>
@@ -340,9 +360,9 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
         </Card>
 
         {shouldShowClusterVersionsCard(appState.connection.connected) && (
-          <Card style={{ marginTop: '16px' }}>
+          <Card style={{ marginTop: PF_SPACER_MD }}>
             <CardBody>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: PF_SPACER_SM }}>
                 <Title headingLevel="h3" size="lg">
                   {t('connection.versionsTitle')}
                 </Title>
@@ -355,18 +375,18 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   {versionsLoading ? t('connection.versionsRefreshing') : t('connection.btnRefreshVersions')}
                 </Button>
               </div>
-              <p style={{ marginTop: '8px', color: '#6a6e73', fontSize: '0.9rem' }}>
+              <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: '0.9rem' }}>
                 {t('connection.versionsDescription')}
               </p>
 
               {versionsError && (
-                <Alert variant="warning" isInline title={versionsError} style={{ marginTop: '12px' }} />
+                <Alert variant="warning" isInline title={versionsError} style={{ marginTop: PF_SPACER_SM }} />
               )}
 
               <FormGroup
                 label={t('connection.labelProfile')}
                 fieldId="cluster-profile"
-                style={{ marginTop: '16px', maxWidth: 360 }}
+                style={{ marginTop: PF_SPACER_MD, maxWidth: 360 }}
               >
                 <FormSelect
                   id="cluster-profile"
@@ -379,7 +399,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     <FormSelectOption
                       key={opt}
                       value={opt}
-                      label={t(`connection.profile.${opt === 'ocp-4.19' ? 'ocp419' : opt === 'ocp-4.21' ? 'ocp421' : 'auto'}`)}
+                      label={t(clusterProfileI18nKey(opt))}
                     />
                   ))}
                 </FormSelect>
@@ -391,12 +411,12 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               </FormGroup>
 
               {versionsLoading && !versions ? (
-                <div style={{ textAlign: 'center', padding: '24px' }}>
+                <div style={{ textAlign: 'center', padding: PF_SPACER_MD }}>
                   <Spinner size="md" /> {t('connection.versionsLoading')}
                 </div>
               ) : versions ? (
                 <>
-                  <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ marginTop: PF_SPACER_MD, display: 'flex', alignItems: 'center', gap: PF_SPACER_SM, flexWrap: 'wrap' }}>
                     <Label color={versions.source === 'detected' ? 'green' : versions.source === 'profile' ? 'blue' : 'orange'}>
                       {t(sourceLabelKey)}
                     </Label>
@@ -406,7 +426,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       <Label color="orange">{t('connection.capCorsFallback')}</Label>
                     )}
                   </div>
-                  <DescriptionList style={{ marginTop: '16px' }} isHorizontal>
+                  <DescriptionList style={{ marginTop: PF_SPACER_MD }} isHorizontal>
                     <DescriptionListGroup>
                       <DescriptionListTerm>{t('connection.labelOcp')}</DescriptionListTerm>
                       <DescriptionListDescription>{displayOrDash(versions.ocp)}</DescriptionListDescription>
@@ -424,7 +444,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       <DescriptionListDescription>
                         {displayOrDash(versions.ossm)}
                         {versions.ossmExpectedForOcp && (
-                          <span style={{ marginLeft: 8, color: '#6a6e73', fontSize: '0.85rem' }}>
+                          <span style={{ marginLeft: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: '0.85rem' }}>
                             ({t('connection.ossmExpected', { version: versions.ossmExpectedForOcp })})
                           </span>
                         )}
@@ -436,7 +456,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       variant="info"
                       isInline
                       title={t('connection.versionsSoftFail')}
-                      style={{ marginTop: '16px' }}
+                      style={{ marginTop: PF_SPACER_MD }}
                     >
                       <ul style={{ margin: 0, paddingLeft: 18 }}>
                         {versions.errors.map((err, i) => (
@@ -452,12 +472,12 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
         )}
 
         {appState.connection.connected && (
-          <Card style={{ marginTop: '16px' }}>
+          <Card style={{ marginTop: PF_SPACER_MD }}>
             <CardBody>
               <Title headingLevel="h3" size="lg">
                 <CheckCircleIcon color="green" /> {t('connection.infoTitle')}
               </Title>
-              <DescriptionList style={{ marginTop: '16px' }}>
+              <DescriptionList style={{ marginTop: PF_SPACER_MD }}>
                 <DescriptionListGroup>
                   <DescriptionListTerm>3scale URL</DescriptionListTerm>
                   <DescriptionListDescription>{appState.connection.url}</DescriptionListDescription>

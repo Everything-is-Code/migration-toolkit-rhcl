@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
+import com.redhat.migrationtoolkit.rhcl.entity.AppSettingsEntity;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResourceList;
 import io.fabric8.kubernetes.api.model.apiextensions.v1.CustomResourceDefinition;
@@ -59,10 +60,13 @@ public class ClusterVersionService {
     private static final Pattern SECRETISH = Pattern.compile(
             "(?i)(token\\s*=\\s*\\S+|bearer\\s+\\S+|sha256~\\S+|kubeconfig\\s*=\\s*\\S+|/[\\w./-]*\\.kube[\\w./-]*)");
 
+    private static final long CACHE_TTL_MS = 5 * 60 * 1000L;
+
     @Inject
     KubernetesClient client;
 
     private volatile ClusterVersionsResponse cache;
+    private volatile long cacheAt;
 
     public ClusterVersionService() {
     }
@@ -72,12 +76,47 @@ public class ClusterVersionService {
         this.client = client;
     }
 
+    /** Overridable clock for TTL unit tests. */
+    protected long nowMs() {
+        return System.currentTimeMillis();
+    }
+
+    /**
+     * Resolve using {@code clusterProfile} from app settings.
+     * On settings read failure: WARN and fall back to {@link #PROFILE_AUTO}.
+     */
+    public ClusterVersionsResponse resolveFromSettings(boolean refresh) {
+        String profile = PROFILE_AUTO;
+        try {
+            profile = readClusterProfile();
+        } catch (Exception e) {
+            LOG.warnf("clusterProfile setting unavailable: %s", e.getMessage());
+            profile = PROFILE_AUTO;
+        }
+        return resolve(profile, refresh);
+    }
+
+    /**
+     * Read {@code clusterProfile} from {@link AppSettingsEntity}.
+     * Overridable for unit tests / Panache isolation.
+     */
+    protected String readClusterProfile() {
+        AppSettingsEntity entity = AppSettingsEntity.findById(SETTINGS_KEY_CLUSTER_PROFILE);
+        if (entity != null && entity.value != null && !entity.value.isBlank()) {
+            return entity.value.trim();
+        }
+        return PROFILE_AUTO;
+    }
+
     public ClusterVersionsResponse resolve(String profile, boolean refresh) {
-        if (!refresh && cache != null && sameProfile(cache.profile, profile)) {
+        long now = nowMs();
+        if (!refresh && cache != null && sameProfile(cache.profile, profile)
+                && (now - cacheAt) < CACHE_TTL_MS) {
             return cache;
         }
         ClusterVersionsResponse resolved = doResolve(normalizeProfile(profile));
         cache = resolved;
+        cacheAt = now;
         return resolved;
     }
 
@@ -156,18 +195,39 @@ public class ClusterVersionService {
             errors.add(sanitize("Gateway API detect failed: " + safeMessage(e)));
         }
 
+        // List CSVs once per detect pass; Kuadrant + OSSM filter the same items.
+        List<GenericKubernetesResource> csvs = null;
         try {
-            kuadrant = detectKuadrantCsvVersion();
+            csvs = listCsvs();
         } catch (Exception e) {
-            LOG.warnf("Kuadrant CSV detect failed: %s", e.getMessage());
-            errors.add(sanitize("Kuadrant detect failed: " + safeMessage(e)));
+            LOG.warnf("CSV list failed: %s", e.getMessage());
+            errors.add(sanitize("CSV list failed: " + safeMessage(e)));
         }
 
-        try {
-            ossm = detectOssmCsvVersion();
-        } catch (Exception e) {
-            LOG.warnf("OSSM CSV detect failed: %s", e.getMessage());
-            errors.add(sanitize("OSSM CSV detect failed: " + safeMessage(e)));
+        if (csvs != null) {
+            try {
+                kuadrant = findCsvVersion(csvs, name -> {
+                    String lower = name.toLowerCase(Locale.ROOT);
+                    return lower.contains("kuadrant") || lower.contains("rhcl") || lower.contains("rh-connectivity");
+                });
+            } catch (Exception e) {
+                LOG.warnf("Kuadrant CSV detect failed: %s", e.getMessage());
+                errors.add(sanitize("Kuadrant detect failed: " + safeMessage(e)));
+            }
+
+            try {
+                ossm = findCsvVersion(csvs, name -> {
+                    String lower = name.toLowerCase(Locale.ROOT);
+                    // Prefer explicit OSSM / service mesh operator names — never treat generic "istio" alone as OSSM
+                    return lower.contains("servicemesh")
+                            || lower.contains("openshift-service-mesh")
+                            || lower.contains("ossm")
+                            || (lower.contains("sail") && lower.contains("operator"));
+                });
+            } catch (Exception e) {
+                LOG.warnf("OSSM CSV detect failed: %s", e.getMessage());
+                errors.add(sanitize("OSSM CSV detect failed: " + safeMessage(e)));
+            }
         }
 
         // SMCP/Istio CR is only a fallback when OLM CSV did not yield an OSSM version.
@@ -222,13 +282,13 @@ public class ClusterVersionService {
         r.gatewayApi = DEFAULT_GATEWAY_API;
         r.kuadrant = null;
         r.ossmExpectedForOcp = expectedOssmForOcp(r.ocp);
-        r.ossm = r.ossmExpectedForOcp;
+        // Soft-fail: keep expected for UI guidance, but do not claim OSSM is present.
+        r.ossm = null;
         r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, null, null, r.ossmExpectedForOcp);
         r.errors = errors;
         return r;
     }
 
-    @SuppressWarnings("unchecked")
     private String detectOcp() {
         ResourceDefinitionContext ctx = new ResourceDefinitionContext.Builder()
                 .withGroup("config.openshift.io")
@@ -273,25 +333,7 @@ public class ClusterVersionService {
         return bundle == null ? null : stripLeadingV(bundle);
     }
 
-    private String detectKuadrantCsvVersion() {
-        return findCsvVersion(name -> {
-            String lower = name.toLowerCase(Locale.ROOT);
-            return lower.contains("kuadrant") || lower.contains("rhcl") || lower.contains("rh-connectivity");
-        });
-    }
-
-    private String detectOssmCsvVersion() {
-        return findCsvVersion(name -> {
-            String lower = name.toLowerCase(Locale.ROOT);
-            // Prefer explicit OSSM / service mesh operator names — never treat generic "istio" alone as OSSM
-            return lower.contains("servicemesh")
-                    || lower.contains("openshift-service-mesh")
-                    || lower.contains("ossm")
-                    || (lower.contains("sail") && lower.contains("operator"));
-        });
-    }
-
-    private String findCsvVersion(java.util.function.Predicate<String> nameMatch) {
+    private List<GenericKubernetesResource> listCsvs() {
         ResourceDefinitionContext ctx = new ResourceDefinitionContext.Builder()
                 .withGroup("operators.coreos.com")
                 .withVersion("v1alpha1")
@@ -301,9 +343,15 @@ public class ClusterVersionService {
                 .build();
         GenericKubernetesResourceList list = client.genericKubernetesResources(ctx).inAnyNamespace().list();
         if (list == null || list.getItems() == null) {
-            return null;
+            return List.of();
         }
-        Optional<GenericKubernetesResource> match = list.getItems().stream()
+        return list.getItems();
+    }
+
+    private static String findCsvVersion(
+            List<GenericKubernetesResource> csvs,
+            java.util.function.Predicate<String> nameMatch) {
+        Optional<GenericKubernetesResource> match = csvs.stream()
                 .filter(csv -> csv.getMetadata() != null && csv.getMetadata().getName() != null)
                 .filter(csv -> nameMatch.test(csv.getMetadata().getName()))
                 .findFirst();

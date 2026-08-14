@@ -4,7 +4,6 @@ import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionRequest;
-import com.redhat.migrationtoolkit.rhcl.entity.AppSettingsEntity;
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
 import com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
@@ -25,7 +24,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
-import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,8 +37,6 @@ import java.util.Set;
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Conversion", description = "Convert 3scale services to Connectivity Link YAML")
 public class ConversionController {
-
-    private static final Logger LOG = Logger.getLogger(ConversionController.class);
 
     @Inject
     ThreeScaleExportService exportService;
@@ -137,17 +133,7 @@ public class ConversionController {
     }
 
     private ClusterCapabilities resolveCapabilities() {
-        String profile = ClusterVersionService.PROFILE_AUTO;
-        try {
-            AppSettingsEntity entity = AppSettingsEntity.findById(
-                    ClusterVersionService.SETTINGS_KEY_CLUSTER_PROFILE);
-            if (entity != null && entity.value != null && !entity.value.isBlank()) {
-                profile = entity.value.trim();
-            }
-        } catch (Exception e) {
-            LOG.debugf("clusterProfile setting unavailable: %s", e.getMessage());
-        }
-        ClusterVersionsResponse versions = clusterVersionService.resolve(profile, false);
+        ClusterVersionsResponse versions = clusterVersionService.resolveFromSettings(false);
         return versions != null ? versions.capabilities : null;
     }
 }

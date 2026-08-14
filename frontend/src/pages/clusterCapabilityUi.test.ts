@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import en from '../locales/en.json';
 import ja from '../locales/ja.json';
+import type { ClusterProfile } from '../api/types';
 import {
+  CLUSTER_PROFILE_I18N_KEYS,
+  clusterProfileI18nKey,
   corsConversionHintKey,
   shouldShowClusterVersionsCard,
 } from '../pages/clusterCapabilityUi';
@@ -19,12 +22,23 @@ describe('clusterCapabilityUi', () => {
     expect(corsConversionHintKey(true, true)).toBe('conversion.corsNativeHint');
   });
 
+  it('maps every ClusterProfile to a connection.profile.* i18n key (I10)', () => {
+    const profiles: ClusterProfile[] = ['auto', 'ocp-4.19', 'ocp-4.21'];
+    expect(Object.keys(CLUSTER_PROFILE_I18N_KEYS).sort()).toEqual([...profiles].sort());
+    expect(clusterProfileI18nKey('auto')).toBe('connection.profile.auto');
+    expect(clusterProfileI18nKey('ocp-4.19')).toBe('connection.profile.ocp419');
+    expect(clusterProfileI18nKey('ocp-4.21')).toBe('connection.profile.ocp421');
+  });
+
   it('keeps Connection version and Conversion CORS hint strings in en+ja', () => {
     const required = [
       'connection.versionsTitle',
       'connection.versionsDescription',
       'connection.capCorsNative',
       'connection.capCorsFallback',
+      'connection.profile.auto',
+      'connection.profile.ocp419',
+      'connection.profile.ocp421',
       'conversion.corsNativeHint',
       'conversion.corsFallbackHint',
     ];
