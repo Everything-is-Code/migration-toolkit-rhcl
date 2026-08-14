@@ -63,6 +63,7 @@ class ClusterVersionServiceTest {
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
         assertTrue(response.capabilities.timeoutsSupported);
+        assertSoftFailOssmNullButExpected(response);
         assertNotNull(response.errors);
         assertFalse(response.errors.isEmpty());
         assertErrorsContainNoSecrets(response.errors);
@@ -79,6 +80,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.ocp.startsWith("4.19"));
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
+        assertSoftFailOssmNullButExpected(response);
         assertErrorsContainNoSecrets(response.errors);
     }
 
@@ -107,6 +109,19 @@ class ClusterVersionServiceTest {
         assertTrue(response.ocp.startsWith("4.19"));
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
+        assertSoftFailOssmNullButExpected(response);
+    }
+
+    @Test
+    void softFailDefault_ossmNullAndNotPresent_whileExpectedKept() {
+        ClusterVersionService offline = new ClusterVersionService(null);
+        ClusterVersionsResponse response = offline.resolve("auto", true);
+
+        assertEquals("default", response.source);
+        assertNull(response.ossm);
+        assertFalse(response.capabilities.ossmPresent);
+        assertEquals("2.6", response.ossmExpectedForOcp);
+        assertFalse(response.capabilities.ossmMatchesOcp);
     }
 
     // ── 1.2 Missing SMCP RBAC still resolves via CSV or OCP→OSSM map ─────────
@@ -175,7 +190,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.ossmExpectedForOcp.startsWith("3."));
     }
 
-    // ── Cache refresh ────────────────────────────────────────────────────────
+    // ── Cache refresh + TTL ──────────────────────────────────────────────────
 
     @Test
     void resolve_refreshFalse_returnsCachedResult() {
@@ -198,6 +213,66 @@ class ClusterVersionServiceTest {
 
         assertNotSame(first, second);
         assertEquals(first.source, second.source);
+    }
+
+    @Test
+    void resolve_withinTtl_returnsCachedResult() {
+        when(client.genericKubernetesResources(any(ResourceDefinitionContext.class)))
+                .thenThrow(new KubernetesClientException("Forbidden", HttpURLConnection.HTTP_FORBIDDEN, null));
+
+        MutableClockService clocked = new MutableClockService(client, 1_000_000L);
+        ClusterVersionsResponse first = clocked.resolve("auto", true);
+        clocked.now = 1_000_000L + (4 * 60 * 1000L); // still within 5m
+        ClusterVersionsResponse second = clocked.resolve("auto", false);
+
+        assertSame(first, second);
+    }
+
+    @Test
+    void resolve_afterTtlExpires_reResolves() {
+        when(client.genericKubernetesResources(any(ResourceDefinitionContext.class)))
+                .thenThrow(new KubernetesClientException("Forbidden", HttpURLConnection.HTTP_FORBIDDEN, null));
+
+        MutableClockService clocked = new MutableClockService(client, 1_000_000L);
+        ClusterVersionsResponse first = clocked.resolve("auto", true);
+        clocked.now = 1_000_000L + (5 * 60 * 1000L); // exactly at TTL boundary → stale
+        ClusterVersionsResponse second = clocked.resolve("auto", false);
+
+        assertNotSame(first, second);
+        assertEquals(first.source, second.source);
+    }
+
+    @Test
+    void resolve_refreshTrue_bypassesEvenWithinTtl() {
+        when(client.genericKubernetesResources(any(ResourceDefinitionContext.class)))
+                .thenThrow(new KubernetesClientException("Forbidden", HttpURLConnection.HTTP_FORBIDDEN, null));
+
+        MutableClockService clocked = new MutableClockService(client, 1_000_000L);
+        ClusterVersionsResponse first = clocked.resolve("auto", true);
+        clocked.now = 1_000_000L + 1_000L;
+        ClusterVersionsResponse second = clocked.resolve("auto", true);
+
+        assertNotSame(first, second);
+    }
+
+    // ── CSV listed once per detect ───────────────────────────────────────────
+
+    @Test
+    void resolve_listsClusterServiceVersionsOnce() {
+        stubCluster(
+                "4.19.3",
+                "1.2.1",
+                csv("kuadrant-operator.v1.4.0", "1.4.0"),
+                csv("servicemeshoperator.v2.6.5", "2.6.5"),
+                SmcpMode.EMPTY);
+
+        ClusterVersionsResponse response = service.resolve("auto", true);
+
+        assertEquals("detected", response.source);
+        assertEquals("1.4.0", response.kuadrant);
+        assertEquals("2.6.5", response.ossm);
+        verify(client, times(1)).genericKubernetesResources(argThat(
+                ctx -> ctx != null && "clusterserviceversions".equals(ctx.getPlural())));
     }
 
     // ── OSSM mapping ─────────────────────────────────────────────────────────
@@ -435,5 +510,28 @@ class ClusterVersionServiceTest {
         csv.setMetadata(meta);
         csv.setAdditionalProperty("spec", Map.of("version", version));
         return csv;
+    }
+
+    private static void assertSoftFailOssmNullButExpected(ClusterVersionsResponse response) {
+        assertNull(response.ossm, "soft-fail must not present expected OSSM as detected");
+        assertFalse(response.capabilities.ossmPresent);
+        assertNotNull(response.ossmExpectedForOcp);
+        assertEquals("2.6", response.ossmExpectedForOcp);
+        assertFalse(response.capabilities.ossmMatchesOcp);
+    }
+
+    /** Test double with injectable clock for TTL assertions. */
+    private static final class MutableClockService extends ClusterVersionService {
+        long now;
+
+        MutableClockService(KubernetesClient client, long nowMs) {
+            super(client);
+            this.now = nowMs;
+        }
+
+        @Override
+        protected long nowMs() {
+            return now;
+        }
     }
 }
