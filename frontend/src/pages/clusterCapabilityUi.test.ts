@@ -28,10 +28,17 @@ describe('clusterCapabilityUi', () => {
       'conversion.corsNativeHint',
       'conversion.corsFallbackHint',
     ];
+    const lookup = (locale: unknown, key: string): unknown => {
+      return key.split('.').reduce<unknown>((acc, part) => {
+        if (acc != null && typeof acc === 'object' && part in (acc as object)) {
+          return (acc as Record<string, unknown>)[part];
+        }
+        return undefined;
+      }, locale);
+    };
     for (const key of required) {
-      const [ns, leaf] = key.split('.');
-      expect((en as Record<string, Record<string, string>>)[ns][leaf]).toBeTruthy();
-      expect((ja as Record<string, Record<string, string>>)[ns][leaf]).toBeTruthy();
+      expect(lookup(en, key)).toBeTruthy();
+      expect(lookup(ja, key)).toBeTruthy();
     }
   });
 });
