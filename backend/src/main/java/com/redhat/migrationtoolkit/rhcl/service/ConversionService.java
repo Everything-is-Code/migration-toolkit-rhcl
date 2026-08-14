@@ -16,6 +16,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -860,7 +861,7 @@ spec:
         Policy anonymousPolicy = findAnonymousPolicy(service);
         if (anonymousPolicy != null) {
             String yaml = generateAnonymousAuthPolicy(name, namespace, anonymousPolicy, anonymousTarget);
-            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+            return finalizeAuthPolicyAuthorization(yaml, service, ipCheckMode);
         }
 
         // token_introspection → AuthPolicy oauth2Introspection (GateForge #202 / Kuadrant)
@@ -869,7 +870,7 @@ spec:
             String introspectionYaml = generateOauth2IntrospectionAuthPolicy(
                     name, namespace, tokenIntrospection, buildAuthCacheBlock(findAuthCachingPolicy(service)));
             if (introspectionYaml != null) {
-                return appendIpCheckOpaIfNeeded(introspectionYaml, service, ipCheckMode);
+                return finalizeAuthPolicyAuthorization(introspectionYaml, service, ipCheckMode);
             }
             // Incomplete (no URL): fall through to normal auth; warning emitted via README/secret
         }
@@ -900,7 +901,7 @@ spec:
         jwt:
           issuerUrl: %s
 %s""".formatted(name, namespace, name, name, issuer, authCacheBlock);
-            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+            return finalizeAuthPolicyAuthorization(yaml, service, ipCheckMode);
         } else if ("apiKey".equals(authType)) {
             String yaml = """
 apiVersion: kuadrant.io/v1
@@ -927,7 +928,7 @@ spec:
           authorizationHeader:
             prefix: APIKEY
 """.formatted(name, namespace, name, name, name, authCacheBlock);
-            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+            return finalizeAuthPolicyAuthorization(yaml, service, ipCheckMode);
         } else if ("appIdKey".equals(authType)) {
             String yaml = """
 apiVersion: kuadrant.io/v1
@@ -957,7 +958,7 @@ spec:
           queryString:
             name: app_key
 """.formatted(name, namespace, name, name, name, authCacheBlock);
-            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+            return finalizeAuthPolicyAuthorization(yaml, service, ipCheckMode);
         }
 
         String yaml = """
@@ -977,7 +978,14 @@ spec:
   rules:
     authentication: {}
 """.formatted(name, namespace, name, name);
-        return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+        return finalizeAuthPolicyAuthorization(yaml, service, ipCheckMode);
+    }
+
+    /** Append jwt_claim_check patternMatching, then optional ip_check OPA. */
+    private String finalizeAuthPolicyAuthorization(String authPolicyYaml, ApiService service,
+                                                    String ipCheckMode) {
+        return appendIpCheckOpaIfNeeded(
+                appendJwtClaimCheckAuthorization(authPolicyYaml, service), service, ipCheckMode);
     }
 
     /**
@@ -1007,6 +1015,170 @@ spec:
             return authPolicyYaml + "\n" + opaBlock;
         }
         return authPolicyYaml.stripTrailing() + "\n" + opaBlock;
+    }
+
+    private record JwtClaimPattern(String selector, String operator, String value) {}
+
+    private record JwtClaimParseResult(List<JwtClaimPattern> patterns, List<String> gapNotes) {}
+
+    private Policy findJwtClaimCheckPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "jwt_claim_check".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Parse 3scale jwt_claim_check rules into Authorino patternMatching patterns.
+     * Skips liquid / combine_op=or / unknown ops (gap notes); path-scoped rules still emit
+     * global patterns with a path-scope gap note.
+     */
+    @SuppressWarnings("unchecked")
+    private JwtClaimParseResult parseJwtClaimCheckRules(Policy policy) {
+        List<JwtClaimPattern> patterns = new ArrayList<>();
+        List<String> gapNotes = new ArrayList<>();
+        if (policy == null || policy.configuration == null) {
+            return new JwtClaimParseResult(patterns, gapNotes);
+        }
+        Object rulesRaw = policy.configuration.get("rules");
+        if (!(rulesRaw instanceof List<?> rules)) {
+            return new JwtClaimParseResult(patterns, gapNotes);
+        }
+        if (Boolean.TRUE.equals(policy.configuration.get("enable_extended_context"))) {
+            gapNotes.add("enable_extended_context is not converted — claim checks use plain JWT identity only");
+        }
+        for (Object ruleObj : rules) {
+            if (!(ruleObj instanceof Map<?, ?> ruleMap)) {
+                continue;
+            }
+            Map<String, Object> rule = (Map<String, Object>) ruleMap;
+            String combineOp = String.valueOf(rule.getOrDefault("combine_op", "and")).trim().toLowerCase(Locale.ROOT);
+            if ("or".equals(combineOp)) {
+                gapNotes.add("combine_op=or is not supported — Authorino authorization rules are AND across patterns; OR rule skipped");
+                continue;
+            }
+            String resourceType = String.valueOf(rule.getOrDefault("resource_type", "plain")).trim().toLowerCase(Locale.ROOT);
+            if ("liquid".equals(resourceType)) {
+                gapNotes.add("resource_type=liquid is not converted — path gating ignored; claim patterns may still apply globally");
+            }
+            if (!isCatchAllJwtClaimResource(rule)) {
+                gapNotes.add("path/method-gated jwt_claim_check rules are applied globally in AuthPolicy (no Authorino when/path scoping in P1)");
+            }
+            Object opsRaw = rule.get("operations");
+            if (!(opsRaw instanceof List<?> ops)) {
+                continue;
+            }
+            for (Object opObj : ops) {
+                if (!(opObj instanceof Map<?, ?> opMap)) {
+                    continue;
+                }
+                Map<String, Object> op = (Map<String, Object>) opMap;
+                String claimType = String.valueOf(op.getOrDefault("jwt_claim_type", "plain")).trim().toLowerCase(Locale.ROOT);
+                String valueType = String.valueOf(op.getOrDefault("value_type", "plain")).trim().toLowerCase(Locale.ROOT);
+                if ("liquid".equals(claimType) || "liquid".equals(valueType)) {
+                    gapNotes.add("liquid jwt_claim/value is not converted — operation skipped");
+                    continue;
+                }
+                Object claimRaw = op.get("jwt_claim");
+                if (claimRaw == null || claimRaw.toString().isBlank()) {
+                    continue;
+                }
+                String claim = claimRaw.toString().trim();
+                String threeScaleOp = String.valueOf(op.getOrDefault("op", "")).trim();
+                String authorinoOp = mapJwtClaimOp(threeScaleOp);
+                if (authorinoOp == null) {
+                    gapNotes.add("unsupported jwt_claim_check op '" + threeScaleOp + "' — skipped");
+                    continue;
+                }
+                Object valueRaw = op.get("value");
+                String value = valueRaw != null ? valueRaw.toString() : "";
+                patterns.add(new JwtClaimPattern("auth.identity." + claim, authorinoOp, value));
+            }
+        }
+        return new JwtClaimParseResult(patterns, gapNotes);
+    }
+
+    private static String mapJwtClaimOp(String threeScaleOp) {
+        return switch (threeScaleOp) {
+            case "==" -> "eq";
+            case "!=" -> "neq";
+            case "matches" -> "matches";
+            default -> null;
+        };
+    }
+
+    private static boolean isCatchAllJwtClaimResource(Map<String, Object> rule) {
+        String resource = rule.get("resource") != null ? rule.get("resource").toString().trim() : "";
+        boolean resourceOk = resource.isEmpty() || "/".equals(resource) || ".*".equals(resource);
+        List<String> methods = toStringList(rule.get("methods"));
+        boolean methodsOk = methods.isEmpty()
+                || methods.stream().anyMatch(m -> "ANY".equalsIgnoreCase(m));
+        return resourceOk && methodsOk;
+    }
+
+    private String buildJwtClaimCheckNamedRule(List<JwtClaimPattern> patterns) {
+        if (patterns == null || patterns.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("      jwt-claim-check:\n");
+        sb.append("        patternMatching:\n");
+        sb.append("          patterns:\n");
+        for (JwtClaimPattern pattern : patterns) {
+            sb.append("            - selector: ").append(pattern.selector()).append('\n');
+            sb.append("              operator: ").append(pattern.operator()).append('\n');
+            sb.append("              value: ").append(yamlDoubleQuoted(pattern.value())).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private String appendJwtClaimCheckAuthorization(String authPolicyYaml, ApiService service) {
+        Policy claimCheck = findJwtClaimCheckPolicy(service);
+        if (claimCheck == null) {
+            return authPolicyYaml;
+        }
+        JwtClaimParseResult parsed = parseJwtClaimCheckRules(claimCheck);
+        String namedRule = buildJwtClaimCheckNamedRule(parsed.patterns());
+        if (namedRule.isEmpty()) {
+            return authPolicyYaml;
+        }
+        return mergeAuthorizationNamedRules(authPolicyYaml, namedRule);
+    }
+
+    /**
+     * Merge a named authorization rule body (indented under {@code authorization:}) into AuthPolicy YAML.
+     * Creates the {@code authorization:} map when missing; otherwise inserts as a sibling entry.
+     */
+    private String mergeAuthorizationNamedRules(String authPolicyYaml, String namedRuleBlock) {
+        if (authPolicyYaml == null || authPolicyYaml.isBlank()
+                || namedRuleBlock == null || namedRuleBlock.isBlank()) {
+            return authPolicyYaml;
+        }
+        String block = namedRuleBlock;
+        if (block.startsWith("    authorization:\n")) {
+            block = block.substring("    authorization:\n".length());
+        }
+        if (!block.endsWith("\n")) {
+            block = block + "\n";
+        }
+        String marker = "\n    authorization:";
+        int authIdx = authPolicyYaml.indexOf(marker);
+        if (authIdx < 0) {
+            return authPolicyYaml.stripTrailing() + "\n    authorization:\n" + block;
+        }
+        // Insert named rule as first child under existing authorization map
+        int insertAt = authIdx + marker.length();
+        // skip to end of "authorization:" line
+        int lineEnd = authPolicyYaml.indexOf('\n', insertAt);
+        if (lineEnd < 0) {
+            return authPolicyYaml + "\n" + block;
+        }
+        return authPolicyYaml.substring(0, lineEnd + 1) + block + authPolicyYaml.substring(lineEnd + 1);
     }
 
     private String buildIpCheckOpaAuthorization(Policy ipCheck) {
@@ -2133,6 +2305,7 @@ Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before a
         }
 
         String rateLimitNotes = buildRateLimitApproximationNotes(service);
+        String jwtClaimCheckNotes = buildJwtClaimCheckReadmeNotes(service);
 
         return """
 # %s - Connectivity Link Migration
@@ -2154,7 +2327,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 | secret.yaml | Credentials (replace values before applying) |
 | configmap.yaml | Configuration data |
 %s
-%s%s
+%s%s%s
 ## Prerequisites
 - OpenShift with Connectivity Link (Kuadrant) operator
 - Gateway API CRDs
@@ -2183,6 +2356,7 @@ kubectl get httproute %s-route -n %s
             fileList,
             tokenIntrospectionNotes,
             rateLimitNotes,
+            jwtClaimCheckNotes,
             namespace, name, namespace, name, namespace
         );
     }
@@ -2233,6 +2407,41 @@ kubectl get httproute %s-route -n %s
 `ratelimitpolicy.yaml` includes best-effort mappings from 3scale. Review before apply:
 
 %s""".formatted(bullets);
+    }
+
+    private String buildJwtClaimCheckReadmeNotes(ApiService service) {
+        Policy claimCheck = findJwtClaimCheckPolicy(service);
+        if (claimCheck == null) {
+            return "";
+        }
+        JwtClaimParseResult parsed = parseJwtClaimCheckRules(claimCheck);
+        if (parsed.gapNotes().isEmpty() && parsed.patterns().isEmpty()) {
+            return "";
+        }
+        if (parsed.gapNotes().isEmpty()) {
+            return """
+
+## JWT Claim Check
+
+`policy.yaml` includes AuthPolicy `authorization.jwt-claim-check` patternMatching rules
+mapped from 3scale `jwt_claim_check` (`==`→`eq`, `!=`→`neq`, `matches`→`matches` on `auth.identity.*`).
+""";
+        }
+        StringBuilder bullets = new StringBuilder();
+        for (String note : parsed.gapNotes().stream().distinct().toList()) {
+            bullets.append("- ").append(note).append('\n');
+        }
+        return """
+
+## WARNING: JWT Claim Check conversion gaps
+
+3scale `jwt_claim_check` was partially converted to AuthPolicy `patternMatching`.
+Review the following limitations before apply:
+
+%s
+Liquid claim/value templates, `combine_op=or`, and path/method-gated deny semantics are not fully
+reproduced — verify authorization behavior against the original APIcast policy.
+""".formatted(bullets);
     }
 
     // ─────────────────────────────────────────────
