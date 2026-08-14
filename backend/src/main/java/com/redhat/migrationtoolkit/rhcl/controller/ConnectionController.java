@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.controller;
 import com.redhat.migrationtoolkit.rhcl.dto.ConnectionRequest;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import jakarta.inject.Inject;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -26,18 +27,7 @@ public class ConnectionController {
     @POST
     @Path("/test")
     @Operation(summary = "Test connection to 3scale")
-    public Response testConnection(ConnectionRequest request) {
-        if (request.url == null || request.url.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("success", false, "message", "URL is required"))
-                    .build();
-        }
-        if (request.accessToken == null || request.accessToken.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("success", false, "message", "Access token is required"))
-                    .build();
-        }
-
+    public Response testConnection(@Valid ConnectionRequest request) {
         boolean connected = exportService.testConnection(request);
         if (connected) {
             return Response.ok(Map.of("success", true, "message", "Successfully connected to 3scale")).build();

@@ -11,6 +11,7 @@ import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import com.redhat.migrationtoolkit.rhcl.service.ValidationService;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
+import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -48,13 +49,7 @@ public class ConversionController {
     @POST
     @Transactional
     @Operation(summary = "Convert selected 3scale services")
-    public Response convert(ConversionRequest request) {
-        if (request.serviceIds == null || request.serviceIds.isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", "No service IDs provided"))
-                    .build();
-        }
-
+    public Response convert(@Valid ConversionRequest request) {
         String namespace = request.namespace != null ? request.namespace : "default";
 
         ProjectEntity project = new ProjectEntity();
