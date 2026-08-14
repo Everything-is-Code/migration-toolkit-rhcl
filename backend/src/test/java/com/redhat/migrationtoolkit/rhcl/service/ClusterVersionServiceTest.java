@@ -275,6 +275,38 @@ class ClusterVersionServiceTest {
                 ctx -> ctx != null && "clusterserviceversions".equals(ctx.getPlural())));
     }
 
+    // ── I-7 unbounded CSV list residual ──────────────────────────────────────
+
+    @Test
+    void warnIfUnboundedCsvListLarge_thresholdBoundary() {
+        assertEquals(500, ClusterVersionService.CSV_LIST_SIZE_WARN_THRESHOLD);
+        // Below threshold: no throw; warn path is a no-op (LOG not asserted here).
+        ClusterVersionService.warnIfUnboundedCsvListLarge(499);
+        // At/above threshold: WARN path executes without error.
+        ClusterVersionService.warnIfUnboundedCsvListLarge(500);
+        ClusterVersionService.warnIfUnboundedCsvListLarge(501);
+    }
+
+    @Test
+    void resolve_whenCsvListAtLeast500_stillDetectsOperators() {
+        List<CsvSpec> csvs = new ArrayList<>(ClusterVersionService.CSV_LIST_SIZE_WARN_THRESHOLD);
+        for (int i = 0; i < ClusterVersionService.CSV_LIST_SIZE_WARN_THRESHOLD - 2; i++) {
+            csvs.add(csv("filler-operator-" + i + ".v1.0.0", "1.0.0"));
+        }
+        csvs.add(csv("kuadrant-operator.v1.4.0", "1.4.0"));
+        csvs.add(csv("servicemeshoperator.v2.6.5", "2.6.5"));
+        assertEquals(ClusterVersionService.CSV_LIST_SIZE_WARN_THRESHOLD, csvs.size());
+
+        stubCluster("4.19.3", "1.2.1", csvs, SmcpMode.EMPTY);
+
+        ClusterVersionsResponse response = service.resolve("auto", true);
+
+        assertEquals("detected", response.source);
+        assertEquals("1.4.0", response.kuadrant);
+        assertEquals("2.6.5", response.ossm);
+        // listCsvs invokes warnIfUnboundedCsvListLarge when size >= threshold (I-7).
+    }
+
     // ── OSSM mapping ─────────────────────────────────────────────────────────
 
     @Test
@@ -414,12 +446,27 @@ class ClusterVersionServiceTest {
         return cwd.resolve("deploy/backend/06-rbac.yaml").normalize();
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
     private void stubCluster(
             String ocpVersion,
             String gatewayApiBundle,
             CsvSpec kuadrant,
             CsvSpec ossm,
+            SmcpMode smcpMode) {
+        List<CsvSpec> csvs = new ArrayList<>(2);
+        if (kuadrant != null) {
+            csvs.add(kuadrant);
+        }
+        if (ossm != null) {
+            csvs.add(ossm);
+        }
+        stubCluster(ocpVersion, gatewayApiBundle, csvs, smcpMode);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void stubCluster(
+            String ocpVersion,
+            String gatewayApiBundle,
+            List<CsvSpec> csvSpecs,
             SmcpMode smcpMode) {
         when(client.genericKubernetesResources(any(ResourceDefinitionContext.class)))
                 .thenAnswer(inv -> {
@@ -442,11 +489,10 @@ class ClusterVersionServiceTest {
                         NonNamespaceOperation n = mock(NonNamespaceOperation.class);
                         GenericKubernetesResourceList list = new GenericKubernetesResourceList();
                         List<GenericKubernetesResource> items = new ArrayList<>();
-                        if (kuadrant != null) {
-                            items.add(csvResource(kuadrant.name(), kuadrant.version()));
-                        }
-                        if (ossm != null) {
-                            items.add(csvResource(ossm.name(), ossm.version()));
+                        if (csvSpecs != null) {
+                            for (CsvSpec spec : csvSpecs) {
+                                items.add(csvResource(spec.name(), spec.version()));
+                            }
                         }
                         list.setItems(items);
                         when(op.inAnyNamespace()).thenReturn(n);
