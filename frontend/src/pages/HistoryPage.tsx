@@ -236,17 +236,20 @@ const HistoryPage: React.FC = () => {
                 {/* Table */}
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                    <caption style={{ textAlign: 'left', padding: '0 0 8px', fontWeight: 600 }}>
+                      {t('history.titlePage')}
+                    </caption>
                     <thead>
                       <tr style={{ borderBottom: '2px solid #d2d2d2' }}>
-                        <th style={{ ...thS, width: 40 }}></th>
-                        <th style={{ ...thS, width: 32 }}></th>
-                        <th style={thS}>{t('history.colDateTime')}</th>
-                        <th style={thS}>{t('history.colType')}</th>
-                        <th style={thS}>{t('history.colPackageName')}</th>
-                        <th style={thS}>Namespace</th>
-                        <th style={{ ...thS, textAlign: 'center' }}>{t('history.colStatus')}</th>
-                        <th style={{ ...thS, textAlign: 'center' }}>{t('history.colSuccessFail')}</th>
-                        <th style={{ ...thS, textAlign: 'center', width: 120 }}>{t('history.colOps')}</th>
+                        <th scope="col" style={{ ...thS, width: 40 }}></th>
+                        <th scope="col" style={{ ...thS, width: 32 }}></th>
+                        <th scope="col" style={thS}>{t('history.colDateTime')}</th>
+                        <th scope="col" style={thS}>{t('history.colType')}</th>
+                        <th scope="col" style={thS}>{t('history.colPackageName')}</th>
+                        <th scope="col" style={thS}>Namespace</th>
+                        <th scope="col" style={{ ...thS, textAlign: 'center' }}>{t('history.colStatus')}</th>
+                        <th scope="col" style={{ ...thS, textAlign: 'center' }}>{t('history.colSuccessFail')}</th>
+                        <th scope="col" style={{ ...thS, textAlign: 'center', width: 120 }}>{t('history.colOps')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -361,16 +364,16 @@ const HistoryPage: React.FC = () => {
                             {isExpanded && hasFailures && (
                               <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
                                 <td colSpan={9} style={{ padding: '0 0 12px 72px', background: '#fff8f7' }}>
-                                  <div style={{ fontSize: 13, fontWeight: 600, color: '#c9190b', marginBottom: 8 }}>
-                                    {t('history.failedResources', { count: failures.length })}
-                                  </div>
                                   <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                                    <caption style={{ textAlign: 'left', padding: '8px 0 4px', fontWeight: 600, color: '#c9190b' }}>
+                                      {t('history.failedResources', { count: failures.length })}
+                                    </caption>
                                     <thead>
                                       <tr style={{ color: '#6a6e73' }}>
-                                        <th style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colFile')}</th>
-                                        <th style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>Kind</th>
-                                        <th style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colName')}</th>
-                                        <th style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colError')}</th>
+                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colFile')}</th>
+                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>Kind</th>
+                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colName')}</th>
+                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colError')}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
