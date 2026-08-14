@@ -21,8 +21,8 @@ Point OpenShift GitOps / Argo CD at this repository path `helm/migration-toolkit
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `backend.image.repository` | `quay.io/maximilianopizarro/migration-toolkit-rhcl-backend` | Backend image |
-| `frontend.image.repository` | `quay.io/maximilianopizarro/migration-toolkit-rhcl-frontend` | Frontend image |
+| `backend.image.repository` | `quay.io/everythingascode/migration-toolkit-rhcl-backend` | Backend image |
+| `frontend.image.repository` | `quay.io/everythingascode/migration-toolkit-rhcl-frontend` | Frontend image |
 | `postgresql.enabled` | `true` | Deploy embedded PostgreSQL |
 | `route.enabled` | `true` | Create OpenShift Route to frontend |
 | `imagePullSecrets` | `[]` | Pull secrets for private Quay |

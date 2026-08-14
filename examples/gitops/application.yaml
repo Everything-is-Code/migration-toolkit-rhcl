@@ -1,6 +1,6 @@
 # Reference Application for OpenShift GitOps / Argo CD.
 # Copy into your GitOps repo and adapt namespace, project, and image tags.
-# After merge upstream, set repoURL to https://github.com/nmushino/migration-toolkit-rhcl
+# Canonical repo for Everything-is-Code organization
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -9,7 +9,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/maximilianoPizarro/migration-toolkit-rhcl
+    repoURL: https://github.com/Everything-is-Code/migration-toolkit-rhcl
     targetRevision: main
     path: helm/migration-toolkit-rhcl
     helm:

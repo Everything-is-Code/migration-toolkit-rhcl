@@ -50,9 +50,9 @@ Built with a Quarkus backend and a React/PatternFly frontend.
 
 Related conversion tooling (external reference; not vendored in this repository):
 
-- **[from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)** — 3scale → Connectivity Link / Developer Hub adapter.
+- **[from-3scale-to-connectivity-link](https://github.com/Everything-is-Code/from-3scale-to-connectivity-link)** — 3scale → Connectivity Link / Developer Hub adapter.
 
-Helm chart packaging, Quay container images, and GitHub Actions CI/CD were validated together with this adapter on the contribution fork [`maximilianoPizarro/migration-toolkit-rhcl`](https://github.com/maximilianoPizarro/migration-toolkit-rhcl).
+Helm chart packaging, Quay container images, and GitHub Actions CI/CD were validated together with this adapter on the contribution fork [`Everything-is-Code/migration-toolkit-rhcl`](https://github.com/Everything-is-Code/migration-toolkit-rhcl).
 
 ### Local Development
 
@@ -95,15 +95,15 @@ Helm chart packaging, Quay container images, and GitHub Actions CI/CD were valid
 
 Preferred path for OpenShift (and Kubernetes with Routes available): install pre-built images via Helm. Default images are public on Quay:
 
-- `quay.io/maximilianopizarro/migration-toolkit-rhcl-backend:latest` (also tagged `v0.1.0`)
-- `quay.io/maximilianopizarro/migration-toolkit-rhcl-frontend:latest` (also tagged `v0.1.0`)
+- `quay.io/everythingascode/migration-toolkit-rhcl-backend:latest` (also tagged `v0.1.0`)
+- `quay.io/everythingascode/migration-toolkit-rhcl-frontend:latest` (also tagged `v0.1.0`)
 
 **Prerequisites:** OpenShift 4.14+ (or compatible), `helm` 3.x, `oc`, and Red Hat Connectivity Link / Kuadrant as required by the toolkit. The chart deploys an embedded PostgreSQL (`registry.redhat.io/rhel9/postgresql-15`) unless you point at an external DB.
 
 From the published Helm repository (GitHub Pages):
 
 ```bash
-helm repo add migration-toolkit-rhcl https://maximilianopizarro.github.io/migration-toolkit-rhcl/
+helm repo add migration-toolkit-rhcl https://everything-is-code.github.io/migration-toolkit-rhcl/
 helm repo update
 helm install migration-toolkit-rhcl migration-toolkit-rhcl/migration-toolkit-rhcl \
   -n migration-toolkit --create-namespace
@@ -133,7 +133,7 @@ oc -n migration-toolkit get route
 
 For OpenShift GitOps / Argo CD, copy [`examples/gitops/application.yaml`](examples/gitops/application.yaml) into your GitOps repo and set `repoURL` to this repository (or upstream after merge) with `path: helm/migration-toolkit-rhcl`.
 
-> Until the upstream maintainer enables GitHub Pages on `/docs`, you can keep using the validated Pages Helm repo: `https://maximilianopizarro.github.io/migration-toolkit-rhcl/`.
+> Until the upstream maintainer enables GitHub Pages on `/docs`, you can keep using the validated Pages Helm repo: `https://everything-is-code.github.io/migration-toolkit-rhcl/`.
 
 ### Full Deploy to OpenShift
 
@@ -586,9 +586,9 @@ This section is for the repository owner after merging the **Simplify Tool Insta
 
 - Dockerfiles, GitHub Actions workflows, Helm chart, and `docs/` with chart `0.1.0` packaged
 - Public images ready to install:
-  - [`quay.io/maximilianopizarro/migration-toolkit-rhcl-backend`](https://quay.io/repository/maximilianopizarro/migration-toolkit-rhcl-backend) (`latest`, `v0.1.0`)
-  - [`quay.io/maximilianopizarro/migration-toolkit-rhcl-frontend`](https://quay.io/repository/maximilianopizarro/migration-toolkit-rhcl-frontend) (`latest`, `v0.1.0`)
-- Integration validated on [`maximilianoPizarro/migration-toolkit-rhcl`](https://github.com/maximilianoPizarro/migration-toolkit-rhcl) with [from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)
+  - [`quay.io/everythingascode/migration-toolkit-rhcl-backend`](https://quay.io/repository/everythingascode/migration-toolkit-rhcl-backend) (`latest`, `v0.1.0`)
+  - [`quay.io/everythingascode/migration-toolkit-rhcl-frontend`](https://quay.io/repository/everythingascode/migration-toolkit-rhcl-frontend) (`latest`, `v0.1.0`)
+- Integration validated on [`Everything-is-Code/migration-toolkit-rhcl`](https://github.com/Everything-is-Code/migration-toolkit-rhcl) with [from-3scale-to-connectivity-link](https://github.com/Everything-is-Code/from-3scale-to-connectivity-link)
 - **Gaps until you finish this runbook:** upstream CI cannot push to Quay without secrets; upstream `helm repo add` needs GitHub Pages on `/docs`
 
 ### Phase 1 — Publish GitHub Pages from `/docs` (Helm chart repository)
@@ -601,12 +601,12 @@ Required for `helm repo add` against this repository’s Pages URL.
 4. On `main`, confirm these files exist: `docs/index.yaml`, `docs/migration-toolkit-rhcl-0.1.0.tgz`, `docs/.nojekyll`, `docs/index.html`
 5. Wait until Pages status is **built** (Settings → Pages shows the site URL)
 6. Smoke-test HTTP:
-   - `https://nmushino.github.io/migration-toolkit-rhcl/` → 200
-   - `https://nmushino.github.io/migration-toolkit-rhcl/index.yaml` → 200 and lists the chart
-   - `https://nmushino.github.io/migration-toolkit-rhcl/migration-toolkit-rhcl-0.1.0.tgz` → 200
-7. In a follow-up commit, update [`scripts/lib/helm-repo-url.sh`](scripts/lib/helm-repo-url.sh) to `https://nmushino.github.io/migration-toolkit-rhcl/` and align the `helm repo add` example in this README
-8. **Temporary bridge:** until upstream Pages is live, users can install from `https://maximilianopizarro.github.io/migration-toolkit-rhcl/`
-9. **Done when:** `helm repo add migration-toolkit-rhcl https://nmushino.github.io/migration-toolkit-rhcl/ && helm search repo migration-toolkit-rhcl` shows `0.1.0`
+   - `https://everything-is-code.github.io/migration-toolkit-rhcl/` → 200
+   - `https://everything-is-code.github.io/migration-toolkit-rhcl/index.yaml` → 200 and lists the chart
+   - `https://everything-is-code.github.io/migration-toolkit-rhcl/migration-toolkit-rhcl-0.1.0.tgz` → 200
+7. In a follow-up commit, update [`scripts/lib/helm-repo-url.sh`](scripts/lib/helm-repo-url.sh) to `https://everything-is-code.github.io/migration-toolkit-rhcl/` and align the `helm repo add` example in this README
+8. **Temporary bridge:** until upstream Pages is live, users can install from `https://everything-is-code.github.io/migration-toolkit-rhcl/`
+9. **Done when:** `helm repo add migration-toolkit-rhcl https://everything-is-code.github.io/migration-toolkit-rhcl/ && helm search repo migration-toolkit-rhcl` shows `0.1.0`
 
 ### Phase 2 — Red Hat Container Registry secrets (required for CI image builds)
 
@@ -623,9 +623,9 @@ CI Dockerfiles pull `registry.access.redhat.com/ubi9/...`. The chart PostgreSQL 
 
 ### Phase 3 — Quay.io secrets (required for CI to publish images)
 
-Workflows default to `QUAY_NAMESPACE: maximilianopizarro` and Helm values already point at those public images.
+Workflows default to `QUAY_NAMESPACE: everythingascode` and Helm values already point at those public images.
 
-**Path A — Day-0 operational (recommended):** keep using the published maximilianopizarro images. Helm install works **without** your own Quay push. Configure `QUAY_USERNAME` / `QUAY_PASSWORD` only if you have write access to that Quay namespace. Otherwise leave CI push disabled until Path B.
+**Path A — Day-0 operational (recommended):** keep using the published `everythingascode` images. Helm install works **without** your own Quay push. Configure `QUAY_USERNAME` / `QUAY_PASSWORD` only if you have write access to that Quay namespace. Otherwise leave CI push disabled until Path B.
 
 **Path B — Maintainer-owned Quay (fully autonomous):**
 
@@ -655,9 +655,9 @@ Workflows default to `QUAY_NAMESPACE: maximilianopizarro` and Helm values alread
 ### Phase 5 — Helm install smoke test (cluster)
 
 ```bash
-helm repo add migration-toolkit-rhcl https://nmushino.github.io/migration-toolkit-rhcl/
+helm repo add migration-toolkit-rhcl https://everything-is-code.github.io/migration-toolkit-rhcl/
 # If upstream Pages is not ready yet:
-# helm repo add migration-toolkit-rhcl https://maximilianopizarro.github.io/migration-toolkit-rhcl/
+# helm repo add migration-toolkit-rhcl https://everything-is-code.github.io/migration-toolkit-rhcl/
 helm repo update
 helm install migration-toolkit-rhcl migration-toolkit-rhcl/migration-toolkit-rhcl \
   -n migration-toolkit --create-namespace
@@ -743,7 +743,7 @@ Quarkus バックエンド + React/PatternFly フロントエンド で構成さ
 ## 前提条件・必要ツール
 
 下記ツールの利用が前提となっています
-https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link
+https://github.com/Everything-is-Code/from-3scale-to-connectivity-link
 
 ### ローカル開発環境
 
@@ -787,13 +787,13 @@ https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link
 公開済みコンテナイメージを Helm で導入する推奨手順です（詳細は英語版 [Install with Helm](#install-with-helm-any-cluster) およびメンテナ向け [post-merge runbook](#maintainer-make-this-repository-operational-post-merge) を参照）。
 
 ```bash
-helm repo add migration-toolkit-rhcl https://maximilianopizarro.github.io/migration-toolkit-rhcl/
+helm repo add migration-toolkit-rhcl https://everything-is-code.github.io/migration-toolkit-rhcl/
 helm repo update
 helm install migration-toolkit-rhcl migration-toolkit-rhcl/migration-toolkit-rhcl \
   -n migration-toolkit --create-namespace
 ```
 
-変換アダプタ: [from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)
+変換アダプタ: [from-3scale-to-connectivity-link](https://github.com/Everything-is-Code/from-3scale-to-connectivity-link)
 
 ### OpenShift へのフルデプロイ
 
