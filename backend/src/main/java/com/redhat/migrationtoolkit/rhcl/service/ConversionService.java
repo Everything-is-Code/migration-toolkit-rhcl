@@ -991,6 +991,7 @@ spec:
     /**
      * When ipCheckMode is authPolicyOpa, append OPA authorization encoding the same
      * allow/deny CIDR logic that AuthorizationPolicy would enforce.
+     * Merges with any existing authorization siblings (e.g. jwt-claim-check).
      */
     private String appendIpCheckOpaIfNeeded(String authPolicyYaml, ApiService service, String ipCheckMode) {
         if (!"authPolicyOpa".equals(ipCheckMode)) {
@@ -1004,17 +1005,7 @@ spec:
         if (opaBlock.isEmpty()) {
             return authPolicyYaml;
         }
-        // Insert authorization under rules: — after authentication block end is fragile;
-        // append as sibling under rules by replacing the trailing authentication section end.
-        if (authPolicyYaml.contains("\n    authorization:")) {
-            return authPolicyYaml;
-        }
-        // Ensure rules has authorization sibling
-        int rulesIdx = authPolicyYaml.indexOf("\n  rules:");
-        if (rulesIdx < 0) {
-            return authPolicyYaml + "\n" + opaBlock;
-        }
-        return authPolicyYaml.stripTrailing() + "\n" + opaBlock;
+        return mergeAuthorizationNamedRules(authPolicyYaml, opaBlock);
     }
 
     private record JwtClaimPattern(String selector, String operator, String value) {}

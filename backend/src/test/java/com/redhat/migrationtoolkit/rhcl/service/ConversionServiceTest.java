@@ -1368,6 +1368,52 @@ class ConversionServiceTest {
                 "README must WARNING about path/method gating limitations");
     }
 
+    @Test
+    void convert_jwtClaimCheck_mergesWithOpaIpCheck() {
+        ApiService svc = basicService("Claim+IP API", "claim-ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(
+                jwtClaimCheckPolicy(List.of(jwtClaimOp("role", "==", "admin", "plain", "plain"))),
+                ipCheckPolicy("whitelist", List.of("192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertFalse(files.containsKey("authorizationpolicy.yaml"),
+                "authPolicyOpa must not emit separate AuthorizationPolicy");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("jwt-claim-check"),
+                "jwt_claim_check patternMatching must remain after OPA merge");
+        assertTrue(policy.contains("patternMatching"));
+        assertTrue(policy.contains("selector: auth.identity.role"));
+        assertTrue(policy.contains("ip-check") || policy.contains("opa"),
+                "ip_check OPA must coexist with claim-check authorization");
+        assertTrue(policy.contains("192.0.2.1"));
+    }
+
+    @Test
+    void convert_jwtClaimCheck_withIpCheckAuthorizationPolicyMode_keepsSeparateAuthz() {
+        ApiService svc = basicService("Claim+IP Authz", "claim-ip-authz");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(
+                jwtClaimCheckPolicy(List.of(jwtClaimOp("role", "==", "admin", "plain", "plain"))),
+                ipCheckPolicy("whitelist", List.of("10.0.0.0/8")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authorizationPolicy";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertTrue(files.containsKey("authorizationpolicy.yaml"),
+                "authorizationPolicy mode still emits authorizationpolicy.yaml");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("jwt-claim-check"));
+        assertFalse(policy.contains("ip-check") && policy.contains("opa"),
+                "authorizationPolicy mode must not put OPA ip-check in AuthPolicy");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService(String name, String systemName) {
