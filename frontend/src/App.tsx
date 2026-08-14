@@ -121,12 +121,25 @@ export interface AppState {
 /* ── Language switcher tabs ── */
 const LangSwitcher: React.FC = () => {
   const { i18n: i18nInst } = useTranslation();
-  const current = i18nInst.language;
+  const current = (i18nInst.language || 'en').startsWith('ja') ? 'ja' : 'en';
 
-  const btn = (lang: string, label: string) => (
+  useEffect(() => {
+    document.documentElement.lang = current;
+  }, [current]);
+
+  const setLanguage = (lang: string) => {
+    void i18n.changeLanguage(lang).then(() => {
+      document.documentElement.lang = lang;
+    });
+  };
+
+  const btn = (lang: string, label: string, ariaLabel: string) => (
     <button
       key={lang}
-      onClick={() => i18n.changeLanguage(lang)}
+      type="button"
+      onClick={() => setLanguage(lang)}
+      aria-pressed={current === lang}
+      aria-label={ariaLabel}
       style={{
         padding: '4px 12px',
         fontSize: '13px',
@@ -145,9 +158,9 @@ const LangSwitcher: React.FC = () => {
   );
 
   return (
-    <div style={{ display: 'flex' }}>
-      {btn('ja', 'JA')}
-      {btn('en', 'EN')}
+    <div style={{ display: 'flex' }} role="group" aria-label="Language">
+      {btn('ja', 'JA', 'Japanese')}
+      {btn('en', 'EN', 'English')}
     </div>
   );
 };
