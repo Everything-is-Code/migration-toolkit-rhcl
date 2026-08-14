@@ -475,6 +475,34 @@ class CompatibilityServiceTest {
         assertTrue(cors.requiredVersion.contains("1.3") || cors.requiredVersion.contains("4.21"));
     }
 
+    /**
+     * I7: capability-tagged CORS fallback WARNING must not require CORS in supportedPolicies.
+     * Without native CORS, enabled cors always gets the fallback hint (capability + requiredVersion).
+     */
+    @Test
+    void check_corsWithoutNativeCapability_warnsFallback_evenWhenNotInSupportedPolicies() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.corsNative = false;
+        caps.timeoutsSupported = true;
+
+        // Custom list intentionally omits CORS — fallback warning must still fire with capability tags.
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"), caps);
+        CompatibilityItem cors = result.items.stream()
+                .filter(i -> i.name != null && i.name.contains("CORS"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", cors.status);
+        assertTrue(cors.message.toLowerCase().contains("fallback")
+                || cors.message.contains("ResponseHeaderModifier"),
+                "Expected native-missing fallback message, not generic unsupported-list warning");
+        assertEquals("corsNative", cors.capability);
+        assertNotNull(cors.requiredVersion);
+        assertTrue(cors.requiredVersion.contains("1.3") || cors.requiredVersion.contains("4.21"));
+    }
+
     @Test
     void check_corsWithNativeCapability_supported() {
         ApiService svc = basicService();
