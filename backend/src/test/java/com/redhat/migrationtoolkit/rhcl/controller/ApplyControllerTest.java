@@ -10,8 +10,9 @@ import io.fabric8.kubernetes.api.model.rbac.PolicyRule;
 import io.fabric8.kubernetes.api.model.rbac.PolicyRuleBuilder;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.quarkus.test.junit.mockito.InjectMock;
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.MockitoConfig;
 import io.restassured.http.ContentType;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -32,7 +33,8 @@ import static org.mockito.Mockito.when;
 @QuarkusTest
 class ApplyControllerTest {
 
-    @InjectMock(convertScopes = true)
+    @InjectMock
+    @MockitoConfig(convertScopes = true)
     KubernetesClient kubernetesClient;
 
     @Inject

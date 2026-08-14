@@ -14,7 +14,7 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <quarkus.platform.version>3.8.4</quarkus.platform.version>
+    <quarkus.platform.version>3.27.5.1</quarkus.platform.version>
     <surefire-plugin.version>3.5.6</surefire-plugin.version>
   </properties>
 
@@ -33,7 +33,7 @@
   <dependencies>
     <dependency>
       <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-resteasy-reactive-jackson</artifactId>
+      <artifactId>quarkus-rest-jackson</artifactId>
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
@@ -49,7 +49,11 @@
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-rest-client-reactive-jackson</artifactId>
+      <artifactId>quarkus-rest-client-jackson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-hibernate-validator</artifactId>
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
@@ -138,7 +142,7 @@
             <configuration>
               <sources>
                 <source>src/test/e2e</source>
-                <source>src/test/archtecter</source>
+                <source>src/test/architect</source>
               </sources>
             </configuration>
           </execution>

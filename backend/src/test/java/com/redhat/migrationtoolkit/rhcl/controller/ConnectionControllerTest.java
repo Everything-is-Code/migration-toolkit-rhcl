@@ -57,8 +57,7 @@ class ConnectionControllerTest {
                 .when().post("/api/connection/test")
                 .then()
                 .statusCode(400)
-                .body("success", is(false))
-                .body("message", containsString("URL"));
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -71,8 +70,7 @@ class ConnectionControllerTest {
                 .when().post("/api/connection/test")
                 .then()
                 .statusCode(400)
-                .body("success", is(false))
-                .body("message", containsString("token"));
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -84,6 +82,7 @@ class ConnectionControllerTest {
                         """)
                 .when().post("/api/connection/test")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 }

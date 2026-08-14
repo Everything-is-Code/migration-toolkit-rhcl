@@ -3,8 +3,9 @@ package com.redhat.migrationtoolkit.rhcl.controller;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.quarkus.test.junit.mockito.InjectMock;
+import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.mockito.MockitoConfig;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -21,7 +22,8 @@ import static org.mockito.Mockito.when;
 @QuarkusTest
 class GatewayInfoControllerTest {
 
-    @InjectMock(convertScopes = true)
+    @InjectMock
+    @MockitoConfig(convertScopes = true)
     KubernetesClient kubernetesClient;
 
     @Test

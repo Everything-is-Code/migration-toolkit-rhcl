@@ -61,7 +61,7 @@ class ConversionControllerTest {
                 .when().post("/api/convert")
                 .then()
                 .statusCode(400)
-                .body("error", notNullValue());
+                .body("violations", is(not(empty())));
     }
 
     @Test
@@ -71,7 +71,44 @@ class ConversionControllerTest {
                 .body("{\"namespace\":\"test\", \"threescaleUrl\":\"https://x.com\", \"accessToken\":\"tok\"}")
                 .when().post("/api/convert")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("violations", is(not(empty())));
+    }
+
+    @Test
+    void convert_blankThreescaleUrl_returns400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "test",
+                          "threescaleUrl": "",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(400)
+                .body("violations", is(not(empty())));
+    }
+
+    @Test
+    void convert_blankAccessToken_returns400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "test",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "   "
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(400)
+                .body("violations", is(not(empty())));
     }
 
     @Test

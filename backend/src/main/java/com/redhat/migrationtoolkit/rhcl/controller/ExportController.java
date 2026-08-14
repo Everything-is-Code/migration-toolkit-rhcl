@@ -7,6 +7,7 @@ import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -27,6 +28,8 @@ import java.util.Set;
 @Tag(name = "Services", description = "3scale service export")
 public class ExportController {
 
+    private static final String BEARER_PREFIX = "Bearer ";
+
     @Inject
     ThreeScaleExportService exportService;
 
@@ -36,10 +39,11 @@ public class ExportController {
     @GET
     @Operation(summary = "Get all services from 3scale")
     public Response getServices(@QueryParam("url") String url,
-                                 @QueryParam("accessToken") String accessToken) {
-        if (url == null || accessToken == null) {
+                                 @HeaderParam("Authorization") String authorization) {
+        String accessToken = extractBearerToken(authorization);
+        if (url == null || url.isBlank() || accessToken == null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("url and accessToken query parameters are required")
+                    .entity("url query parameter and Authorization Bearer token are required")
                     .build();
         }
         List<ApiService> services = exportService.exportServices(url, accessToken);
@@ -51,7 +55,13 @@ public class ExportController {
     @Operation(summary = "Get a specific service from 3scale")
     public Response getService(@PathParam("id") String id,
                                 @QueryParam("url") String url,
-                                @QueryParam("accessToken") String accessToken) {
+                                @HeaderParam("Authorization") String authorization) {
+        String accessToken = extractBearerToken(authorization);
+        if (url == null || url.isBlank() || accessToken == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("url query parameter and Authorization Bearer token are required")
+                    .build();
+        }
         ApiService service = exportService.exportService(url, accessToken, id);
         return Response.ok(service).build();
     }
@@ -61,8 +71,14 @@ public class ExportController {
     @Operation(summary = "Check compatibility of a service")
     public Response checkCompatibility(@PathParam("id") String id,
                                         @QueryParam("url") String url,
-                                        @QueryParam("accessToken") String accessToken,
+                                        @HeaderParam("Authorization") String authorization,
                                         @QueryParam("supportedPolicies") String supportedPoliciesParam) {
+        String accessToken = extractBearerToken(authorization);
+        if (url == null || url.isBlank() || accessToken == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("url query parameter and Authorization Bearer token are required")
+                    .build();
+        }
         ApiService service = exportService.exportService(url, accessToken, id);
         Set<String> supportedPolicies = new HashSet<>();
         if (supportedPoliciesParam != null && !supportedPoliciesParam.isBlank()) {
@@ -70,5 +86,26 @@ public class ExportController {
         }
         CompatibilityResult result = compatibilityService.check(service, supportedPolicies);
         return Response.ok(result).build();
+    }
+
+    /**
+     * Extracts the token from an {@code Authorization: Bearer <token>} header.
+     * Query-string tokens are intentionally unsupported.
+     *
+     * @return token value, or {@code null} if missing/invalid
+     */
+    static String extractBearerToken(String authorization) {
+        if (authorization == null || authorization.isBlank()) {
+            return null;
+        }
+        String trimmed = authorization.trim();
+        if (trimmed.length() <= BEARER_PREFIX.length()) {
+            return null;
+        }
+        if (!trimmed.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
+            return null;
+        }
+        String token = trimmed.substring(BEARER_PREFIX.length()).trim();
+        return token.isEmpty() ? null : token;
     }
 }

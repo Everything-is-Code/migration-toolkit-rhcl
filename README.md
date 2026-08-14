@@ -48,9 +48,9 @@ Built with a Quarkus backend and a React/PatternFly frontend.
 
 ### Required tools
 
-The conversion adapter below is required for the migration workflow:
+Related conversion tooling (external reference; not vendored in this repository):
 
-- **[from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)** — 3scale → Connectivity Link / Developer Hub adapter (also present as a git submodule in this repository).
+- **[from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)** — 3scale → Connectivity Link / Developer Hub adapter.
 
 Helm chart packaging, Quay container images, and GitHub Actions CI/CD were validated together with this adapter on the contribution fork [`maximilianoPizarro/migration-toolkit-rhcl`](https://github.com/maximilianoPizarro/migration-toolkit-rhcl).
 
@@ -198,6 +198,13 @@ cd frontend
 npm install --legacy-peer-deps
 VITE_API_URL=http://localhost:8080 npm run dev
 ```
+
+CORS defaults to `http://localhost:5173`, `http://localhost:3000`, and
+`http://localhost:8080`. For OpenShift or temporary demos, override with
+`CORS_ORIGINS` or `QUARKUS_HTTP_CORS_ORIGINS` (comma-separated origins).
+Export API tokens must be sent as `Authorization: Bearer <token>` (never as
+query `accessToken` / `access_token`). Existing POST bodies may still include
+`accessToken`.
 
 ---
 
@@ -470,7 +477,6 @@ migration-toolkit-rhcl/
 │   ├── backend/                # Backend OpenShift resource YAMLs
 │   ├── frontend/               # Frontend OpenShift resource YAMLs
 │   └── postgres/               # PostgreSQL Operator / Cluster / SCC YAMLs
-├── from-3scale-to-connectivity-link/  # Conversion adapter
 └── README.md
 ```
 
@@ -585,13 +591,7 @@ This section is for the repository owner after merging the **Simplify Tool Insta
 - Integration validated on [`maximilianoPizarro/migration-toolkit-rhcl`](https://github.com/maximilianoPizarro/migration-toolkit-rhcl) with [from-3scale-to-connectivity-link](https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link)
 - **Gaps until you finish this runbook:** upstream CI cannot push to Quay without secrets; upstream `helm repo add` needs GitHub Pages on `/docs`
 
-### Phase 1 — Git submodule (avoid Pages / CI checkout failures)
-
-1. Confirm [`.gitmodules`](.gitmodules) maps `from-3scale-to-connectivity-link` → `https://github.com/maximilianoPizarro/from-3scale-to-connectivity-link.git`
-2. Optionally locally: `git submodule update --init --recursive`
-3. **Done when:** checkout with submodules no longer fails with `No url found for submodule path 'from-3scale-to-connectivity-link'`
-
-### Phase 2 — Publish GitHub Pages from `/docs` (Helm chart repository)
+### Phase 1 — Publish GitHub Pages from `/docs` (Helm chart repository)
 
 Required for `helm repo add` against this repository’s Pages URL.
 
@@ -608,7 +608,7 @@ Required for `helm repo add` against this repository’s Pages URL.
 8. **Temporary bridge:** until upstream Pages is live, users can install from `https://maximilianopizarro.github.io/migration-toolkit-rhcl/`
 9. **Done when:** `helm repo add migration-toolkit-rhcl https://nmushino.github.io/migration-toolkit-rhcl/ && helm search repo migration-toolkit-rhcl` shows `0.1.0`
 
-### Phase 3 — Red Hat Container Registry secrets (required for CI image builds)
+### Phase 2 — Red Hat Container Registry secrets (required for CI image builds)
 
 CI Dockerfiles pull `registry.access.redhat.com/ubi9/...`. The chart PostgreSQL image uses `registry.redhat.io/rhel9/postgresql-15`. Without registry login, **Build and push to Quay.io** fails on base-image pull.
 
@@ -621,7 +621,7 @@ CI Dockerfiles pull `registry.access.redhat.com/ubi9/...`. The chart PostgreSQL 
    - `REDHAT_REGISTRY_PASSWORD` = service account token
 6. **Done when:** both secrets appear in the Actions secrets list (values hidden)
 
-### Phase 4 — Quay.io secrets (required for CI to publish images)
+### Phase 3 — Quay.io secrets (required for CI to publish images)
 
 Workflows default to `QUAY_NAMESPACE: maximilianopizarro` and Helm values already point at those public images.
 
@@ -644,7 +644,7 @@ Workflows default to `QUAY_NAMESPACE: maximilianopizarro` and Helm values alread
 | `QUAY_USERNAME` | CI push to Quay | Quay robot account |
 | `QUAY_PASSWORD` | CI push to Quay | Quay robot token |
 
-### Phase 5 — Enable and verify GitHub Actions
+### Phase 4 — Enable and verify GitHub Actions
 
 1. **Settings → Actions → General:** allow Actions / workflows if restricted
 2. **Actions** → **Build and push to Quay.io** → **Run workflow** on `main`
@@ -652,7 +652,7 @@ Workflows default to `QUAY_NAMESPACE: maximilianopizarro` and Helm values alread
 4. Commits whose message contains `[skip build]` skip the push job
 5. **Done when:** the latest run is green, or you consciously stay on Path A without push
 
-### Phase 6 — Helm install smoke test (cluster)
+### Phase 5 — Helm install smoke test (cluster)
 
 ```bash
 helm repo add migration-toolkit-rhcl https://nmushino.github.io/migration-toolkit-rhcl/
@@ -670,16 +670,15 @@ GitOps: apply [`examples/gitops/application.yaml`](examples/gitops/application.y
 
 **Done when:** the Route works and a basic migration UI flow is usable.
 
-### Phase 7 — Semver releases (optional)
+### Phase 6 — Semver releases (optional)
 
 1. Bump `version` / `appVersion` in `Chart.yaml` (and image tags in values if needed)
 2. Push git tag `vX.Y.Z` matching `Chart.yaml` version exactly (`release.yml` enforces this)
 3. Release workflow rebuilds/pushes images, packages the chart into `docs/`, opens PR `chore/helm-chart-vX.Y.Z`, creates a GitHub Release
 4. Merge that PR so Pages serves the new chart version
 
-### Phase 8 — Operational checklist
+### Phase 7 — Operational checklist
 
-- [ ] Submodule `.gitmodules` OK
 - [ ] GitHub Pages `main` + `/docs` **built**; `index.yaml` returns 200
 - [ ] `helm-repo-url.sh` + README point at upstream Pages
 - [ ] Secrets `REDHAT_REGISTRY_*` configured
@@ -859,6 +858,13 @@ cd frontend
 npm install --legacy-peer-deps
 VITE_API_URL=http://localhost:8080 npm run dev
 ```
+
+CORS のデフォルト許可オリジンは `http://localhost:5173`、`http://localhost:3000`、
+`http://localhost:8080` です。OpenShift や一時デモでは `CORS_ORIGINS` または
+`QUARKUS_HTTP_CORS_ORIGINS`（カンマ区切り）で上書きしてください。
+エクスポート API のトークンは `Authorization: Bearer <token>` で送り、
+クエリの `accessToken` / `access_token` は使いません。既存の POST ボディの
+`accessToken` はそのまま利用できます。
 
 ---
 
@@ -1131,7 +1137,6 @@ migration-toolkit-rhcl/
 │   ├── backend/                # Backend OpenShift リソース YAML
 │   ├── frontend/               # Frontend OpenShift リソース YAML
 │   └── postgres/               # PostgreSQL Operator / Cluster / SCC YAML
-├── from-3scale-to-connectivity-link/  # 変換アダプタ
 └── README.md
 ```
 
