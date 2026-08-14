@@ -66,6 +66,25 @@ class DtoTest {
         assertEquals("3", req.serviceIds.get(2));
     }
 
+    @Test
+    void conversionRequest_ipCheckMode_fieldAssignment() {
+        ConversionRequest req = new ConversionRequest();
+        req.ipCheckMode = "authPolicyOpa";
+        assertEquals("authPolicyOpa", req.ipCheckMode);
+    }
+
+    // ── ConversionOptions ────────────────────────────────────────────────────
+
+    @Test
+    void conversionOptions_defaults() {
+        ConversionOptions opts = new ConversionOptions();
+        assertEquals("gateway", opts.loggingTarget);
+        assertEquals("httproute", opts.anonymousTarget);
+        assertTrue(opts.includeMigratedFromLabel);
+        assertEquals("authorizationPolicy", opts.ipCheckMode,
+                "Binding default: ip_check emits AuthorizationPolicy when unset");
+    }
+
     // ── ValidationResult ─────────────────────────────────────────────────────
 
     @Test

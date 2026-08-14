@@ -25,4 +25,9 @@ public class ConversionRequest {
     public String anonymousTarget;
     /** Whether to add the "migrated-from: 3scale" label to generated resources (default: true). */
     public Boolean includeMigratedFromLabel;
+    /**
+     * ip_check emit target: "authorizationPolicy" (default) or "authPolicyOpa".
+     * Convert-time preference — same pattern as anonymousTarget.
+     */
+    public String ipCheckMode;
 }

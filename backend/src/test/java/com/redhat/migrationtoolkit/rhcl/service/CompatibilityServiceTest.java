@@ -57,11 +57,11 @@ class CompatibilityServiceTest {
     }
 
     @Test
-    void check_appIdKeyAuthentication_warning() {
+    void check_appIdKeyAuthentication_supported() {
         ApiService svc = basicService();
         svc.authentication = auth("appIdKey");
         CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
-        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("App ID")));
     }
 
@@ -114,6 +114,154 @@ class CompatibilityServiceTest {
         CompatibilityResult result = service.check(svc, Set.of("Header Modification"));
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("Header")));
+    }
+
+    @Test
+    void check_headersAlias_supportedWhenHeaderModificationInList() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("headers"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification"));
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Header Modification".equals(i.name)));
+    }
+
+    /**
+     * After PR1 converters land, fresh DEFAULT_SUPPORTED includes CORS + Header Modification.
+     * Compatibility must mark those policies SUPPORTED when the default set is used.
+     */
+    @Test
+    void check_pr1DefaultSupportedPolicies_corsAndHeaderModificationSupported() {
+        // Mirrors frontend DEFAULT_SUPPORTED_POLICIES after PR1 land (CORS added).
+        Set<String> pr1Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling");
+
+        ApiService corsSvc = basicService();
+        corsSvc.authentication = auth("jwt");
+        corsSvc.policies = List.of(enabledPolicy("cors"));
+        CompatibilityResult corsResult = service.check(corsSvc, pr1Defaults);
+        assertTrue(corsResult.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "CORS Request Handling".equals(i.name)));
+
+        ApiService headerSvc = basicService();
+        headerSvc.authentication = auth("jwt");
+        headerSvc.policies = List.of(enabledPolicy("header_modification"));
+        CompatibilityResult headerResult = service.check(headerSvc, pr1Defaults);
+        assertTrue(headerResult.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Header Modification".equals(i.name)));
+    }
+
+    /**
+     * After PR2 converters land, DEFAULT_SUPPORTED includes IP Check.
+     */
+    @Test
+    void check_pr2DefaultSupportedPolicies_ipCheckSupported() {
+        Set<String> pr2Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("ip_check"));
+        CompatibilityResult result = service.check(svc, pr2Defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "IP Check".equals(i.name)));
+    }
+
+    /**
+     * After PR3 converters land, DEFAULT_SUPPORTED includes Edge Limiting.
+     */
+    @Test
+    void check_pr3DefaultSupportedPolicies_edgeLimitingSupported() {
+        Set<String> pr3Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        CompatibilityResult result = service.check(svc, pr3Defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Edge Limiting".equals(i.name)));
+    }
+
+    @Test
+    void check_edgeLimiting_withoutSupportedList_warns() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "Edge Limiting".equals(i.name)));
+    }
+
+    /**
+     * After PR4 converters land, DEFAULT_SUPPORTED includes OAuth 2.0 Token Introspection.
+     */
+    @Test
+    void check_pr4DefaultSupportedPolicies_tokenIntrospectionSupported() {
+        Set<String> pr4Defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("token_introspection"));
+        CompatibilityResult result = service.check(svc, pr4Defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "OAuth 2.0 Token Introspection".equals(i.name)));
+    }
+
+    @Test
+    void check_tokenIntrospection_withoutSupportedList_warns() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("token_introspection"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "OAuth 2.0 Token Introspection".equals(i.name)));
+    }
+
+    @Test
+    void check_customSupportedListWithoutCors_stillWarns() {
+        // User override / saved custom list without CORS must keep WARNING until reset.
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        CompatibilityResult result = service.check(svc, Set.of("Header Modification", "Logging"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "CORS Request Handling".equals(i.name)));
     }
 
     @Test

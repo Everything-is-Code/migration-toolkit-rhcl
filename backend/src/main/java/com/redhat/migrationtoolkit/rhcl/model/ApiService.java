@@ -19,4 +19,9 @@ public class ApiService {
     public String proxyEndpoint;
     public String apicastProductionEndpoint;
     public String apicastStagingEndpoint;
+
+    /** Applications + keys from Admin API (App ID/App Key auth). */
+    public List<Application> applications;
+    /** Application plans + usage limits (RateLimitPolicy global ceiling). */
+    public List<ApplicationPlan> applicationPlans;
 }

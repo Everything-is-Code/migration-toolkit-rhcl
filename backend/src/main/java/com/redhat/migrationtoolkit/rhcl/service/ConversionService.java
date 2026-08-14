@@ -1,6 +1,9 @@
 package com.redhat.migrationtoolkit.rhcl.service;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.model.Application;
+import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -8,6 +11,7 @@ import org.jboss.logging.Logger;
 
 import java.security.SecureRandom;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
@@ -23,26 +27,49 @@ public class ConversionService {
     enum BackendType { INTERNAL, EXTERNAL }
 
     public Map<String, String> convert(ApiService service, String namespace) {
-        return convert(service, namespace, null, "gateway", "httproute");
+        return convert(service, namespace, null, new ConversionOptions());
     }
 
     public Map<String, String> convert(ApiService service, String namespace, String backendUrl) {
-        return convert(service, namespace, backendUrl, "gateway", "httproute");
+        return convert(service, namespace, backendUrl, new ConversionOptions());
     }
 
     public Map<String, String> convert(ApiService service, String namespace,
             String backendUrl, String loggingTarget) {
-        return convert(service, namespace, backendUrl, loggingTarget, "httproute");
+        ConversionOptions opts = new ConversionOptions();
+        opts.loggingTarget = loggingTarget;
+        return convert(service, namespace, backendUrl, opts);
     }
 
     public Map<String, String> convert(ApiService service, String namespace,
             String backendUrl, String loggingTarget, String anonymousTarget) {
-        return convert(service, namespace, backendUrl, loggingTarget, anonymousTarget, true);
+        ConversionOptions opts = new ConversionOptions();
+        opts.loggingTarget = loggingTarget;
+        opts.anonymousTarget = anonymousTarget;
+        return convert(service, namespace, backendUrl, opts);
     }
 
     public Map<String, String> convert(ApiService service, String namespace,
             String backendUrl, String loggingTarget, String anonymousTarget,
             boolean includeMigratedFromLabel) {
+        ConversionOptions opts = new ConversionOptions();
+        opts.loggingTarget = loggingTarget;
+        opts.anonymousTarget = anonymousTarget;
+        opts.includeMigratedFromLabel = includeMigratedFromLabel;
+        return convert(service, namespace, backendUrl, opts);
+    }
+
+    public Map<String, String> convert(ApiService service, String namespace,
+            String backendUrl, ConversionOptions opts) {
+        if (opts == null) {
+            opts = new ConversionOptions();
+        }
+        String loggingTarget = opts.loggingTarget != null ? opts.loggingTarget : "gateway";
+        String anonymousTarget = opts.anonymousTarget != null ? opts.anonymousTarget : "httproute";
+        boolean includeMigratedFromLabel = opts.includeMigratedFromLabel;
+        String ipCheckMode = "authPolicyOpa".equals(opts.ipCheckMode)
+                ? "authPolicyOpa" : "authorizationPolicy";
+
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
@@ -73,7 +100,7 @@ public class ConversionService {
         files.put("gateway.yaml", generateGateway(name, namespace));
         files.put("httproute.yaml",  generateHttpRoute(
                 name, namespace, service, backendType, externalHost, internalService, internalPort, externalPort));
-        files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget));
+        files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
         files.put("configmap.yaml",  generateConfigMap(name, namespace, service, effectiveBackendUrl));
         files.put("apiproduct.yaml", generateApiProduct(name, namespace, service));
@@ -113,6 +140,17 @@ public class ConversionService {
                 files.put("envoyfilter-url-rewriting.yaml",
                         generateUrlRewritingEnvoyFilter(name, namespace, rewriteCommands));
             }
+        }
+
+        Policy ipCheck = findIpCheckPolicy(service);
+        if (ipCheck != null && "authorizationPolicy".equals(ipCheckMode)) {
+            files.put("authorizationpolicy.yaml",
+                    generateAuthorizationPolicy(name, namespace, ipCheck));
+        }
+
+        String rateLimitYaml = generateRateLimitPolicy(name, namespace, service);
+        if (rateLimitYaml != null) {
+            files.put("ratelimitpolicy.yaml", rateLimitYaml);
         }
 
         files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
@@ -253,7 +291,7 @@ spec:
                 ? (name + "-backend")
                 : (internalService != null ? internalService : name + "-backend");
 
-        // Build the filters block (combining URLRewrite + Header Modification)
+        // Build the filters block (combining URLRewrite + Header Modification + CORS)
         StringBuilder filterItems = new StringBuilder();
         if (backendType == BackendType.EXTERNAL) {
             filterItems.append("""
@@ -263,6 +301,7 @@ spec:
 """.formatted(externalHost));
         }
         filterItems.append(buildHeaderModificationFilters(service));
+        filterItems.append(buildCorsFilters(service));
 
         String filtersBlock = filterItems.length() > 0
                 ? "      filters:\n" + filterItems
@@ -288,6 +327,8 @@ metadata:
 """.formatted(name, namespace, name, annotations, name, namespace));
 
         String timeoutsBlock = buildTimeoutsBlock(service);
+        boolean hasCors = findCorsPolicy(service) != null;
+        java.util.LinkedHashSet<String> pathsForOptions = new java.util.LinkedHashSet<>();
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             // For HTTP methods that already have a "/" (catch-all) Mapping Rule,
@@ -304,6 +345,7 @@ metadata:
                 if ("/".equals(path)) {
                     catchAllMethods.add(method);
                 }
+                pathsForOptions.add(path);
 
                 sb.append("""
     - matches:
@@ -317,6 +359,7 @@ metadata:
 """.formatted(path, method, filtersBlock, timeoutsBlock, backendSvc, backendPort));
             }
         } else {
+            pathsForOptions.add("/");
             sb.append("""
     - matches:
         - path:
@@ -326,6 +369,33 @@ metadata:
         - name: %s
           port: %d
 """.formatted(filtersBlock, timeoutsBlock, backendSvc, backendPort));
+        }
+
+        // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
+        if (hasCors) {
+            java.util.Set<String> emittedOptions = new java.util.HashSet<>();
+            if (service.mappingRules != null) {
+                for (MappingRule rule : service.mappingRules) {
+                    if (rule.httpMethod != null && "OPTIONS".equalsIgnoreCase(rule.httpMethod)) {
+                        emittedOptions.add(toGatewayApiPathPrefix(rule.pattern));
+                    }
+                }
+            }
+            for (String path : pathsForOptions) {
+                if (!emittedOptions.add(path)) {
+                    continue;
+                }
+                sb.append("""
+    - matches:
+        - path:
+            type: PathPrefix
+            value: "%s"
+          method: OPTIONS
+%s%s      backendRefs:
+        - name: %s
+          port: %d
+""".formatted(path, filtersBlock, timeoutsBlock, backendSvc, backendPort));
+            }
         }
         return sb.toString();
     }
@@ -356,7 +426,7 @@ metadata:
             return "";
         }
         Policy policy = service.policies.stream()
-                .filter(p -> Boolean.TRUE.equals(p.enabled) && "headers".equals(p.name))
+                .filter(p -> Boolean.TRUE.equals(p.enabled) && isHeaderModificationPolicy(p.name))
                 .findFirst().orElse(null);
         if (policy == null || policy.configuration == null) {
             return "";
@@ -437,6 +507,132 @@ metadata:
         }
 
         return result.toString();
+    }
+
+    /** True when policy name is {@code headers} or alias {@code header_modification} (case-insensitive). */
+    private static boolean isHeaderModificationPolicy(String name) {
+        if (name == null) {
+            return false;
+        }
+        String n = name.toLowerCase();
+        return "headers".equals(n) || "header_modification".equals(n);
+    }
+
+    private Policy findCorsPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "cors".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Maps 3scale {@code cors} to HTTPRoute {@code ResponseHeaderModifier} (+ OPTIONS rules elsewhere).
+     * <p>
+     * Does <strong>not</strong> emit Gateway API {@code type: CORS}: that filter needs Gateway API ≥ 1.3
+     * and is unsupported on OpenShift 4.19 (Gateway API 1.2.1) / RHCL 1.4 minimum. Aligns with
+     * migration-pilot {@code pilot_cors_ip} ({@code Access-Control-*} via ResponseHeaderModifier).
+     * Static headers carry one Allow-Origin: {@code *} wins if present, otherwise the first origin.
+     */
+    private String buildCorsFilters(ApiService service) {
+        Policy cors = findCorsPolicy(service);
+        if (cors == null || cors.configuration == null) {
+            return "";
+        }
+        Map<String, Object> cfg = cors.configuration;
+
+        java.util.List<String> originList = toStringList(cfg.get("allow_origin")).stream()
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+        java.util.List<String> methodList = toStringList(cfg.get("allow_methods")).stream()
+                .map(s -> s.trim().toUpperCase())
+                .filter(s -> !s.isBlank())
+                .toList();
+        java.util.List<String> headerList = toStringList(cfg.get("allow_headers")).stream()
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+
+        boolean credentials = Boolean.TRUE.equals(cfg.get("allow_credentials"))
+                || "true".equalsIgnoreCase(String.valueOf(cfg.getOrDefault("allow_credentials", "false")));
+        Object maxAgeRaw = cfg.get("max_age");
+        Integer maxAge = null;
+        if (maxAgeRaw instanceof Number n) {
+            maxAge = n.intValue();
+        } else if (maxAgeRaw != null) {
+            try {
+                maxAge = Integer.parseInt(maxAgeRaw.toString().trim());
+            } catch (NumberFormatException ignored) {
+                maxAge = null;
+            }
+        }
+
+        String allowOrigin = "*";
+        if (!originList.isEmpty()) {
+            allowOrigin = originList.stream().anyMatch("*"::equals) ? "*" : originList.get(0);
+        }
+
+        StringBuilder setHeaders = new StringBuilder();
+        setHeaders.append(String.format(
+                "              - name: Access-Control-Allow-Origin%n                value: %s%n",
+                allowOrigin));
+        if (!methodList.isEmpty()) {
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Allow-Methods%n                value: %s%n",
+                    String.join(", ", methodList)));
+        }
+        if (!headerList.isEmpty()) {
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Allow-Headers%n                value: %s%n",
+                    String.join(", ", headerList)));
+        }
+        if (credentials) {
+            setHeaders.append("""
+                              - name: Access-Control-Allow-Credentials
+                                value: "true"
+            """);
+        }
+        if (maxAge != null) {
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Max-Age%n                value: \"%d\"%n",
+                    maxAge));
+        }
+
+        return "        - type: ResponseHeaderModifier\n"
+                + "          responseHeaderModifier:\n"
+                + "            set:\n"
+                + setHeaders;
+    }
+
+    private static java.util.List<String> toStringList(Object raw) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (raw == null) {
+            return out;
+        }
+        if (raw instanceof java.util.List<?> list) {
+            for (Object item : list) {
+                if (item != null) {
+                    out.add(item.toString());
+                }
+            }
+            return out;
+        }
+        String s = raw.toString().trim();
+        if (s.isEmpty()) {
+            return out;
+        }
+        // 3scale sometimes stores space/comma/newline separated origins
+        for (String part : s.split("[,\\s]+")) {
+            if (!part.isBlank()) {
+                out.add(part.trim());
+            }
+        }
+        return out;
     }
 
     /**
@@ -595,13 +791,25 @@ spec:
     // ─────────────────────────────────────────────
 
     private String generateAuthPolicy(String name, String namespace, ApiService service,
-            String anonymousTarget) {
+            String anonymousTarget, String ipCheckMode) {
         String authType = service.authentication != null ? service.authentication.type : "none";
 
         // Anonymous Access (default_credentials policy) — inject credentials as response headers
         Policy anonymousPolicy = findAnonymousPolicy(service);
         if (anonymousPolicy != null) {
-            return generateAnonymousAuthPolicy(name, namespace, anonymousPolicy, anonymousTarget);
+            String yaml = generateAnonymousAuthPolicy(name, namespace, anonymousPolicy, anonymousTarget);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+        }
+
+        // token_introspection → AuthPolicy oauth2Introspection (GateForge #202 / Kuadrant)
+        Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
+        if (tokenIntrospection != null) {
+            String introspectionYaml = generateOauth2IntrospectionAuthPolicy(
+                    name, namespace, tokenIntrospection, buildAuthCacheBlock(findAuthCachingPolicy(service)));
+            if (introspectionYaml != null) {
+                return appendIpCheckOpaIfNeeded(introspectionYaml, service, ipCheckMode);
+            }
+            // Incomplete (no URL): fall through to normal auth; warning emitted via README/secret
         }
 
         String authCacheBlock = buildAuthCacheBlock(findAuthCachingPolicy(service));
@@ -610,7 +818,7 @@ spec:
             String issuer = service.authentication.oidcIssuerEndpoint != null
                     ? service.authentication.oidcIssuerEndpoint
                     : "https://your-oidc-provider/realms/your-realm";
-            return """
+            String yaml = """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
@@ -630,8 +838,9 @@ spec:
         jwt:
           issuerUrl: %s
 %s""".formatted(name, namespace, name, name, issuer, authCacheBlock);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
         } else if ("apiKey".equals(authType)) {
-            return """
+            String yaml = """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
@@ -657,9 +866,41 @@ spec:
           authorizationHeader:
             prefix: APIKEY
 """.formatted(name, namespace, name, name, name, authCacheBlock);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+        } else if ("appIdKey".equals(authType)) {
+            String yaml = """
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: %s-auth
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/auth-type: "app-id-key"
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: %s-route
+  rules:
+    authentication:
+      app-id-key-auth:
+        apiKey:
+          allNamespaces: true
+          selector:
+            matchLabels:
+              app: %s
+              auth-type: app-id-key
+%s        credentials:
+          queryString:
+            name: app_key
+""".formatted(name, namespace, name, name, name, authCacheBlock);
+            return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
         }
 
-        return """
+        String yaml = """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
@@ -676,6 +917,428 @@ spec:
   rules:
     authentication: {}
 """.formatted(name, namespace, name, name);
+        return appendIpCheckOpaIfNeeded(yaml, service, ipCheckMode);
+    }
+
+    /**
+     * When ipCheckMode is authPolicyOpa, append OPA authorization encoding the same
+     * allow/deny CIDR logic that AuthorizationPolicy would enforce.
+     */
+    private String appendIpCheckOpaIfNeeded(String authPolicyYaml, ApiService service, String ipCheckMode) {
+        if (!"authPolicyOpa".equals(ipCheckMode)) {
+            return authPolicyYaml;
+        }
+        Policy ipCheck = findIpCheckPolicy(service);
+        if (ipCheck == null) {
+            return authPolicyYaml;
+        }
+        String opaBlock = buildIpCheckOpaAuthorization(ipCheck);
+        if (opaBlock.isEmpty()) {
+            return authPolicyYaml;
+        }
+        // Insert authorization under rules: — after authentication block end is fragile;
+        // append as sibling under rules by replacing the trailing authentication section end.
+        if (authPolicyYaml.contains("\n    authorization:")) {
+            return authPolicyYaml;
+        }
+        // Ensure rules has authorization sibling
+        int rulesIdx = authPolicyYaml.indexOf("\n  rules:");
+        if (rulesIdx < 0) {
+            return authPolicyYaml + "\n" + opaBlock;
+        }
+        return authPolicyYaml.stripTrailing() + "\n" + opaBlock;
+    }
+
+    private String buildIpCheckOpaAuthorization(Policy ipCheck) {
+        Map<String, Object> cfg = ipCheck.configuration != null ? ipCheck.configuration : Map.of();
+        String checkType = String.valueOf(cfg.getOrDefault("check_type", "whitelist"));
+        List<String> ips = toStringList(cfg.get("ips"));
+        if (ips.isEmpty()) {
+            return "";
+        }
+        StringBuilder cidrList = new StringBuilder();
+        for (String ip : ips) {
+            String cidr = normalizeCidr(ip);
+            if (cidrList.length() > 0) {
+                cidrList.append(", ");
+            }
+            cidrList.append("\"").append(cidr).append("\"");
+        }
+        boolean whitelist = !"blacklist".equalsIgnoreCase(checkType)
+                && !"deny".equalsIgnoreCase(checkType);
+        // whitelist: allow if IP in list; blacklist: allow if IP NOT in list
+        String allowBody = whitelist
+                ? """
+            allow {
+              some i
+              net.cidr_contains(cidrs[i], client_ip)
+            }
+"""
+                : """
+            allow {
+              not denied
+            }
+            denied {
+              some i
+              net.cidr_contains(cidrs[i], client_ip)
+            }
+""";
+        return """
+    authorization:
+      ip-check:
+        opa:
+          rego: |
+            package ipcheck
+            import future.keywords
+            cidrs := [%s]
+            client_ip := input.attributes.request.http.headers["x-forwarded-for"]
+%s""".formatted(cidrList, allowBody);
+    }
+
+    private Policy findIpCheckPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "ip_check".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Policy findEdgeLimitingPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "edge_limiting".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Policy findTokenIntrospectionPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "token_introspection".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Build AuthPolicy with oauth2Introspection when introspection_url is present.
+     * Returns null when required URL is missing (incomplete — caller warns, no full support).
+     */
+    private String generateOauth2IntrospectionAuthPolicy(String name, String namespace,
+                                                          Policy policy, String authCacheBlock) {
+        Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
+        String endpoint = firstNonBlank(
+                cfg.get("introspection_url"),
+                cfg.get("introspectionEndpoint"),
+                cfg.get("endpoint"));
+        if (endpoint == null) {
+            return null;
+        }
+
+        String tokenTypeHint = firstNonBlank(
+                cfg.get("token_type_hint"),
+                cfg.get("tokenTypeHint"));
+        String hintBlock = tokenTypeHint != null
+                ? "          tokenTypeHint: " + tokenTypeHint + "\n"
+                : "";
+
+        String secretName = name + "-oauth2-introspection";
+        return """
+apiVersion: kuadrant.io/v1
+kind: AuthPolicy
+metadata:
+  name: %s-auth
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/auth-type: "token-introspection"
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: %s-route
+  rules:
+    authentication:
+      oauth2-introspection:
+        oauth2Introspection:
+          endpoint: %s
+%s          credentialsRef:
+            name: %s
+%s        credentials:
+          authorizationHeader:
+            prefix: Bearer
+""".formatted(name, namespace, name, name, endpoint, hintBlock, secretName, authCacheBlock);
+    }
+
+    private static String firstNonBlank(Object... values) {
+        for (Object value : values) {
+            if (value == null) {
+                continue;
+            }
+            String s = String.valueOf(value).trim();
+            if (!s.isEmpty() && !"null".equalsIgnoreCase(s)) {
+                return s;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Emit RateLimitPolicy from edge_limiting config ∪ application-plan ceilings.
+     * Returns null when neither source yields rates (no placeholder file).
+     */
+    String generateRateLimitPolicy(String name, String namespace, ApiService service) {
+        Map<String, String> limitBlocks = new LinkedHashMap<>();
+
+        Policy edge = findEdgeLimitingPolicy(service);
+        if (edge != null && edge.configuration != null) {
+            appendEdgeLimitingRates(limitBlocks, edge.configuration);
+        }
+
+        PlanCeiling ceiling = resolvePlanCeiling(service);
+        if (ceiling != null) {
+            limitBlocks.put("global", """
+      rates:
+        - limit: %d
+          window: %s
+""".formatted(ceiling.limit, ceiling.window));
+        }
+
+        if (limitBlocks.isEmpty()) {
+            return null;
+        }
+
+        StringBuilder limitsYaml = new StringBuilder();
+        for (Map.Entry<String, String> entry : limitBlocks.entrySet()) {
+            limitsYaml.append("    ").append(entry.getKey()).append(":\n");
+            for (String line : entry.getValue().split("\n", -1)) {
+                if (line.isEmpty()) {
+                    continue;
+                }
+                limitsYaml.append(line).append('\n');
+            }
+        }
+
+        return """
+apiVersion: kuadrant.io/v1
+kind: RateLimitPolicy
+metadata:
+  name: %s-ratelimit
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: %s-route
+  limits:
+%s""".formatted(name, namespace, name, name, limitsYaml);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void appendEdgeLimitingRates(Map<String, String> limitBlocks, Map<String, Object> cfg) {
+        int idx = 1;
+        Object fixed = cfg.get("fixed_window_limiters");
+        if (fixed instanceof List<?> list) {
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> raw)) {
+                    continue;
+                }
+                Map<String, Object> limiter = (Map<String, Object>) raw;
+                Integer count = toPositiveInt(limiter.get("count"));
+                Integer window = toPositiveInt(limiter.get("window"));
+                if (count == null || window == null) {
+                    continue;
+                }
+                String limitName = edgeLimiterName(limiter, "edge_fixed_window", idx++);
+                limitBlocks.put(limitName, """
+      rates:
+        - limit: %d
+          window: %ds
+""".formatted(count, window));
+            }
+        }
+
+        Object leaky = cfg.get("leaky_bucket_limiters");
+        if (leaky instanceof List<?> list) {
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> raw)) {
+                    continue;
+                }
+                Map<String, Object> limiter = (Map<String, Object>) raw;
+                Integer rate = toPositiveInt(limiter.get("rate"));
+                if (rate == null) {
+                    continue;
+                }
+                String limitName = edgeLimiterName(limiter, "edge_leaky_bucket", idx++);
+                limitBlocks.put(limitName, """
+      rates:
+        - limit: %d
+          window: 1s
+""".formatted(rate));
+            }
+        }
+
+        Object conn = cfg.get("connection_limiters");
+        if (conn instanceof List<?> list) {
+            for (Object item : list) {
+                if (!(item instanceof Map<?, ?> raw)) {
+                    continue;
+                }
+                Map<String, Object> limiter = (Map<String, Object>) raw;
+                Integer connLimit = toPositiveInt(limiter.get("conn"));
+                if (connLimit == null) {
+                    continue;
+                }
+                // Best-effort: map concurrent connections to a per-second rate ceiling.
+                String limitName = edgeLimiterName(limiter, "edge_conn", idx++);
+                limitBlocks.put(limitName, """
+      rates:
+        - limit: %d
+          window: 1s
+""".formatted(connLimit));
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String edgeLimiterName(Map<String, Object> limiter, String prefix, int idx) {
+        Object keyObj = limiter.get("key");
+        if (keyObj instanceof Map<?, ?> keyMap) {
+            Object name = keyMap.get("name");
+            if (name != null) {
+                String sanitized = String.valueOf(name)
+                        .replaceAll("[^a-zA-Z0-9_-]", "_")
+                        .replaceAll("^_+|_+$", "");
+                if (!sanitized.isBlank() && !sanitized.contains("{{")) {
+                    return sanitized + "_" + idx;
+                }
+            }
+        }
+        return prefix + "_" + idx;
+    }
+
+    private static Integer toPositiveInt(Object value) {
+        if (value instanceof Number n) {
+            int v = n.intValue();
+            return v > 0 ? v : null;
+        }
+        if (value != null) {
+            try {
+                int v = Integer.parseInt(String.valueOf(value).trim());
+                return v > 0 ? v : null;
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Highest plan minute ceiling, else highest hour ceiling (GateForge #202).
+     * Never falls back to hardcoded 100/60s when plan data exists.
+     */
+    private PlanCeiling resolvePlanCeiling(ApiService service) {
+        if (service.applicationPlans == null || service.applicationPlans.isEmpty()) {
+            return null;
+        }
+        Integer maxMinute = null;
+        Integer maxHour = null;
+        for (ApplicationPlan plan : service.applicationPlans) {
+            if (plan == null || plan.limits == null) {
+                continue;
+            }
+            for (Map<String, Object> limit : plan.limits) {
+                if (limit == null) {
+                    continue;
+                }
+                Object periodObj = limit.get("period");
+                Integer value = toPositiveInt(limit.get("value"));
+                if (periodObj == null || value == null) {
+                    continue;
+                }
+                String period = String.valueOf(periodObj).toLowerCase();
+                if ("minute".equals(period)) {
+                    maxMinute = maxMinute == null ? value : Math.max(maxMinute, value);
+                } else if ("hour".equals(period)) {
+                    maxHour = maxHour == null ? value : Math.max(maxHour, value);
+                }
+            }
+        }
+        if (maxMinute != null) {
+            return new PlanCeiling(maxMinute, "60s");
+        }
+        if (maxHour != null) {
+            return new PlanCeiling(maxHour, "3600s");
+        }
+        return null;
+    }
+
+    private record PlanCeiling(int limit, String window) {}
+
+    private String generateAuthorizationPolicy(String name, String namespace, Policy ipCheck) {
+        Map<String, Object> cfg = ipCheck.configuration != null ? ipCheck.configuration : Map.of();
+        String checkType = String.valueOf(cfg.getOrDefault("check_type", "whitelist"));
+        List<String> ips = toStringList(cfg.get("ips"));
+        boolean deny = "blacklist".equalsIgnoreCase(checkType) || "deny".equalsIgnoreCase(checkType);
+        String action = deny ? "DENY" : "ALLOW";
+
+        StringBuilder remoteIps = new StringBuilder();
+        for (String ip : ips) {
+            remoteIps.append("        - \"").append(normalizeCidr(ip)).append("\"\n");
+        }
+        if (remoteIps.length() == 0) {
+            remoteIps.append("        - \"0.0.0.0/0\"\n");
+        }
+
+        return """
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: %s-ip-check
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/ip-check-type: "%s"
+spec:
+  action: %s
+  rules:
+    - from:
+        - source:
+            remoteIpBlocks:
+%s""".formatted(name, namespace, name, checkType, action, remoteIps);
+    }
+
+    private static String normalizeCidr(String ip) {
+        if (ip == null || ip.isBlank()) {
+            return "0.0.0.0/0";
+        }
+        String trimmed = ip.trim();
+        if (trimmed.contains("/")) {
+            return trimmed;
+        }
+        // Single host → /32
+        if (trimmed.contains(":")) {
+            return trimmed + "/128";
+        }
+        return trimmed + "/32";
     }
 
     private Policy findLoggingPolicy(ApiService service) {
@@ -1074,6 +1737,15 @@ stringData:
 %s""".formatted(name, namespace, name, stringData);
         }
 
+        Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
+        if (tokenIntrospection != null) {
+            return generateTokenIntrospectionSecret(name, namespace, tokenIntrospection);
+        }
+
+        if ("appIdKey".equals(authType)) {
+            return generateAppIdKeySecret(name, namespace, service);
+        }
+
         if ("apiKey".equals(authType)) {
             String apiKey = generateRandomHex(32);
             return """
@@ -1105,6 +1777,127 @@ stringData:
   client-id: "REPLACE_ME"
   client-secret: "REPLACE_ME"
 """.formatted(name, namespace, name);
+    }
+
+    /**
+     * Secret for Authorino oauth2Introspection credentialsRef (clientID / clientSecret).
+     * Incomplete policy (no introspection_url) emits a WARNING and does not claim full support.
+     */
+    private String generateTokenIntrospectionSecret(String name, String namespace, Policy policy) {
+        Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
+        String endpoint = firstNonBlank(
+                cfg.get("introspection_url"),
+                cfg.get("introspectionEndpoint"),
+                cfg.get("endpoint"));
+        String clientId = firstNonBlank(cfg.get("client_id"), cfg.get("clientID"));
+        String clientSecret = firstNonBlank(cfg.get("client_secret"), cfg.get("clientSecret"));
+
+        String warning = "";
+        if (endpoint == null) {
+            warning = "# WARNING: token_introspection missing introspection_url — "
+                    + "incomplete; not claiming full oauth2Introspection support\n";
+            LOG.warnf("token_introspection policy incomplete: missing introspection_url");
+        } else if (clientId == null || clientSecret == null) {
+            warning = "# WARNING: token_introspection credentials incomplete — "
+                    + "fill clientID/clientSecret before apply\n";
+        }
+
+        String idValue = clientId != null ? clientId : "REPLACE_ME";
+        String secretValue = clientSecret != null ? clientSecret : "REPLACE_ME";
+
+        return """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s-oauth2-introspection
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+    auth-type: oauth2-introspection
+type: Opaque
+%sstringData:
+  clientID: "%s"
+  clientSecret: "%s"
+""".formatted(name, namespace, name, warning, idValue, secretValue);
+    }
+
+    /**
+     * One Secret with real App ID / App Key pairs as app_id_N / app_key_N.
+     * Never invents keys; warns when credentials are missing.
+     */
+    private String generateAppIdKeySecret(String name, String namespace, ApiService service) {
+        List<Application> apps = service.applications != null ? service.applications : List.of();
+        StringBuilder stringData = new StringBuilder();
+        String warning;
+        int index = 1;
+        int pairs = 0;
+        for (Application app : apps) {
+            String appId = app.appId != null && !app.appId.isBlank() ? app.appId : null;
+            String appKey = null;
+            if (app.keys != null) {
+                for (String k : app.keys) {
+                    if (k != null && !k.isBlank()) {
+                        appKey = k;
+                        break;
+                    }
+                }
+            }
+            if (appId == null && appKey == null) {
+                continue;
+            }
+            if (appId != null) {
+                stringData.append(String.format("  app_id_%d: \"%s\"%n", index, appId));
+            }
+            if (appKey != null) {
+                stringData.append(String.format("  app_key_%d: \"%s\"%n", index, appKey));
+                pairs++;
+            } else {
+                LOG.warnf("App ID %s for service %s has no application keys from Admin API",
+                        appId, service.id);
+            }
+            index++;
+        }
+
+        if (pairs == 0 && stringData.length() == 0) {
+            warning = "# WARNING: No App ID/App Key credentials fetched from 3scale Admin API — "
+                    + "Secret left empty; do not invent keys\n";
+            LOG.warnf("No App ID/App Key credentials for service %s; emitting empty Secret with warning",
+                    service.id);
+            return """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s-app-id-keys
+  namespace: %s
+  labels:
+    app: %s
+    auth-type: app-id-key
+    migrated-from: 3scale
+    authorino.kuadrant.io/managed-by: authorino
+type: Opaque
+%sstringData: {}
+""".formatted(name, namespace, name, warning);
+        } else if (pairs == 0) {
+            warning = "# WARNING: App IDs present but application keys missing from Admin API\n";
+        } else {
+            warning = "";
+        }
+
+        return """
+apiVersion: v1
+kind: Secret
+metadata:
+  name: %s-app-id-keys
+  namespace: %s
+  labels:
+    app: %s
+    auth-type: app-id-key
+    migrated-from: 3scale
+    authorino.kuadrant.io/managed-by: authorino
+type: Opaque
+%sstringData:
+%s""".formatted(name, namespace, name, warning, stringData);
     }
 
     // ─────────────────────────────────────────────
@@ -1230,6 +2023,35 @@ ServiceEntry, DestinationRule, and URLRewrite filters are not needed and have no
                     + "| destinationrule.yaml | TLS origination to external host |"
                     : "");
 
+        Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
+        String tokenIntrospectionNotes = "";
+        if (tokenIntrospection != null) {
+            Map<String, Object> cfg = tokenIntrospection.configuration != null
+                    ? tokenIntrospection.configuration : Map.of();
+            String endpoint = firstNonBlank(
+                    cfg.get("introspection_url"),
+                    cfg.get("introspectionEndpoint"),
+                    cfg.get("endpoint"));
+            if (endpoint == null) {
+                tokenIntrospectionNotes = """
+
+## WARNING: Incomplete token_introspection
+
+The 3scale `token_introspection` policy is present but missing `introspection_url`.
+AuthPolicy oauth2Introspection was **not** fully generated — do not claim full support until the
+introspection endpoint and client credentials are configured.
+""";
+            } else {
+                tokenIntrospectionNotes = """
+
+## OAuth 2.0 Token Introspection
+
+`policy.yaml` uses AuthPolicy `oauth2Introspection` (endpoint + credentialsRef).
+Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before apply.
+""".formatted(name);
+            }
+        }
+
         return """
 # %s - Connectivity Link Migration
 
@@ -1250,7 +2072,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 | secret.yaml | Credentials (replace values before applying) |
 | configmap.yaml | Configuration data |
 %s
-
+%s
 ## Prerequisites
 - OpenShift with Connectivity Link (Kuadrant) operator
 - Gateway API CRDs
@@ -1277,6 +2099,7 @@ kubectl get httproute %s-route -n %s
             backendType == BackendType.EXTERNAL ? "External HTTPS" : "Internal OpenShift Service",
             backendSection,
             fileList,
+            tokenIntrospectionNotes,
             namespace, name, namespace, name, namespace
         );
     }
