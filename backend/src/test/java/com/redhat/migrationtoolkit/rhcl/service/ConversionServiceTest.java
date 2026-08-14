@@ -1051,6 +1051,70 @@ class ConversionServiceTest {
                 "Neither source → no RateLimitPolicy file");
     }
 
+    @Test
+    void convert_connectionLimiters_emitsWarningInRateLimitAndReadme() {
+        ApiService svc = basicService("Conn Limit", "conn-limit");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(edgeLimitingConnectionPolicy(25));
+        svc.applicationPlans = List.of();
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String rlp = files.get("ratelimitpolicy.yaml");
+        String readme = files.get("README.md");
+        assertNotNull(rlp);
+        assertTrue(rlp.contains("# WARNING:") && rlp.toLowerCase().contains("connection"),
+                "connection_limiters→rate approximation must warn in RateLimitPolicy YAML");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && readme.toLowerCase().contains("connection"),
+                "connection_limiters approximation must warn in README");
+        assertTrue(rlp.contains("25") && rlp.contains("window: 1s"));
+    }
+
+    @Test
+    void convert_leakyBucket_emitsWarningInRateLimitAndReadme() {
+        ApiService svc = basicService("Leaky", "leaky");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(edgeLimitingLeakyBucketPolicy(40));
+        svc.applicationPlans = List.of();
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String rlp = files.get("ratelimitpolicy.yaml");
+        String readme = files.get("README.md");
+        assertNotNull(rlp);
+        assertTrue(rlp.contains("# WARNING:") && rlp.toLowerCase().contains("leaky"),
+                "leaky_bucket→fixed window approximation must warn in RateLimitPolicy YAML");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && readme.toLowerCase().contains("leaky"),
+                "leaky_bucket approximation must warn in README");
+        assertTrue(rlp.contains("40") && rlp.contains("window: 1s"));
+    }
+
+    @Test
+    void convert_planCeiling_emitsMaxAcrossPlansWarningInYamlAndReadme() {
+        ApiService svc = basicService("Ceiling", "ceiling");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of();
+        ApplicationPlan planA = new ApplicationPlan();
+        planA.id = "1";
+        planA.limits = List.of(Map.of("period", "minute", "value", 10));
+        ApplicationPlan planB = new ApplicationPlan();
+        planB.id = "2";
+        planB.limits = List.of(Map.of("period", "minute", "value", 90));
+        svc.applicationPlans = List.of(planA, planB);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String rlp = files.get("ratelimitpolicy.yaml");
+        String readme = files.get("README.md");
+        assertNotNull(rlp);
+        assertTrue(rlp.contains("90"));
+        assertTrue(rlp.contains("# WARNING:")
+                        && (rlp.toLowerCase().contains("plan") || rlp.toLowerCase().contains("ceiling")),
+                "plan ceiling = max across all plans must warn in RateLimitPolicy YAML");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && (readme.toLowerCase().contains("plan") || readme.toLowerCase().contains("ceiling")),
+                "plan-ceiling max-all-plans note must appear in README");
+    }
+
     // ── token_introspection → AuthPolicy oauth2Introspection (PR4) ────────────
 
     @Test
@@ -1250,6 +1314,38 @@ class ConversionServiceTest {
         limiter.put("key", key);
         Map<String, Object> cfg = new HashMap<>();
         cfg.put("fixed_window_limiters", List.of(limiter));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy edgeLimitingLeakyBucketPolicy(int rate) {
+        Policy p = new Policy();
+        p.name = "edge_limiting";
+        p.enabled = true;
+        Map<String, Object> limiter = new HashMap<>();
+        limiter.put("rate", rate);
+        Map<String, Object> key = new HashMap<>();
+        key.put("name", "service");
+        key.put("scope", "service");
+        limiter.put("key", key);
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("leaky_bucket_limiters", List.of(limiter));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy edgeLimitingConnectionPolicy(int conn) {
+        Policy p = new Policy();
+        p.name = "edge_limiting";
+        p.enabled = true;
+        Map<String, Object> limiter = new HashMap<>();
+        limiter.put("conn", conn);
+        Map<String, Object> key = new HashMap<>();
+        key.put("name", "service");
+        key.put("scope", "service");
+        limiter.put("key", key);
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("connection_limiters", List.of(limiter));
         p.configuration = cfg;
         return p;
     }
