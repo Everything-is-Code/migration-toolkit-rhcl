@@ -849,10 +849,12 @@ class ConversionServiceTest {
         assertTrue(files.containsKey("configmap.yaml"));
         assertTrue(files.containsKey("apiproduct.yaml"));
         assertTrue(files.containsKey("README.md"));
-        assertTrue(files.get("httproute.yaml").contains("CORS")
-                        || files.get("httproute.yaml").contains("cors")
-                        || files.get("httproute.yaml").contains("allowOrigins"),
-                "CORS conversion must still be present");
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("Access-Control")
+                        || httproute.contains("ResponseHeaderModifier")
+                        || httproute.contains("CORS")
+                        || httproute.contains("allowOrigins"),
+                "CORS conversion must still be present (ResponseHeaderModifier or CORS filter)");
         assertTrue(files.containsKey("authorizationpolicy.yaml"),
                 "ip_check AuthzPolicy must still be present");
         assertTrue(files.containsKey("ratelimitpolicy.yaml"),
