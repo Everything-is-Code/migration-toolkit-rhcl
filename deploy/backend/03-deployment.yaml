@@ -21,7 +21,7 @@ spec:
       serviceAccountName: migration-tool-backend
       containers:
         - name: backend
-          image: image-registry.openshift-image-registry.svc:5000/migration-toolkit/migration-tool-backend:latest
+          image: image-registry.openshift-image-registry.svc:5000/NAMESPACE_PLACEHOLDER/migration-tool-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
