@@ -60,8 +60,7 @@ class ConversionControllerTest {
                 .body("{\"serviceIds\":[], \"namespace\":\"test\", \"threescaleUrl\":\"https://x.com\", \"accessToken\":\"tok\"}")
                 .when().post("/api/convert")
                 .then()
-                .statusCode(400)
-                .body("error", notNullValue());
+                .statusCode(400);
     }
 
     @Test
@@ -69,6 +68,40 @@ class ConversionControllerTest {
         given()
                 .contentType(ContentType.JSON)
                 .body("{\"namespace\":\"test\", \"threescaleUrl\":\"https://x.com\", \"accessToken\":\"tok\"}")
+                .when().post("/api/convert")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void convert_blankThreescaleUrl_returns400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "test",
+                          "threescaleUrl": "",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void convert_blankAccessToken_returns400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "test",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "   "
+                        }
+                        """)
                 .when().post("/api/convert")
                 .then()
                 .statusCode(400);

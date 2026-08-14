@@ -1,12 +1,18 @@
 package com.redhat.migrationtoolkit.rhcl.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+
 import java.util.List;
 
 public class ConversionRequest {
+    @NotBlank
     public String threescaleUrl;
+    @NotBlank
     public String accessToken;
     public String tenant;
     public String namespace;
+    @NotEmpty
     public List<String> serviceIds;
     /** External backend URL (e.g. https://foo.ecs.us-east-2.on.aws/api).
      * When specified, generates ServiceEntry + DestinationRule + Host rewrite. */
