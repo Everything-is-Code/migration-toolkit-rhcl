@@ -62,6 +62,12 @@ public class ClusterVersionService {
 
     private static final long CACHE_TTL_MS = 5 * 60 * 1000L;
 
+    /**
+     * I-7: warn when a cluster-wide CSV list is this large or larger.
+     * Package-visible for unit tests.
+     */
+    static final int CSV_LIST_SIZE_WARN_THRESHOLD = 500;
+
     @Inject
     KubernetesClient client;
 
@@ -333,6 +339,19 @@ public class ClusterVersionService {
         return bundle == null ? null : stripLeadingV(bundle);
     }
 
+    /**
+     * Lists ClusterServiceVersions cluster-wide for Kuadrant/OSSM name matching.
+     *
+     * <p><b>I-7 residual risk:</b> This intentionally uses unbounded
+     * {@code inAnyNamespace().list()} — no blind {@code withLimit} and no unproven
+     * {@code withLabelSelector}. Detection filters by <em>name substring</em>
+     * ({@code kuadrant}/{@code rhcl}/{@code servicemesh}/{@code sail}+{@code operator}, etc.);
+     * OLM CSV labels are package/namespace-specific and are not proven safe for those
+     * matchers, so a selector or limit would risk false negatives. The resolve result is
+     * cached for {@link #CACHE_TTL_MS} (5 minutes), which bounds how often this list runs.
+     * When the returned item count is {@code >=} {@link #CSV_LIST_SIZE_WARN_THRESHOLD},
+     * we {@code LOG.warn} so large clusters surface the residual unbounded-list cost.
+     */
     private List<GenericKubernetesResource> listCsvs() {
         ResourceDefinitionContext ctx = new ResourceDefinitionContext.Builder()
                 .withGroup("operators.coreos.com")
@@ -345,7 +364,26 @@ public class ClusterVersionService {
         if (list == null || list.getItems() == null) {
             return List.of();
         }
-        return list.getItems();
+        List<GenericKubernetesResource> items = list.getItems();
+        warnIfUnboundedCsvListLarge(items.size());
+        return items;
+    }
+
+    /**
+     * I-7: emit WARN when an unbounded cluster-wide CSV list is large.
+     * Package-visible for unit tests.
+     */
+    static void warnIfUnboundedCsvListLarge(int size) {
+        if (size >= CSV_LIST_SIZE_WARN_THRESHOLD) {
+            LOG.warnf(
+                    "Unbounded CSV list returned %d ClusterServiceVersions (threshold %d). "
+                            + "List stays unbounded because Kuadrant/OSSM detection uses name-substring "
+                            + "matching; blind withLimit or unproven labelSelectors would risk false "
+                            + "negatives (I-7). Resolve cache TTL is %d ms.",
+                    size,
+                    CSV_LIST_SIZE_WARN_THRESHOLD,
+                    CACHE_TTL_MS);
+        }
     }
 
     private static String findCsvVersion(

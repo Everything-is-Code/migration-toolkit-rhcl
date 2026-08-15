@@ -26,8 +26,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -39,8 +41,8 @@ public class ThreeScaleExportService {
     /** Page size for Admin API list endpoints. */
     static final int LIST_PAGE_SIZE = 500;
 
-    /** Max concurrent Admin API enrich calls while listing services. */
-    static final int LIST_ENRICH_CONCURRENCY = 8;
+    /** Max wait for list-enrich virtual-thread pool shutdown. */
+    static final long LIST_ENRICH_TERMINATION_SECONDS = 60;
 
     public boolean testConnection(ConnectionRequest req) {
         try {
@@ -148,6 +150,7 @@ public class ThreeScaleExportService {
      * @deprecated Prefer {@link #listServices(String, String)} for the API list.
      * Kept as an alias so older call sites keep working.
      */
+    @Deprecated
     public List<ApiService> exportServices(String url, String accessToken) {
         return listServices(url, accessToken);
     }
@@ -197,8 +200,7 @@ public class ThreeScaleExportService {
         if (services.isEmpty()) {
             return;
         }
-        int poolSize = Math.min(LIST_ENRICH_CONCURRENCY, services.size());
-        ExecutorService pool = Executors.newFixedThreadPool(poolSize);
+        ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
         try {
             List<CompletableFuture<Void>> futures = new ArrayList<>(services.size());
             for (ApiService service : services) {
@@ -208,9 +210,26 @@ public class ThreeScaleExportService {
                             client, service.id, accessToken, backendCatalog);
                 }, pool));
             }
-            CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+            for (int i = 0; i < futures.size(); i++) {
+                try {
+                    futures.get(i).join();
+                } catch (CompletionException e) {
+                    ApiService failed = services.get(i);
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    LOG.warnf(cause, "Failed to enrich service %s during list: %s",
+                            failed != null ? failed.id : "?", cause.getMessage());
+                }
+            }
         } finally {
             pool.shutdown();
+            try {
+                if (!pool.awaitTermination(LIST_ENRICH_TERMINATION_SECONDS, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException ie) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -262,7 +281,11 @@ public class ThreeScaleExportService {
                 page++;
             }
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch backend catalog: %s", e.getMessage());
+            LOG.warnf("Failed to fetch backend catalog: %s — continuing with empty catalog (per-backend GET fallback)",
+                    e.getMessage());
+        }
+        if (catalog.isEmpty()) {
+            LOG.warn("Backend catalog is empty; list enrichment will fall back to per-backend GET when needed");
         }
         return catalog;
     }

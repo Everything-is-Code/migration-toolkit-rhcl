@@ -216,12 +216,16 @@ const AppContent: React.FC = () => {
 
   const [appState, setAppState] = useState<AppState>(() => {
     const persisted = loadPersistedConnection();
+    // I-2: never restore connected:true without a non-empty token (load already clears token).
+    const token = persisted?.connection?.accessToken ?? '';
+    const connected =
+      Boolean(token.trim()) && Boolean(persisted?.connection?.connected);
     return {
       connection: {
         url: persisted?.connection?.url ?? '',
-        accessToken: persisted?.connection?.accessToken ?? '',
+        accessToken: token,
         tenant: persisted?.connection?.tenant ?? '',
-        connected: Boolean(persisted?.connection?.connected),
+        connected,
       },
       selectedServices: [],
       conversionResults: [],

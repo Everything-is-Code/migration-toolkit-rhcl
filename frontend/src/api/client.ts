@@ -1,6 +1,7 @@
 import axios from 'axios';
 import i18n from '../i18n';
 import { ClusterVersionsResponse } from './types';
+import { clearPersistedConnection } from '../utils/appStateStorage';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
@@ -15,6 +16,18 @@ api.interceptors.request.use((config) => {
   config.headers['Accept-Language'] = i18n.language || 'en';
   return config;
 });
+
+// I-3: drop persisted connection when the API rejects auth.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+    if (status === 401 || status === 403) {
+      clearPersistedConnection();
+    }
+    return Promise.reject(error);
+  },
+);
 
 export const connectionApi = {
   test: (data: { url: string; accessToken: string; tenant?: string }) =>

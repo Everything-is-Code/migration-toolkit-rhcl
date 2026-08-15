@@ -24,20 +24,23 @@ import { CompatibilityResult } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { loadSupportedPolicies } from './SupportedPoliciesPage';
-
-/** PF v5 tokens for status / muted text / spacing (I8). */
-const PF_SUCCESS = 'var(--pf-v5-global--success-color--100)';
-const PF_WARNING = 'var(--pf-v5-global--warning-color--100)';
-const PF_DANGER = 'var(--pf-v5-global--danger-color--100)';
-const PF_COLOR_MUTED = 'var(--pf-v5-global--Color--200)';
-const PF_COLOR_SUBTLE = 'var(--pf-v5-global--Color--400)';
-const PF_BG_DEFAULT = 'var(--pf-v5-global--BackgroundColor--200)';
-const PF_BG_WARNING = 'var(--pf-v5-global--palette--gold-50)';
-const PF_BG_DANGER = 'var(--pf-v5-global--palette--red-50)';
-const PF_SPACER_XS = 'var(--pf-v5-global--spacer--xs)';
-const PF_SPACER_SM = 'var(--pf-v5-global--spacer--sm)';
-const PF_SPACER_MD = 'var(--pf-v5-global--spacer--md)';
-const PF_BORDER_RADIUS = 'var(--pf-v5-global--BorderRadius--sm)';
+import {
+  PF_BG_DANGER,
+  PF_BG_DEFAULT,
+  PF_BG_WARNING,
+  PF_BORDER_RADIUS,
+  PF_COLOR_MUTED,
+  PF_COLOR_SUBTLE,
+  PF_DANGER,
+  PF_FONT_SIZE_2XL,
+  PF_FONT_SIZE_SM,
+  PF_FONT_SIZE_XS,
+  PF_SPACER_MD,
+  PF_SPACER_SM,
+  PF_SPACER_XS,
+  PF_SUCCESS,
+  PF_WARNING,
+} from '../styles/pfTokens';
 
 interface Props {
   appState: AppState;
@@ -157,7 +160,7 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
                         >
                           {result.level}
                         </Label>
-                        <span style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>
+                        <span style={{ fontSize: PF_FONT_SIZE_2XL, fontWeight: 'bold' }}>
                           Migration Score: {result.score}%
                         </span>
                       </div>
@@ -182,10 +185,10 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
                           }}>
                             <StatusIcon status={item.status} />
                             <div>
-                              <div style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{item.name}</div>
-                              <div style={{ fontSize: '0.8rem', color: PF_COLOR_MUTED }}>{item.message}</div>
+                              <div style={{ fontWeight: 'bold', fontSize: PF_FONT_SIZE_SM }}>{item.name}</div>
+                              <div style={{ fontSize: PF_FONT_SIZE_SM, color: PF_COLOR_MUTED }}>{item.message}</div>
                               {(item.requiredVersion || item.capability) && (
-                                <div style={{ marginTop: PF_SPACER_XS, fontSize: '0.75rem', color: PF_COLOR_SUBTLE }}>
+                                <div style={{ marginTop: PF_SPACER_XS, fontSize: PF_FONT_SIZE_XS, color: PF_COLOR_SUBTLE }}>
                                   {item.capability && (
                                     <span style={{ marginRight: PF_SPACER_SM }}>
                                       {t('compatibility.capability', { capability: item.capability })}

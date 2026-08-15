@@ -476,7 +476,7 @@ class CompatibilityServiceTest {
     }
 
     /**
-     * I7: capability-tagged CORS fallback WARNING must not require CORS in supportedPolicies.
+     * Capability-tagged CORS fallback WARNING must not require CORS in supportedPolicies.
      * Without native CORS, enabled cors always gets the fallback hint (capability + requiredVersion).
      */
     @Test

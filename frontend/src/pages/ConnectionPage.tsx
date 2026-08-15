@@ -33,6 +33,13 @@ import { ClusterProfile, ClusterVersionsResponse } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { clusterProfileI18nKey, shouldShowClusterVersionsCard } from './clusterCapabilityUi';
+import { clearPersistedConnection } from '../utils/appStateStorage';
+import {
+  PF_COLOR_MUTED,
+  PF_FONT_SIZE_SM,
+  PF_SPACER_MD,
+  PF_SPACER_SM,
+} from '../styles/pfTokens';
 
 interface Props {
   appState: AppState;
@@ -40,11 +47,6 @@ interface Props {
 }
 
 const PROFILE_OPTIONS: ClusterProfile[] = ['auto', 'ocp-4.19', 'ocp-4.21'];
-
-/** PF v5 tokens — muted text / spacers used by versions-related UI (I8). */
-const PF_COLOR_MUTED = 'var(--pf-v5-global--Color--200)';
-const PF_SPACER_SM = 'var(--pf-v5-global--spacer--sm)';
-const PF_SPACER_MD = 'var(--pf-v5-global--spacer--md)';
 
 const displayOrDash = (value: string | null | undefined) =>
   value && value.trim() ? value : '—';
@@ -191,6 +193,8 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       await loadVersions(true);
     } catch (e: unknown) {
       setError(apiErrorMessage(e, t('connection.errorDefault')));
+      // I-3: clear persisted connection on connect failure / disconnect.
+      clearPersistedConnection();
       setAppState(prev => ({
         ...prev,
         connection: { url, accessToken, tenant, connected: false },
@@ -375,7 +379,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   {versionsLoading ? t('connection.versionsRefreshing') : t('connection.btnRefreshVersions')}
                 </Button>
               </div>
-              <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: '0.9rem' }}>
+              <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: PF_FONT_SIZE_SM }}>
                 {t('connection.versionsDescription')}
               </p>
 
@@ -444,7 +448,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       <DescriptionListDescription>
                         {displayOrDash(versions.ossm)}
                         {versions.ossmExpectedForOcp && (
-                          <span style={{ marginLeft: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: '0.85rem' }}>
+                          <span style={{ marginLeft: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: PF_FONT_SIZE_SM }}>
                             ({t('connection.ossmExpected', { version: versions.ossmExpectedForOcp })})
                           </span>
                         )}
