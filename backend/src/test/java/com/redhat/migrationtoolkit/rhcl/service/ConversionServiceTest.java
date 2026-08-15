@@ -1242,6 +1242,178 @@ class ConversionServiceTest {
                 "edge_limiting RateLimitPolicy must still be present");
     }
 
+    // ── jwt_claim_check → AuthPolicy patternMatching (#20) ───────────────────
+
+    @Test
+    void convert_jwtClaimCheck_equals_emitsPatternMatchingEq() {
+        ApiService svc = basicService("Claim API", "claim-api");
+        svc.authentication = auth("jwt");
+        svc.authentication.oidcIssuerEndpoint = "https://sso.example.com/realms/demo";
+        svc.policies = List.of(jwtClaimCheckPolicy(List.of(
+                jwtClaimOp("role", "==", "admin", "plain", "plain"))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("authorization:"), "Must emit authorization block");
+        assertTrue(policy.contains("jwt-claim-check"), "Must name the claim-check rule");
+        assertTrue(policy.contains("patternMatching"), "Must use Authorino patternMatching");
+        assertTrue(policy.contains("selector: auth.identity.role"),
+                "Selector must be auth.identity.<claim>");
+        assertTrue(policy.contains("operator: eq"), "== must map to eq");
+        assertTrue(policy.contains("value: \"admin\"") || policy.contains("value: admin"),
+                "Must emit claim value");
+    }
+
+    @Test
+    void convert_jwtClaimCheck_notEquals_emitsPatternMatchingNeq() {
+        ApiService svc = basicService("Claim API", "claim-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(jwtClaimCheckPolicy(List.of(
+                jwtClaimOp("scope", "!=", "guest", "plain", "plain"))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("selector: auth.identity.scope"));
+        assertTrue(policy.contains("operator: neq"), "!= must map to neq");
+        assertTrue(policy.contains("guest"));
+    }
+
+    @Test
+    void convert_jwtClaimCheck_matches_emitsPatternMatchingMatches() {
+        ApiService svc = basicService("Claim API", "claim-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(jwtClaimCheckPolicy(List.of(
+                jwtClaimOp("email", "matches", ".*@example.com", "plain", "plain"))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("selector: auth.identity.email"));
+        assertTrue(policy.contains("operator: matches"), "matches must map to matches");
+        assertTrue(policy.contains(".*@example.com"));
+    }
+
+    @Test
+    void convert_jwtClaimCheck_andOps_emitMultiplePatternsUnderOneRule() {
+        ApiService svc = basicService("Claim API", "claim-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(jwtClaimCheckPolicy(List.of(
+                jwtClaimOp("role", "==", "admin", "plain", "plain"),
+                jwtClaimOp("tenant", "==", "acme", "plain", "plain"))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("jwt-claim-check"));
+        assertTrue(policy.contains("auth.identity.role"));
+        assertTrue(policy.contains("auth.identity.tenant"));
+        assertEquals(1, policy.split("jwt-claim-check:").length - 1,
+                "AND ops must share one named jwt-claim-check rule");
+    }
+
+    @Test
+    void convert_jwtClaimCheck_liquidClaim_skippedWithReadmeWarning() {
+        ApiService svc = basicService("Claim API", "claim-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(jwtClaimCheckPolicy(List.of(
+                jwtClaimOp("{{ jwt.role }}", "==", "admin", "liquid", "plain"))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        String readme = files.get("README.md");
+        assertFalse(policy != null && policy.contains("jwt-claim-check"),
+                "liquid claim ops must not emit patternMatching");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && readme.toLowerCase().contains("liquid"),
+                "README must WARNING about liquid jwt_claim_check");
+    }
+
+    @Test
+    void convert_jwtClaimCheck_combineOpOr_skippedWithReadmeWarning() {
+        ApiService svc = basicService("Claim API", "claim-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(jwtClaimCheckPolicy(
+                List.of(jwtClaimOp("role", "==", "admin", "plain", "plain")),
+                "or", "/", List.of("ANY"), "plain"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        String readme = files.get("README.md");
+        assertFalse(policy != null && policy.contains("jwt-claim-check"),
+                "combine_op=or rules must be skipped");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && (readme.contains("combine_op") || readme.toLowerCase().contains(" or ")),
+                "README must WARNING about combine_op=or");
+    }
+
+    @Test
+    void convert_jwtClaimCheck_pathScoped_emitsGlobalPatternsWithReadmeWarning() {
+        ApiService svc = basicService("Claim API", "claim-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(jwtClaimCheckPolicy(
+                List.of(jwtClaimOp("role", "==", "admin", "plain", "plain")),
+                "and", "/admin/.*", List.of("GET"), "plain"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        String readme = files.get("README.md");
+        assertNotNull(policy);
+        assertTrue(policy.contains("selector: auth.identity.role"),
+                "path-scoped rules still emit global claim patterns");
+        assertTrue(policy.contains("operator: eq"));
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && (readme.toLowerCase().contains("path") || readme.toLowerCase().contains("method")),
+                "README must WARNING about path/method gating limitations");
+    }
+
+    @Test
+    void convert_jwtClaimCheck_mergesWithOpaIpCheck() {
+        ApiService svc = basicService("Claim+IP API", "claim-ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(
+                jwtClaimCheckPolicy(List.of(jwtClaimOp("role", "==", "admin", "plain", "plain"))),
+                ipCheckPolicy("whitelist", List.of("192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertFalse(files.containsKey("authorizationpolicy.yaml"),
+                "authPolicyOpa must not emit separate AuthorizationPolicy");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("jwt-claim-check"),
+                "jwt_claim_check patternMatching must remain after OPA merge");
+        assertTrue(policy.contains("patternMatching"));
+        assertTrue(policy.contains("selector: auth.identity.role"));
+        assertTrue(policy.contains("ip-check") || policy.contains("opa"),
+                "ip_check OPA must coexist with claim-check authorization");
+        assertTrue(policy.contains("192.0.2.1"));
+    }
+
+    @Test
+    void convert_jwtClaimCheck_withIpCheckAuthorizationPolicyMode_keepsSeparateAuthz() {
+        ApiService svc = basicService("Claim+IP Authz", "claim-ip-authz");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(
+                jwtClaimCheckPolicy(List.of(jwtClaimOp("role", "==", "admin", "plain", "plain"))),
+                ipCheckPolicy("whitelist", List.of("10.0.0.0/8")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authorizationPolicy";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertTrue(files.containsKey("authorizationpolicy.yaml"),
+                "authorizationPolicy mode still emits authorizationpolicy.yaml");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("jwt-claim-check"));
+        assertFalse(policy.contains("ip-check") && policy.contains("opa"),
+                "authorizationPolicy mode must not put OPA ip-check in AuthPolicy");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService(String name, String systemName) {
@@ -1369,6 +1541,43 @@ class ConversionServiceTest {
         if (clientSecret != null) {
             cfg.put("client_secret", clientSecret);
         }
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Map<String, Object> jwtClaimOp(String claim, String op, String value,
+                                           String claimType, String valueType) {
+        Map<String, Object> operation = new HashMap<>();
+        operation.put("jwt_claim", claim);
+        operation.put("op", op);
+        operation.put("value", value);
+        if (claimType != null) {
+            operation.put("jwt_claim_type", claimType);
+        }
+        if (valueType != null) {
+            operation.put("value_type", valueType);
+        }
+        return operation;
+    }
+
+    private Policy jwtClaimCheckPolicy(List<Map<String, Object>> operations) {
+        return jwtClaimCheckPolicy(operations, "and", "/", List.of("ANY"), "plain");
+    }
+
+    private Policy jwtClaimCheckPolicy(List<Map<String, Object>> operations, String combineOp,
+                                       String resource, List<String> methods, String resourceType) {
+        Policy p = new Policy();
+        p.name = "jwt_claim_check";
+        p.enabled = true;
+        Map<String, Object> rule = new HashMap<>();
+        rule.put("resource", resource);
+        rule.put("resource_type", resourceType);
+        rule.put("methods", methods);
+        rule.put("combine_op", combineOp);
+        rule.put("operations", operations);
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("error_message", "Invalid JWT check");
+        cfg.put("rules", List.of(rule));
         p.configuration = cfg;
         return p;
     }
