@@ -19,7 +19,9 @@ Built with a Quarkus backend and a React/PatternFly frontend.
 - [API Reference](#api-reference)
 - [Data Model](#data-model)
 - [Internationalization (i18n)](#internationalization-i18n)
+- [Testing](#testing)
 - [Maintainer: make this repository operational (post-merge)](#maintainer-make-this-repository-operational-post-merge)
+- [Contributing](CONTRIBUTING.md) · [Agents](AGENTS.md) · [Security](SECURITY.md)
 - [日本語ドキュメント](#日本語ドキュメント)
 
 ---
@@ -60,7 +62,7 @@ Helm chart packaging, Quay container images, and GitHub Actions CI/CD were valid
 |------|---------|---------|
 | Java (OpenJDK) | 21+ | Backend build |
 | Apache Maven | 3.9.x+ | Backend build |
-| Node.js | 18+ | Frontend build |
+| Node.js | 22 | Frontend build |
 | npm | 9+ | Frontend dependency management |
 | Docker / Podman | Latest | Container image build (local testing) |
 
@@ -247,7 +249,7 @@ query `accessToken` / `access_token`). Existing POST bodies may still include
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18, PatternFly 5, Vite, TypeScript, react-i18next |
-| Backend | Quarkus 3.8.4 (Java 21), RESTEasy Reactive, Hibernate ORM Panache |
+| Backend | Quarkus 3.27.5.1 (Java 21), RESTEasy Reactive, Hibernate ORM Panache |
 | Database | PostgreSQL (managed by CrunchyData Operator) |
 | Kubernetes client | Fabric8 Kubernetes Client 6.7.x |
 | OpenAPI | SmallRye OpenAPI + Swagger UI (`/q/swagger-ui`) |
@@ -567,14 +569,27 @@ Flyway migrations:
 
 ## Testing
 
+Run these from `backend/` unless noted.
+
 ### Run all tools + generate HTML report
+
+```bash
 ./generate-report.sh
+```
 
 ### To include Wapiti (DAST)
+
+```bash
 ./generate-report.sh --with-wapiti --wapiti-url http://your-app:8080
+```
 
 ### Maven only (Checkstyle + PMD + JaCoCo + Unit Test)
+
+```bash
 mvn verify checkstyle:checkstyle pmd:pmd
+```
+
+See also [CONTRIBUTING.md](CONTRIBUTING.md) for frontend tests and local setup. The SPA API base URL is bake-time `VITE_API_URL` (not a runtime `REACT_APP_*` env).
 
 ---
 
@@ -751,7 +766,7 @@ https://github.com/Everything-is-Code/from-3scale-to-connectivity-link
 |--------|------------|------|
 | Java (OpenJDK) | 21 以上 | バックエンドビルド |
 | Apache Maven | 3.9.x 以上 | バックエンドビルド |
-| Node.js | 18 以上 | フロントエンドビルド |
+| Node.js | 22 | フロントエンドビルド |
 | npm | 9 以上 | フロントエンド依存関係管理 |
 | Docker / Podman | 最新版 | コンテナイメージビルド（ローカル検証時） |
 
@@ -907,7 +922,7 @@ CORS のデフォルト許可オリジンは `http://localhost:5173`、`http://l
 | レイヤー | 技術 |
 |---------|------|
 | フロントエンド | React 18, PatternFly 5, Vite, TypeScript, react-i18next |
-| バックエンド | Quarkus 3.8.4 (Java 21), RESTEasy Reactive, Hibernate ORM Panache |
+| バックエンド | Quarkus 3.27.5.1 (Java 21), RESTEasy Reactive, Hibernate ORM Panache |
 | データベース | PostgreSQL (CrunchyData Operator 管理) |
 | Kubernetes クライアント | Fabric8 Kubernetes Client 6.7.x |
 | OpenAPI | SmallRye OpenAPI + Swagger UI (`/q/swagger-ui`) |
@@ -1226,11 +1241,24 @@ Flyway マイグレーション:
 
 ## テスト
 
+特に記載がない限り `backend/` で実行します。
+
 ### 全ツール実行 + HTML レポート生成
+
+```bash
 ./generate-report.sh
+```
 
 ### Wapiti (DAST) も含める場合
+
+```bash
 ./generate-report.sh --with-wapiti --wapiti-url http://your-app:8080
+```
 
 ### Maven のみ (Checkstyle + PMD + JaCoCo + Unit Test)
+
+```bash
 mvn verify checkstyle:checkstyle pmd:pmd
+```
+
+ローカルセットアップとフロントエンドのテストは [CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。SPA の API ベース URL はビルド時の `VITE_API_URL` です（ランタイムの `REACT_APP_*` ではありません）。
