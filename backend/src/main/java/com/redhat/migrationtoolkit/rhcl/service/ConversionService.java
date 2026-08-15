@@ -9,10 +9,15 @@ import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
+import java.net.URI;
 import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @ApplicationScoped
 public class ConversionService {
@@ -123,7 +128,7 @@ public class ConversionService {
         if (loggingPolicy != null) {
             boolean isGateway = !"workload".equals(loggingTarget);
             files.put("telemetry.yaml", generateTelemetry(name, namespace, loggingPolicy, isGateway));
-            java.util.List<Map<String, Object>> jsonCfgCheck =
+            List<Map<String, Object>> jsonCfgCheck =
                     parseJsonObjectConfig(loggingPolicy.configuration != null
                             ? loggingPolicy.configuration.get("json_object_config") : null);
             if (!jsonCfgCheck.isEmpty()) {
@@ -134,7 +139,7 @@ public class ConversionService {
 
         Policy urlRewritingPolicy = findUrlRewritingPolicy(service);
         if (urlRewritingPolicy != null) {
-            java.util.List<Map<String, Object>> rewriteCommands = parseJsonObjectConfig(
+            List<Map<String, Object>> rewriteCommands = parseJsonObjectConfig(
                     urlRewritingPolicy.configuration != null
                             ? urlRewritingPolicy.configuration.get("commands") : null);
             if (!rewriteCommands.isEmpty()) {
@@ -207,7 +212,7 @@ public class ConversionService {
             if (!s.contains("://")) {
                 s = "https://" + s;
             }
-            return new java.net.URI(s).getHost();
+            return new URI(s).getHost();
         } catch (Exception e) {
             return null;
         }
@@ -237,7 +242,7 @@ public class ConversionService {
             if (!s.contains("://")) {
                 s = "http://" + s;
             }
-            int port = new java.net.URI(s).getPort();
+            int port = new URI(s).getPort();
             return port > 0 ? port : defaultPort;
         } catch (Exception e) {
             return defaultPort;
@@ -330,13 +335,13 @@ metadata:
 
         String timeoutsBlock = buildTimeoutsBlock(service);
         boolean hasCors = findCorsPolicy(service) != null;
-        java.util.LinkedHashSet<String> pathsForOptions = new java.util.LinkedHashSet<>();
+        LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             // For HTTP methods that already have a "/" (catch-all) Mapping Rule,
             // skip any subsequent rules for the same method since they are always subsumed by "/".
-            java.util.Set<String> catchAllMethods = new java.util.HashSet<>();
-            java.util.Set<String> emitted = new java.util.LinkedHashSet<>();
+            Set<String> catchAllMethods = new HashSet<>();
+            Set<String> emitted = new LinkedHashSet<>();
             for (MappingRule rule : service.mappingRules) {
                 String path   = toGatewayApiPathPrefix(rule.pattern);
                 String method = rule.httpMethod != null ? rule.httpMethod : "GET";
@@ -375,7 +380,7 @@ metadata:
 
         // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
         if (hasCors) {
-            java.util.Set<String> emittedOptions = new java.util.HashSet<>();
+            Set<String> emittedOptions = new HashSet<>();
             if (service.mappingRules != null) {
                 for (MappingRule rule : service.mappingRules) {
                     if (rule.httpMethod != null && "OPTIONS".equalsIgnoreCase(rule.httpMethod)) {
@@ -438,7 +443,7 @@ metadata:
 
         for (String direction : new String[]{"response", "request"}) {
             Object raw = policy.configuration.get(direction);
-            if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) {
+            if (!(raw instanceof List<?> list) || list.isEmpty()) {
                 continue;
             }
 
@@ -547,15 +552,15 @@ metadata:
         }
         Map<String, Object> cfg = cors.configuration;
 
-        java.util.List<String> originList = toStringList(cfg.get("allow_origin")).stream()
+        List<String> originList = toStringList(cfg.get("allow_origin")).stream()
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .toList();
-        java.util.List<String> methodList = toStringList(cfg.get("allow_methods")).stream()
+        List<String> methodList = toStringList(cfg.get("allow_methods")).stream()
                 .map(s -> s.trim().toUpperCase())
                 .filter(s -> !s.isBlank())
                 .toList();
-        java.util.List<String> headerList = toStringList(cfg.get("allow_headers")).stream()
+        List<String> headerList = toStringList(cfg.get("allow_headers")).stream()
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .toList();
@@ -580,9 +585,9 @@ metadata:
         return buildCorsResponseHeaderModifier(originList, methodList, headerList, credentials, maxAge);
     }
 
-    private static String buildNativeCorsFilter(java.util.List<String> originList,
-                                                java.util.List<String> methodList,
-                                                java.util.List<String> headerList,
+    private static String buildNativeCorsFilter(List<String> originList,
+                                                List<String> methodList,
+                                                List<String> headerList,
                                                 boolean credentials,
                                                 Integer maxAge) {
         StringBuilder sb = new StringBuilder();
@@ -618,9 +623,9 @@ metadata:
         return sb.toString();
     }
 
-    private static String buildCorsResponseHeaderModifier(java.util.List<String> originList,
-                                                          java.util.List<String> methodList,
-                                                          java.util.List<String> headerList,
+    private static String buildCorsResponseHeaderModifier(List<String> originList,
+                                                          List<String> methodList,
+                                                          List<String> headerList,
                                                           boolean credentials,
                                                           Integer maxAge) {
         String allowOrigin = "*";
@@ -643,10 +648,8 @@ metadata:
                     yamlDoubleQuoted(String.join(", ", headerList))));
         }
         if (credentials) {
-            setHeaders.append("""
-                              - name: Access-Control-Allow-Credentials
-                                value: "true"
-            """);
+            setHeaders.append(String.format(
+                    "              - name: Access-Control-Allow-Credentials%n                value: \"true\"%n"));
         }
         if (maxAge != null) {
             setHeaders.append(String.format(
@@ -668,12 +671,12 @@ metadata:
         return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
-    private static java.util.List<String> toStringList(Object raw) {
-        java.util.List<String> out = new java.util.ArrayList<>();
+    private static List<String> toStringList(Object raw) {
+        List<String> out = new ArrayList<>();
         if (raw == null) {
             return out;
         }
-        if (raw instanceof java.util.List<?> list) {
+        if (raw instanceof List<?> list) {
             for (Object item : list) {
                 if (item != null) {
                     out.add(item.toString());
@@ -917,7 +920,6 @@ spec:
     authentication:
       api-key-auth:
         apiKey:
-          allNamespaces: true
           selector:
             matchLabels:
               app: %s
@@ -947,7 +949,6 @@ spec:
     authentication:
       app-id-key-auth:
         apiKey:
-          allNamespaces: true
           selector:
             matchLabels:
               app: %s
@@ -1018,10 +1019,16 @@ spec:
         StringBuilder cidrList = new StringBuilder();
         for (String ip : ips) {
             String cidr = normalizeCidr(ip);
+            if (cidr == null) {
+                continue;
+            }
             if (cidrList.length() > 0) {
                 cidrList.append(", ");
             }
             cidrList.append("\"").append(cidr).append("\"");
+        }
+        if (cidrList.length() == 0) {
+            return "";
         }
         boolean whitelist = !"blacklist".equalsIgnoreCase(checkType)
                 && !"deny".equalsIgnoreCase(checkType);
@@ -1050,7 +1057,7 @@ spec:
             package ipcheck
             import future.keywords
             cidrs := [%s]
-            client_ip := input.attributes.request.http.headers["x-forwarded-for"]
+            client_ip := input.attributes.source.address
 %s""".formatted(cidrList, allowBody);
     }
 
@@ -1170,6 +1177,7 @@ spec:
         PlanCeiling ceiling = resolvePlanCeiling(service);
         if (ceiling != null) {
             limitBlocks.put("global", """
+      # WARNING: plan ceiling is the max limit across all application plans (not per-plan)
       rates:
         - limit: %d
           window: %s
@@ -1246,6 +1254,7 @@ spec:
                 }
                 String limitName = edgeLimiterName(limiter, "edge_leaky_bucket", idx++);
                 limitBlocks.put(limitName, """
+      # WARNING: 3scale leaky_bucket_limiters approximated as fixed window (window: 1s); not true leaky-bucket semantics
       rates:
         - limit: %d
           window: 1s
@@ -1267,6 +1276,7 @@ spec:
                 // Best-effort: map concurrent connections to a per-second rate ceiling.
                 String limitName = edgeLimiterName(limiter, "edge_conn", idx++);
                 limitBlocks.put(limitName, """
+      # WARNING: 3scale connection_limiters mapped to a per-second rate ceiling; concurrent-connection semantics are not preserved
       rates:
         - limit: %d
           window: 1s
@@ -1275,7 +1285,6 @@ spec:
         }
     }
 
-    @SuppressWarnings("unchecked")
     private static String edgeLimiterName(Map<String, Object> limiter, String prefix, int idx) {
         Object keyObj = limiter.get("key");
         if (keyObj instanceof Map<?, ?> keyMap) {
@@ -1359,7 +1368,11 @@ spec:
 
         StringBuilder remoteIps = new StringBuilder();
         for (String ip : ips) {
-            remoteIps.append("        - \"").append(normalizeCidr(ip)).append("\"\n");
+            String cidr = normalizeCidr(ip);
+            if (cidr == null) {
+                continue;
+            }
+            remoteIps.append("        - \"").append(cidr).append("\"\n");
         }
         if (remoteIps.length() == 0) {
             remoteIps.append("        - \"0.0.0.0/0\"\n");
@@ -1385,9 +1398,14 @@ spec:
 %s""".formatted(name, namespace, name, checkType, action, remoteIps);
     }
 
+    /**
+     * Normalize a host or CIDR string. Returns {@code null} for null/blank input
+     * (callers must skip); never maps blank entries to {@code 0.0.0.0/0}.
+     */
     private static String normalizeCidr(String ip) {
         if (ip == null || ip.isBlank()) {
-            return "0.0.0.0/0";
+            LOG.warn("Skipping blank/null CIDR entry in IP check policy");
+            return null;
         }
         String trimmed = ip.trim();
         if (trimmed.contains("/")) {
@@ -1476,7 +1494,7 @@ spec:
      * Lua patterns must be manually verified.
      */
     private String generateUrlRewritingEnvoyFilter(String name, String namespace,
-            java.util.List<Map<String, Object>> commands) {
+            List<Map<String, Object>> commands) {
         StringBuilder rules = new StringBuilder();
         for (Map<String, Object> cmd : commands) {
             String op = String.valueOf(cmd.getOrDefault("op", "sub"));
@@ -1581,23 +1599,23 @@ spec:
     }
 
     @SuppressWarnings("unchecked")
-    private java.util.List<Map<String, Object>> parseJsonObjectConfig(Object raw) {
-        if (raw instanceof java.util.List) {
-            return (java.util.List<Map<String, Object>>) raw;
+    private List<Map<String, Object>> parseJsonObjectConfig(Object raw) {
+        if (raw instanceof List) {
+            return (List<Map<String, Object>>) raw;
         }
         if (raw instanceof String str && !str.isBlank()) {
             try {
                 com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
                 com.fasterxml.jackson.databind.JavaType type = om.getTypeFactory()
-                        .constructCollectionType(java.util.List.class,
+                        .constructCollectionType(List.class,
                                 om.getTypeFactory().constructMapType(
-                                        java.util.LinkedHashMap.class, String.class, Object.class));
+                                        LinkedHashMap.class, String.class, Object.class));
                 return om.readValue(str, type);
             } catch (Exception e) {
                 LOG.warnf("Failed to parse json_object_config string: %s", e.getMessage());
             }
         }
-        return java.util.List.of();
+        return List.of();
     }
 
     private String generateTelemetry(String name, String namespace, Policy policy, boolean isGateway) {
@@ -1635,7 +1653,7 @@ spec:
 
     @SuppressWarnings("checkstyle:LineLength")
     private String generateLoggingEnvoyFilter(String name, String namespace,
-            java.util.List<Map<String, Object>> jsonCfg, boolean isGateway) {
+            List<Map<String, Object>> jsonCfg, boolean isGateway) {
         StringBuilder jsonFormat = new StringBuilder();
         for (Map<String, Object> entry : jsonCfg) {
             String key        = String.valueOf(entry.getOrDefault("key", ""));
@@ -1798,7 +1816,17 @@ stringData:
 
         Policy tokenIntrospection = findTokenIntrospectionPolicy(service);
         if (tokenIntrospection != null) {
-            return generateTokenIntrospectionSecret(name, namespace, tokenIntrospection);
+            Map<String, Object> cfg = tokenIntrospection.configuration != null
+                    ? tokenIntrospection.configuration : Map.of();
+            String endpoint = firstNonBlank(
+                    cfg.get("introspection_url"),
+                    cfg.get("introspectionEndpoint"),
+                    cfg.get("endpoint"));
+            // Same URL gate as AuthPolicy: incomplete introspection must not emit
+            // a mismatched oauth2-introspection Secret while policy falls through.
+            if (endpoint != null) {
+                return generateTokenIntrospectionSecret(name, namespace, tokenIntrospection);
+            }
         }
 
         if ("appIdKey".equals(authType)) {
@@ -1840,23 +1868,16 @@ stringData:
 
     /**
      * Secret for Authorino oauth2Introspection credentialsRef (clientID / clientSecret).
-     * Incomplete policy (no introspection_url) emits a WARNING and does not claim full support.
+     * Caller must only invoke when introspection_url is present (same gate as AuthPolicy).
+     * Missing client credentials emit a WARNING with REPLACE_ME placeholders.
      */
     private String generateTokenIntrospectionSecret(String name, String namespace, Policy policy) {
         Map<String, Object> cfg = policy.configuration != null ? policy.configuration : Map.of();
-        String endpoint = firstNonBlank(
-                cfg.get("introspection_url"),
-                cfg.get("introspectionEndpoint"),
-                cfg.get("endpoint"));
         String clientId = firstNonBlank(cfg.get("client_id"), cfg.get("clientID"));
         String clientSecret = firstNonBlank(cfg.get("client_secret"), cfg.get("clientSecret"));
 
         String warning = "";
-        if (endpoint == null) {
-            warning = "# WARNING: token_introspection missing introspection_url — "
-                    + "incomplete; not claiming full oauth2Introspection support\n";
-            LOG.warnf("token_introspection policy incomplete: missing introspection_url");
-        } else if (clientId == null || clientSecret == null) {
+        if (clientId == null || clientSecret == null) {
             warning = "# WARNING: token_introspection credentials incomplete — "
                     + "fill clientID/clientSecret before apply\n";
         }
@@ -2111,6 +2132,8 @@ Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before a
             }
         }
 
+        String rateLimitNotes = buildRateLimitApproximationNotes(service);
+
         return """
 # %s - Connectivity Link Migration
 
@@ -2131,7 +2154,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 | secret.yaml | Credentials (replace values before applying) |
 | configmap.yaml | Configuration data |
 %s
-%s
+%s%s
 ## Prerequisites
 - OpenShift with Connectivity Link (Kuadrant) operator
 - Gateway API CRDs
@@ -2159,8 +2182,57 @@ kubectl get httproute %s-route -n %s
             backendSection,
             fileList,
             tokenIntrospectionNotes,
+            rateLimitNotes,
             namespace, name, namespace, name, namespace
         );
+    }
+
+    /**
+     * Operator-facing WARNINGs for rate-limit semantic approximations (#8–#10).
+     * Empty when neither edge_limiting approximations nor plan ceilings apply.
+     */
+    private String buildRateLimitApproximationNotes(ApiService service) {
+        boolean hasLeaky = false;
+        boolean hasConn = false;
+        Policy edge = findEdgeLimitingPolicy(service);
+        if (edge != null && edge.configuration != null) {
+            Object leaky = edge.configuration.get("leaky_bucket_limiters");
+            if (leaky instanceof List<?> list && !list.isEmpty()) {
+                hasLeaky = true;
+            }
+            Object conn = edge.configuration.get("connection_limiters");
+            if (conn instanceof List<?> list && !list.isEmpty()) {
+                hasConn = true;
+            }
+        }
+        boolean hasPlanCeiling = resolvePlanCeiling(service) != null;
+        if (!hasLeaky && !hasConn && !hasPlanCeiling) {
+            return "";
+        }
+
+        StringBuilder bullets = new StringBuilder();
+        if (hasConn) {
+            bullets.append(
+                    "- **connection_limiters → rate**: concurrent connections are approximated as a "
+                            + "per-second rate ceiling (`window: 1s`); connection semantics are not preserved\n");
+        }
+        if (hasLeaky) {
+            bullets.append(
+                    "- **leaky_bucket → fixed window**: leaky-bucket limiters are emitted as fixed "
+                            + "`window: 1s` rates; not true leaky-bucket semantics\n");
+        }
+        if (hasPlanCeiling) {
+            bullets.append(
+                    "- **plan ceiling**: `global` limit is the **max** across all application plans "
+                            + "(not a per-plan ceiling)\n");
+        }
+        return """
+
+## WARNING: Rate-limit approximations
+
+`ratelimitpolicy.yaml` includes best-effort mappings from 3scale. Review before apply:
+
+%s""".formatted(bullets);
     }
 
     // ─────────────────────────────────────────────

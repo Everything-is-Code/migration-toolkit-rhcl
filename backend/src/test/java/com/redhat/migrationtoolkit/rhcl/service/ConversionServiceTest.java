@@ -324,6 +324,56 @@ class ConversionServiceTest {
     }
 
     @Test
+    void convert_corsPolicy_credentialsIndent_matchesSiblingAccessControlHeaders() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"),
+                List.of("GET", "POST"),
+                List.of("Authorization"),
+                true,
+                600));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = false;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+
+        String originItem = "              - name: Access-Control-Allow-Origin";
+        String credentialsItem = "              - name: Access-Control-Allow-Credentials";
+        String credentialsValue = "                value: \"true\"";
+        assertTrue(httproute.contains(originItem),
+                "Allow-Origin sibling must use 14-space list-item indent");
+        assertTrue(httproute.contains(credentialsItem),
+                "Allow-Credentials must align at 14 spaces like sibling Access-Control-* headers");
+        assertTrue(httproute.contains(credentialsItem + "\n" + credentialsValue),
+                "Allow-Credentials value must use 16-space indent matching sibling headers");
+        assertFalse(httproute.contains("                  - name: Access-Control-Allow-Credentials"),
+                "must not over-indent Allow-Credentials relative to siblings");
+    }
+
+    @Test
+    void convert_corsPolicy_credentialsIndent_withMaxAgeStillAligned() {
+        ApiService svc = basicService("cors-age", "cors-age");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(corsPolicy(
+                List.of("https://app.example.com"),
+                List.of("GET"),
+                List.of(),
+                true,
+                3600));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = false;
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+
+        assertTrue(httproute.contains(
+                        "              - name: Access-Control-Allow-Credentials\n"
+                                + "                value: \"true\"\n"
+                                + "              - name: Access-Control-Max-Age"),
+                "credentials block must sit between siblings at the same indent as Max-Age");
+    }
+
+    @Test
     void convert_corsPolicy_wildcardOrigin_nativeIsYamlQuoted() {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
@@ -723,6 +773,89 @@ class ConversionServiceTest {
     }
 
     @Test
+    void convert_ipCheck_authPolicyOpaMode_usesSourceAddressNotXff() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("input.attributes.source.address"),
+                "OPA Rego must use Envoy source.address (non-spoofable)");
+        assertFalse(policy.contains("x-forwarded-for"),
+                "OPA Rego must not use spoofable X-Forwarded-For header");
+        assertFalse(policy.contains("X-Forwarded-For"));
+    }
+
+    @Test
+    void convert_ipCheck_authPolicyOpaMode_blacklistAlsoUsesSourceAddress() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("blacklist", List.of("10.0.0.1")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("input.attributes.source.address"));
+        assertFalse(policy.contains("x-forwarded-for"));
+        assertTrue(policy.contains("denied") || policy.contains("not denied"),
+                "blacklist path must still emit deny Rego");
+    }
+
+    @Test
+    void convert_ipCheck_blankCidrSkipped_authzKeepsValidEntry() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("", "  ", "203.0.113.10")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authorizationPolicy";
+        String authz = service.convert(svc, "ns", null, opts).get("authorizationpolicy.yaml");
+
+        assertNotNull(authz);
+        assertTrue(authz.contains("203.0.113.10") || authz.contains("203.0.113.10/32"));
+        // Blank entries must not collapse to allow-all while a valid CIDR exists
+        assertFalse(authz.contains("0.0.0.0/0"),
+                "blank CIDRs must be skipped; must not emit 0.0.0.0/0 alongside valid IPs");
+    }
+
+    @Test
+    void convert_ipCheck_blankCidrSkipped_opaKeepsValidEntry() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("", "192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("192.0.2.1"));
+        assertFalse(policy.contains("0.0.0.0/0"),
+                "blank CIDR must not become allow-all in OPA cidrs list");
+    }
+
+    @Test
+    void convert_ipCheck_allBlankCidrs_authzAllowAllOnlyWhenEmpty() {
+        ApiService svc = basicService("IP API", "ip-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(ipCheckPolicy("whitelist", List.of("", "   ")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authorizationPolicy";
+        String authz = service.convert(svc, "ns", null, opts).get("authorizationpolicy.yaml");
+
+        assertNotNull(authz);
+        assertTrue(authz.contains("0.0.0.0/0"),
+                "empty-after-filter AuthorizationPolicy keeps intentional allow-all");
+    }
+
+    @Test
     void convert_noIpCheck_noAuthorizationPolicyFile() {
         ApiService svc = basicService("No IP", "no-ip");
         svc.authentication = auth("jwt");
@@ -733,6 +866,39 @@ class ConversionServiceTest {
     }
 
     // ── App ID/App Key AuthPolicy + real Secret (PR2) ─────────────────────────
+
+    @Test
+    void convert_apiKeyAuth_secretSelectorIsNamespaceScoped() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("apiKey");
+        String policy = service.convert(svc, "ns").get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("api-key-auth") || policy.contains("apiKey"));
+        assertFalse(policy.contains("allNamespaces"),
+                "apiKey AuthPolicy Secret selector must be namespace-scoped");
+        assertTrue(policy.contains("selector:") && policy.contains("matchLabels:"),
+                "apiKey AuthPolicy must retain label selector");
+    }
+
+    @Test
+    void convert_appIdKey_secretSelectorIsNamespaceScoped() {
+        ApiService svc = basicService("App ID API", "app-id-api");
+        svc.authentication = auth("appIdKey");
+        Application app = new Application();
+        app.id = "42";
+        app.appId = "real-app-id-abc";
+        app.keys = List.of("real-app-key-xyz");
+        svc.applications = List.of(app);
+
+        String policy = service.convert(svc, "ns").get("policy.yaml");
+
+        assertNotNull(policy);
+        assertTrue(policy.contains("app-id-key") || policy.contains("app-id-key-auth"));
+        assertFalse(policy.contains("allNamespaces"),
+                "appIdKey AuthPolicy Secret selector must be namespace-scoped");
+        assertTrue(policy.contains("selector:") && policy.contains("matchLabels:"));
+    }
 
     @Test
     void convert_appIdKey_withRealCredentials_emitsAuthPolicyAndSecret() {
@@ -885,6 +1051,70 @@ class ConversionServiceTest {
                 "Neither source → no RateLimitPolicy file");
     }
 
+    @Test
+    void convert_connectionLimiters_emitsWarningInRateLimitAndReadme() {
+        ApiService svc = basicService("Conn Limit", "conn-limit");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(edgeLimitingConnectionPolicy(25));
+        svc.applicationPlans = List.of();
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String rlp = files.get("ratelimitpolicy.yaml");
+        String readme = files.get("README.md");
+        assertNotNull(rlp);
+        assertTrue(rlp.contains("# WARNING:") && rlp.toLowerCase().contains("connection"),
+                "connection_limiters→rate approximation must warn in RateLimitPolicy YAML");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && readme.toLowerCase().contains("connection"),
+                "connection_limiters approximation must warn in README");
+        assertTrue(rlp.contains("25") && rlp.contains("window: 1s"));
+    }
+
+    @Test
+    void convert_leakyBucket_emitsWarningInRateLimitAndReadme() {
+        ApiService svc = basicService("Leaky", "leaky");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(edgeLimitingLeakyBucketPolicy(40));
+        svc.applicationPlans = List.of();
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String rlp = files.get("ratelimitpolicy.yaml");
+        String readme = files.get("README.md");
+        assertNotNull(rlp);
+        assertTrue(rlp.contains("# WARNING:") && rlp.toLowerCase().contains("leaky"),
+                "leaky_bucket→fixed window approximation must warn in RateLimitPolicy YAML");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && readme.toLowerCase().contains("leaky"),
+                "leaky_bucket approximation must warn in README");
+        assertTrue(rlp.contains("40") && rlp.contains("window: 1s"));
+    }
+
+    @Test
+    void convert_planCeiling_emitsMaxAcrossPlansWarningInYamlAndReadme() {
+        ApiService svc = basicService("Ceiling", "ceiling");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of();
+        ApplicationPlan planA = new ApplicationPlan();
+        planA.id = "1";
+        planA.limits = List.of(Map.of("period", "minute", "value", 10));
+        ApplicationPlan planB = new ApplicationPlan();
+        planB.id = "2";
+        planB.limits = List.of(Map.of("period", "minute", "value", 90));
+        svc.applicationPlans = List.of(planA, planB);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String rlp = files.get("ratelimitpolicy.yaml");
+        String readme = files.get("README.md");
+        assertNotNull(rlp);
+        assertTrue(rlp.contains("90"));
+        assertTrue(rlp.contains("# WARNING:")
+                        && (rlp.toLowerCase().contains("plan") || rlp.toLowerCase().contains("ceiling")),
+                "plan ceiling = max across all plans must warn in RateLimitPolicy YAML");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && (readme.toLowerCase().contains("plan") || readme.toLowerCase().contains("ceiling")),
+                "plan-ceiling max-all-plans note must appear in README");
+    }
+
     // ── token_introspection → AuthPolicy oauth2Introspection (PR4) ────────────
 
     @Test
@@ -927,14 +1157,39 @@ class ConversionServiceTest {
 
         Map<String, String> files = service.convert(svc, "ns");
         String policy = files.get("policy.yaml");
+        String secret = files.get("secret.yaml");
         String readme = files.get("README.md");
         assertFalse(policy != null && policy.contains("oauth2Introspection"),
                 "Incomplete token_introspection must NOT emit full oauth2Introspection");
+        assertFalse(secret != null && secret.contains("oauth2-introspection"),
+                "Incomplete token_introspection must NOT emit oauth2-introspection Secret");
+        assertTrue(secret != null && secret.contains("incomplete-introspect-credentials"),
+                "Without introspection URL, Secret must fall through to JWT/auth-type credentials");
         assertTrue((readme != null && readme.toLowerCase().contains("warn"))
-                        || (policy != null && policy.contains("WARNING"))
-                        || (files.get("secret.yaml") != null
-                        && files.get("secret.yaml").contains("WARNING")),
+                        || (policy != null && policy.contains("WARNING")),
                 "Incomplete config must warn and not claim full support");
+    }
+
+    @Test
+    void convert_tokenIntrospection_incomplete_apiKey_fallsThroughToApiKeySecret() {
+        ApiService svc = basicService("Incomplete ApiKey", "incomplete-apikey");
+        svc.authentication = auth("apiKey");
+        Policy incomplete = new Policy();
+        incomplete.name = "token_introspection";
+        incomplete.enabled = true;
+        incomplete.configuration = new HashMap<>();
+        // missing introspection_url — same gate as AuthPolicy
+        svc.policies = List.of(incomplete);
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        String secret = files.get("secret.yaml");
+        assertFalse(policy.contains("oauth2Introspection"));
+        assertFalse(secret.contains("oauth2-introspection"),
+                "Secret kind must match AuthPolicy fallthrough (no mismatched oauth2 Secret)");
+        assertTrue(secret.contains("incomplete-apikey-api-key")
+                        || secret.contains("api_key:"),
+                "Fallthrough auth-type apiKey must emit api-key Secret");
     }
 
     @Test
@@ -1059,6 +1314,38 @@ class ConversionServiceTest {
         limiter.put("key", key);
         Map<String, Object> cfg = new HashMap<>();
         cfg.put("fixed_window_limiters", List.of(limiter));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy edgeLimitingLeakyBucketPolicy(int rate) {
+        Policy p = new Policy();
+        p.name = "edge_limiting";
+        p.enabled = true;
+        Map<String, Object> limiter = new HashMap<>();
+        limiter.put("rate", rate);
+        Map<String, Object> key = new HashMap<>();
+        key.put("name", "service");
+        key.put("scope", "service");
+        limiter.put("key", key);
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("leaky_bucket_limiters", List.of(limiter));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy edgeLimitingConnectionPolicy(int conn) {
+        Policy p = new Policy();
+        p.name = "edge_limiting";
+        p.enabled = true;
+        Map<String, Object> limiter = new HashMap<>();
+        limiter.put("conn", conn);
+        Map<String, Object> key = new HashMap<>();
+        key.put("name", "service");
+        key.put("scope", "service");
+        limiter.put("key", key);
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("connection_limiters", List.of(limiter));
         p.configuration = cfg;
         return p;
     }
