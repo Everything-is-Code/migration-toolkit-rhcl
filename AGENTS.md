@@ -47,6 +47,16 @@ cd frontend && npm run typecheck
 cd frontend && npm test
 ```
 
+## Container base digests
+
+`backend/Dockerfile.jvm` and `frontend/Dockerfile.ci` pin bases as `image:tag@sha256:…`. When Dependabot or security advisories require a bump:
+
+1. `skopeo inspect --format '{{.Digest}}' docker://<image:tag>` (or `crane digest`)
+2. Update the Dockerfile `FROM` digest; keep the tag comment for humans
+3. Rebuild and confirm HEALTHCHECK still passes (`/q/health/ready`, frontend `/`)
+
+Full command list: see **Container base digests** in `CONTRIBUTING.md`.
+
 ## Do not
 
 - Commit secrets, tokens, or private cluster credentials.

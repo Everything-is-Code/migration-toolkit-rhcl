@@ -407,15 +407,27 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
 
   const diffLines = mode === 'diff' ? computeDiff(current.content, content) : [];
 
+  const panelId = 'yaml-panel';
+
   return (
     <div>
       {/* Tab header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, borderBottom: '2px solid #d2d2d2', marginBottom: 12 }}>
+      <div
+        role="tablist"
+        aria-label={t('import.yamlEditorTitle')}
+        style={{ display: 'flex', flexWrap: 'wrap', gap: 2, borderBottom: '2px solid #d2d2d2', marginBottom: 12 }}
+      >
         {files.map((f, i) => {
           const changed = edits[f.name] !== undefined && edits[f.name] !== f.content;
           return (
             <button
               key={f.name}
+              type="button"
+              role="tab"
+              id={`yaml-tab-${i}`}
+              aria-selected={i === active}
+              aria-controls={panelId}
+              tabIndex={i === active ? 0 : -1}
               onClick={() => { setActive(i); setMode('view'); }}
               style={{
                 padding: '8px 16px', fontSize: 13, cursor: 'pointer',
@@ -442,6 +454,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
       {/* Mode toggle buttons */}
       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginBottom: 8 }}>
         <button
+          type="button"
           onClick={() => setMode('view')}
           style={{
             fontSize: 12, padding: '4px 12px', cursor: 'pointer',
@@ -453,6 +466,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
           {t('import.viewMode')}
         </button>
         <button
+          type="button"
           onClick={() => setMode('edit')}
           style={{
             fontSize: 12, padding: '4px 12px', cursor: 'pointer',
@@ -464,6 +478,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
           {t('import.editMode')}
         </button>
         <button
+          type="button"
           onClick={() => setMode('diff')}
           disabled={!isEdited}
           style={{
@@ -478,52 +493,59 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
       </div>
 
       {/* Content */}
-      {mode === 'edit' ? (
-        <textarea
-          value={content}
-          onChange={e => onEdit(current.name, e.target.value)}
-          style={{
-            width: '100%', minHeight: 480, fontFamily: 'monospace', fontSize: 13,
-            background: '#1b1d21', color: '#d4d4d4', border: '1px solid #6a6e73',
-            borderRadius: 4, padding: 12, boxSizing: 'border-box', resize: 'vertical',
-          }}
-        />
-      ) : mode === 'diff' ? (
-        <div style={{
-          background: '#1b1d21', padding: 16, borderRadius: 4,
-          overflow: 'auto', maxHeight: 480, fontSize: 13, fontFamily: 'monospace',
-        }}>
-          {diffLines.map((line, idx) => (
-            <div key={idx} style={{
-              display: 'flex',
-              background: line.type === 'add' ? '#1a3a1a' : line.type === 'remove' ? '#3a1a1a' : 'transparent',
-              borderLeft: line.type === 'add' ? '3px solid #3e8635' : line.type === 'remove' ? '3px solid #c9190b' : '3px solid transparent',
-              paddingLeft: 8,
-            }}>
-              <span style={{
-                color: line.type === 'add' ? '#6a9f5a' : line.type === 'remove' ? '#c9190b' : '#6a6e73',
-                minWidth: 16, userSelect: 'none', marginRight: 8,
+      <div
+        role="tabpanel"
+        id={panelId}
+        aria-labelledby={`yaml-tab-${active}`}
+      >
+        {mode === 'edit' ? (
+          <textarea
+            value={content}
+            onChange={e => onEdit(current.name, e.target.value)}
+            aria-label={t('import.editMode') + ': ' + current.name}
+            style={{
+              width: '100%', minHeight: 480, fontFamily: 'monospace', fontSize: 13,
+              background: '#1b1d21', color: '#d4d4d4', border: '1px solid #6a6e73',
+              borderRadius: 4, padding: 12, boxSizing: 'border-box', resize: 'vertical',
+            }}
+          />
+        ) : mode === 'diff' ? (
+          <div style={{
+            background: '#1b1d21', padding: 16, borderRadius: 4,
+            overflow: 'auto', maxHeight: 480, fontSize: 13, fontFamily: 'monospace',
+          }}>
+            {diffLines.map((line, idx) => (
+              <div key={idx} style={{
+                display: 'flex',
+                background: line.type === 'add' ? '#1a3a1a' : line.type === 'remove' ? '#3a1a1a' : 'transparent',
+                borderLeft: line.type === 'add' ? '3px solid #3e8635' : line.type === 'remove' ? '3px solid #c9190b' : '3px solid transparent',
+                paddingLeft: 8,
               }}>
-                {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
-              </span>
-              <span style={{
-                color: line.type === 'add' ? '#b5e4a8' : line.type === 'remove' ? '#f1948a' : '#d4d4d4',
-                whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-              }}>
-                {line.text}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <pre style={{
-          background: '#1b1d21', color: '#d4d4d4', padding: 16, borderRadius: 4,
-          overflow: 'auto', maxHeight: 480, fontSize: 13, fontFamily: 'monospace',
-          margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        }}>
-          {content}
-        </pre>
-      )}
+                <span style={{
+                  color: line.type === 'add' ? '#6a9f5a' : line.type === 'remove' ? '#c9190b' : '#6a6e73',
+                  minWidth: 16, userSelect: 'none', marginRight: 8,
+                }}>
+                  {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
+                </span>
+                <span style={{
+                  color: line.type === 'add' ? '#b5e4a8' : line.type === 'remove' ? '#f1948a' : '#d4d4d4',
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                }}>
+                  {line.text}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <pre style={{
+            background: '#1b1d21', color: '#d4d4d4', padding: 16, borderRadius: 4,
+            overflow: 'auto', maxHeight: 480, fontSize: 13, fontFamily: 'monospace',
+            margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            {content}
+          </pre>
+        )}
+      </div>
     </div>
   );
 };
@@ -893,11 +915,14 @@ const ImportPageInner: React.FC = () => {
                         title={t('import.partialAlert', { success: successCount, error: errorCount })} />}
                       <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                          <caption style={{ textAlign: 'left', padding: '0 0 8px', fontWeight: 600 }}>
+                            {t('import.resultTitle')}
+                          </caption>
                           <thead>
                             <tr style={{ background: '#f5f5f5' }}>
-                              <th style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', textAlign: 'left' }}>{t('import.colFileName')}</th>
-                              <th style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', width: 90, textAlign: 'left' }}>{t('import.colResult')}</th>
-                              <th style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', textAlign: 'left' }}>{t('import.colMessage')}</th>
+                              <th scope="col" style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', textAlign: 'left' }}>{t('import.colFileName')}</th>
+                              <th scope="col" style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', width: 90, textAlign: 'left' }}>{t('import.colResult')}</th>
+                              <th scope="col" style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', textAlign: 'left' }}>{t('import.colMessage')}</th>
                             </tr>
                           </thead>
                           <tbody>

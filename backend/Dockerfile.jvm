@@ -1,4 +1,5 @@
-FROM registry.access.redhat.com/ubi9/openjdk-21:1.24 AS builder
+# Pin: ubi9/openjdk-21:1.24 — refresh digests via CONTRIBUTING.md / AGENTS.md
+FROM registry.access.redhat.com/ubi9/openjdk-21:1.24@sha256:b70b025bc58ccbf82a514cc3dc25090f2923144372dc0c4f7456ebd017f210fe AS builder
 USER root
 WORKDIR /build
 COPY pom.xml .
@@ -6,7 +7,8 @@ RUN mvn dependency:go-offline -B
 COPY src ./src
 RUN mvn package -DskipTests
 
-FROM registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24
+# Pin: ubi9/openjdk-21-runtime:1.24
+FROM registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24@sha256:41cfee8b4373d0be1c6724ab80a9942e1e4d10bba62c5876455a8028a7a953a2
 
 ENV LANGUAGE='en_US:en'
 
@@ -20,4 +22,8 @@ EXPOSE 8080
 USER 185
 ENV JAVA_OPTS_APPEND="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
 ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8080/q/health/ready || exit 1
+
 ENTRYPOINT ["java", "-jar", "/deployments/quarkus-run.jar"]

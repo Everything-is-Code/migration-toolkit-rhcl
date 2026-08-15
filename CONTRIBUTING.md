@@ -91,4 +91,22 @@ fix(deploy): namespace placeholder for images; drop REACT_APP_API_URL
 
 ## Container base digests
 
-Dockerfile base images may be pinned by digest (or documented for refresh) in a follow-up images hygiene change. When refreshing pins, resolve digests with `skopeo`/`crane`, update `backend/Dockerfile.jvm` / `frontend/Dockerfile.ci`, and note the human-readable tag in a comment next to the digest.
+Dockerfile `FROM` lines in `backend/Dockerfile.jvm` and `frontend/Dockerfile.ci` are pinned as `image:tag@sha256:…` (tag kept for humans; digest is authoritative).
+
+### Refresh procedure
+
+1. Resolve current digests (requires network access to the registries):
+
+```bash
+skopeo inspect --format '{{.Digest}}' docker://registry.access.redhat.com/ubi9/openjdk-21:1.24
+skopeo inspect --format '{{.Digest}}' docker://registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24
+skopeo inspect --format '{{.Digest}}' docker://docker.io/library/node:22-alpine
+skopeo inspect --format '{{.Digest}}' docker://registry.access.redhat.com/ubi9/nginx-124:1
+```
+
+(`crane digest <image>` is an equivalent alternative.)
+
+2. Update the matching `FROM …@sha256:…` lines in `backend/Dockerfile.jvm` and `frontend/Dockerfile.ci`. Keep the human-readable tag in the reference and in the nearby comment.
+3. Rebuild images and smoke-test HEALTHCHECK endpoints (`/q/health/ready` for backend, `/` for frontend nginx).
+
+Do not drop digests back to floating tags without documenting why.
