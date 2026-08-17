@@ -61,13 +61,10 @@ class ThreeScaleExportServiceTest {
     // ── buildClient() ─────────────────────────────────────────────────────────
 
     @Test
-    void buildClient_invalidUri_throwsRuntimeException() throws Exception {
-        Method buildClient = ThreeScaleExportService.class
-                .getDeclaredMethod("buildClient", String.class);
-        buildClient.setAccessible(true);
-        Exception ex = assertThrows(Exception.class,
-                () -> buildClient.invoke(service, "::invalid::uri::"));
-        assertNotNull(ex.getCause() != null ? ex.getCause() : ex);
+    void buildClient_invalidUri_throwsRuntimeException() {
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> service.buildClient("::invalid::uri::"));
+        assertTrue(ex.getMessage().contains("Invalid 3scale URL"));
     }
 
     // ── extractAuthentication() ───────────────────────────────────────────────
@@ -80,71 +77,43 @@ class ThreeScaleExportServiceTest {
         "3, none",
         ", none"
     })
-    void extractAuthentication_backendVersion_mapsCorrectly(String backendVersion, String expectedType)
-            throws Exception {
-        Method extractAuth = ThreeScaleExportService.class
-                .getDeclaredMethod("extractAuthentication", Map.class);
-        extractAuth.setAccessible(true);
-
+    void extractAuthentication_backendVersion_mapsCorrectly(String backendVersion, String expectedType) {
         Map<String, Object> svc = new HashMap<>();
         if (backendVersion != null) {
             svc.put("backend_version", backendVersion);
         }
-        Authentication auth = (Authentication) extractAuth.invoke(service, svc);
+        Authentication auth = service.extractAuthentication(svc);
         assertEquals(expectedType, auth.type);
     }
 
     // ── extractList() ─────────────────────────────────────────────────────────
 
     @Test
-    void extractList_withValidKey_returnsList() throws Exception {
-        Method extractList = ThreeScaleExportService.class
-                .getDeclaredMethod("extractList", Map.class, String.class);
-        extractList.setAccessible(true);
-
+    void extractList_withValidKey_returnsList() {
         List<Map<String, Object>> data = List.of(Map.of("service", Map.of("id", "1")));
         Map<String, Object> response = Map.of("services", data);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> result = (List<Map<String, Object>>) extractList.invoke(service, response, "services");
+        List<Map<String, Object>> result = service.extractList(response, "services");
         assertEquals(1, result.size());
     }
 
     @Test
-    void extractList_missingKey_returnsEmpty() throws Exception {
-        Method extractList = ThreeScaleExportService.class
-                .getDeclaredMethod("extractList", Map.class, String.class);
-        extractList.setAccessible(true);
-
+    void extractList_missingKey_returnsEmpty() {
         Map<String, Object> response = Map.of();
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> result = (List<Map<String, Object>>) extractList.invoke(service, response, "services");
+        List<Map<String, Object>> result = service.extractList(response, "services");
         assertTrue(result.isEmpty());
     }
 
     @Test
-    void extractList_nonListValue_returnsEmpty() throws Exception {
-        Method extractList = ThreeScaleExportService.class
-                .getDeclaredMethod("extractList", Map.class, String.class);
-        extractList.setAccessible(true);
-
+    void extractList_nonListValue_returnsEmpty() {
         Map<String, Object> response = Map.of("services", "not-a-list");
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> result = (List<Map<String, Object>>) extractList.invoke(service, response, "services");
+        List<Map<String, Object>> result = service.extractList(response, "services");
         assertTrue(result.isEmpty());
     }
 
     // ── fetchApplications() mapping (real Admin API shape) ───────────────────
 
     @Test
-    void fetchApplications_mapsAppIdAndKeys() throws Exception {
-        // Build a fake client via a simple stub using anonymous class would require RestClient;
-        // instead unit-test key parsing path through reflection on a mock-like response mapper.
-        Method fetchKeys = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchApplicationKeys",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class, String.class);
-        assertNotNull(fetchKeys);
-        // Verify Application model wiring used by convert
+    void fetchApplications_mapsAppIdAndKeys() {
         Application app = new Application();
         app.id = "99";
         app.appId = "my-app-id";
@@ -154,31 +123,18 @@ class ThreeScaleExportServiceTest {
     }
 
     @Test
-    void fetchApplications_emptyOnClientFailure() throws Exception {
-        Method fetchApps = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchApplications",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class, String.class);
-        fetchApps.setAccessible(true);
-
+    void fetchApplications_emptyOnClientFailure() {
         com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient failing =
                 org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
         org.mockito.Mockito.when(failing.getApplications(anyString(), anyString(), anyInt(), anyInt()))
                 .thenThrow(new RuntimeException("boom"));
 
-        @SuppressWarnings("unchecked")
-        List<Application> apps = (List<Application>) fetchApps.invoke(service, failing, "svc-1", "tok");
+        List<Application> apps = service.fetchApplications(failing, "svc-1", "tok");
         assertTrue(apps.isEmpty());
     }
 
     @Test
-    void fetchApplications_parsesWrappedApplicationAndKeys() throws Exception {
-        Method fetchApps = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchApplications",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class, String.class);
-        fetchApps.setAccessible(true);
-
+    void fetchApplications_parsesWrappedApplicationAndKeys() {
         com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
                 org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
         Map<String, Object> appBody = new HashMap<>();
@@ -192,8 +148,7 @@ class ThreeScaleExportServiceTest {
         org.mockito.Mockito.when(client.getApplicationKeys(anyString(), anyString()))
                 .thenReturn(Map.of("keys", List.of(Map.of("key", Map.of("value", "real-key")))));
 
-        @SuppressWarnings("unchecked")
-        List<Application> apps = (List<Application>) fetchApps.invoke(service, client, "svc-1", "tok");
+        List<Application> apps = service.fetchApplications(client, "svc-1", "tok");
         assertEquals(1, apps.size());
         assertEquals("real-id", apps.get(0).appId);
         assertEquals(List.of("real-key"), apps.get(0).keys);
@@ -202,13 +157,7 @@ class ThreeScaleExportServiceTest {
     // ── fetchApplicationPlans() + limits (PR3) ────────────────────────────────
 
     @Test
-    void fetchApplicationPlans_mapsPlansAndLimits() throws Exception {
-        Method fetchPlans = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchApplicationPlans",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class, String.class);
-        fetchPlans.setAccessible(true);
-
+    void fetchApplicationPlans_mapsPlansAndLimits() {
         com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
                 org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
 
@@ -232,9 +181,7 @@ class ThreeScaleExportServiceTest {
         org.mockito.Mockito.when(client.getApplicationPlanLimits(anyString(), anyString()))
                 .thenReturn(limitsResp);
 
-        @SuppressWarnings("unchecked")
-        List<ApplicationPlan> plans =
-                (List<ApplicationPlan>) fetchPlans.invoke(service, client, "svc-1", "tok");
+        List<ApplicationPlan> plans = service.fetchApplicationPlans(client, "svc-1", "tok");
         assertEquals(1, plans.size());
         assertEquals("7", plans.get(0).id);
         assertEquals("Basic", plans.get(0).name);
@@ -247,32 +194,18 @@ class ThreeScaleExportServiceTest {
     }
 
     @Test
-    void fetchApplicationPlans_emptyOnClientFailure() throws Exception {
-        Method fetchPlans = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchApplicationPlans",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class, String.class);
-        fetchPlans.setAccessible(true);
-
+    void fetchApplicationPlans_emptyOnClientFailure() {
         com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient failing =
                 org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
         org.mockito.Mockito.when(failing.getApplicationPlans(anyString(), anyString()))
                 .thenThrow(new RuntimeException("boom"));
 
-        @SuppressWarnings("unchecked")
-        List<ApplicationPlan> plans =
-                (List<ApplicationPlan>) fetchPlans.invoke(service, failing, "svc-1", "tok");
+        List<ApplicationPlan> plans = service.fetchApplicationPlans(failing, "svc-1", "tok");
         assertTrue(plans.isEmpty());
     }
 
     @Test
-    void fetchApplicationPlans_limitsFetchFailure_stillReturnsPlanWithEmptyLimits() throws Exception {
-        Method fetchPlans = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchApplicationPlans",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class, String.class);
-        fetchPlans.setAccessible(true);
-
+    void fetchApplicationPlans_limitsFetchFailure_stillReturnsPlanWithEmptyLimits() {
         com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
                 org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
         Map<String, Object> planBody = Map.of("id", 3, "name", "Gold", "system_name", "gold");
@@ -281,9 +214,7 @@ class ThreeScaleExportServiceTest {
         org.mockito.Mockito.when(client.getApplicationPlanLimits(anyString(), anyString()))
                 .thenThrow(new RuntimeException("limits boom"));
 
-        @SuppressWarnings("unchecked")
-        List<ApplicationPlan> plans =
-                (List<ApplicationPlan>) fetchPlans.invoke(service, client, "svc-1", "tok");
+        List<ApplicationPlan> plans = service.fetchApplicationPlans(client, "svc-1", "tok");
         assertEquals(1, plans.size());
         assertEquals("gold", plans.get(0).systemName);
         assertNotNull(plans.get(0).limits);
@@ -487,20 +418,13 @@ class ThreeScaleExportServiceTest {
     }
 
     @Test
-    void fetchBackendCatalog_onFailure_returnsEmptyAndListStillWorksViaFallback() throws Exception {
-        Method fetchCatalog = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchBackendCatalog",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class);
-        fetchCatalog.setAccessible(true);
-
+    void fetchBackendCatalog_onFailure_returnsEmptyAndListStillWorksViaFallback() {
         com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
                 org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
         org.mockito.Mockito.when(client.getBackends(anyString(), anyInt(), anyInt()))
                 .thenThrow(new RuntimeException("catalog down"));
 
-        @SuppressWarnings("unchecked")
-        Map<String, ?> catalog = (Map<String, ?>) fetchCatalog.invoke(service, client, "tok");
+        Map<String, ?> catalog = service.fetchBackendCatalog(client, "tok");
         assertTrue(catalog.isEmpty(), "Catalog failure must yield empty catalog (S-6 soft path)");
 
         org.mockito.Mockito.when(client.getServices(anyString(), anyInt(), anyInt()))
@@ -522,20 +446,13 @@ class ThreeScaleExportServiceTest {
     }
 
     @Test
-    void fetchBackendCatalog_emptyResponse_returnsEmptyCatalog() throws Exception {
-        Method fetchCatalog = ThreeScaleExportService.class
-                .getDeclaredMethod("fetchBackendCatalog",
-                        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class,
-                        String.class);
-        fetchCatalog.setAccessible(true);
-
+    void fetchBackendCatalog_emptyResponse_returnsEmptyCatalog() {
         com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
                 org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
         org.mockito.Mockito.when(client.getBackends(anyString(), anyInt(), anyInt()))
                 .thenReturn(Map.of("backend_apis", List.of()));
 
-        @SuppressWarnings("unchecked")
-        Map<String, ?> catalog = (Map<String, ?>) fetchCatalog.invoke(service, client, "tok");
+        Map<String, ?> catalog = service.fetchBackendCatalog(client, "tok");
         assertTrue(catalog.isEmpty());
     }
 }

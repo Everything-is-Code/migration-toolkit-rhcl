@@ -3,6 +3,8 @@ package com.redhat.migrationtoolkit.rhcl.util;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class MessagesTest {
@@ -17,30 +19,31 @@ class MessagesTest {
     @Test
     void get_existingKey_returnsMessage() {
         String msg = messages.get("apply.success");
-        assertNotNull(msg);
-        assertFalse(msg.isBlank());
-        assertNotEquals("apply.success", msg);
+        assertEquals("Applied successfully", msg);
+    }
+
+    @Test
+    void get_applyErrorNoFiles_returnsEnglishMessageByDefault() {
+        String msg = messages.get("apply.error.noFiles");
+        assertEquals("No files to apply", msg);
     }
 
     @Test
     void get_applyErrorNoFiles_returnsJapaneseMessage() {
-        String msg = messages.get("apply.error.noFiles");
-        assertNotNull(msg);
-        assertNotEquals("apply.error.noFiles", msg);
+        String msg = messages.get("apply.error.noFiles", Locale.JAPANESE);
+        assertEquals("適用するファイルがありません", msg);
     }
 
     @Test
     void get_importErrorNoFile_returnsMessage() {
         String msg = messages.get("import.error.noFile");
-        assertNotNull(msg);
-        assertNotEquals("import.error.noFile", msg);
+        assertEquals("No file was uploaded", msg);
     }
 
     @Test
     void get_importErrorNoYaml_returnsMessage() {
         String msg = messages.get("import.error.noYaml");
-        assertNotNull(msg);
-        assertNotEquals("import.error.noYaml", msg);
+        assertEquals("No YAML files found in the ZIP archive", msg);
     }
 
     @Test
@@ -53,16 +56,13 @@ class MessagesTest {
     @Test
     void get_withFormatArgs_replacesPlaceholder() {
         String msg = messages.get("import.error.parseZip", "connection refused");
-        assertNotNull(msg);
-        assertNotEquals("import.error.parseZip", msg);
-        assertTrue(msg.contains("connection refused"));
+        assertEquals("Failed to parse ZIP file: connection refused", msg);
     }
 
     @Test
     void get_withMultipleArgs_formatsCorrectly() {
         String msg = messages.get("import.error.parseZip", "timeout", "extra");
-        assertNotNull(msg);
-        assertTrue(msg.contains("timeout"));
+        assertEquals("Failed to parse ZIP file: timeout", msg);
     }
 
     @Test
@@ -73,6 +73,6 @@ class MessagesTest {
     @Test
     void get_emptyArgs_returnsPattern() {
         String msg = messages.get("apply.success");
-        assertNotNull(msg);
+        assertEquals("Applied successfully", msg);
     }
 }
