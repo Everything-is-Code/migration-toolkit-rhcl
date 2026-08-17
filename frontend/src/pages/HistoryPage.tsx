@@ -52,9 +52,9 @@ const statusColor = (status: string): 'green' | 'red' | 'orange' | 'blue' => {
   }
 };
 
-const sourceLabel = (source?: string) => {
-  if (source === 'IMPORT') return <Label isCompact color="purple">ZIP Import</Label>;
-  if (source === 'CONVERT') return <Label isCompact color="blue">Convert</Label>;
+const sourceLabel = (source: string | undefined, t: (key: string) => string) => {
+  if (source === 'IMPORT') return <Label isCompact color="purple">{t('history.sourceZipImport')}</Label>;
+  if (source === 'CONVERT') return <Label isCompact color="blue">{t('history.sourceConvert')}</Label>;
   return <Label isCompact color="grey">{source ?? '—'}</Label>;
 };
 
@@ -297,7 +297,7 @@ const HistoryPage: React.FC = () => {
                               </td>
 
                               {/* Type */}
-                              <td style={tdS}>{sourceLabel(entry.source)}</td>
+                              <td style={tdS}>{sourceLabel(entry.source, t)}</td>
 
                               {/* Service/Package name */}
                               <td style={tdS}>

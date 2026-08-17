@@ -198,7 +198,9 @@ const RedHatLogo: React.FC = () => (
 );
 
 /* ── Footer ── */
-const Footer: React.FC = () => (
+const Footer: React.FC = () => {
+  const { t } = useTranslation();
+  return (
   <div style={{
     borderTop: '1px solid #3c3f42',
     padding: '12px 24px',
@@ -210,13 +212,14 @@ const Footer: React.FC = () => (
     alignItems: 'center',
     gap: '16px',
   }}>
-    <span>Copyright © 2026 Red Hat</span>
+    <span>{t('app.copyright')}</span>
     <span> | </span>
     <a href="mailto:nmushino@redhat.com" style={{ color: '#73bcf7', textDecoration: 'none' }}>
       Noriaki Mushino | nmushino@redhat.com
     </a>
   </div>
-);
+  );
+};
 
 const AppContent: React.FC = () => {
   const { t } = useTranslation();

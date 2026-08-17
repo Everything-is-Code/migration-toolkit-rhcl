@@ -197,7 +197,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
 
         {/* Gateway URL */}
         <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff', borderRadius: 6, border: '1px solid #d2d2d2' }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Gateway URL</div>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{t('import.testPanel.gatewayUrl')}</div>
 
           {/* Phase-based status display */}
           {gwLoading && gwPhase === 'lb' && (
@@ -853,7 +853,7 @@ const ImportPageInner: React.FC = () => {
                           )}
                         </div>
                       </FormGroup>
-                      <FormGroup label="Namespace" fieldId="imp-ns">
+                      <FormGroup label={t('import.labelNamespace')} fieldId="imp-ns">
                         <Flex>
                           <FlexItem>
                             <TextInput id="imp-ns" value={namespace}

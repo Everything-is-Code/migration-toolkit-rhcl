@@ -72,7 +72,8 @@
     "labelOssm": "OpenShift Service Mesh (OSSM)",
     "ossmExpected": "OCP 向け期待値: {{version}}",
     "capCorsNative": "CORS: ネイティブフィルター",
-    "capCorsFallback": "CORS: ResponseHeaderModifier フォールバック"
+    "capCorsFallback": "CORS: ResponseHeaderModifier フォールバック",
+    "labelUrlShort": "3scale URL"
   },
   "apiSelection": {
     "title": "API一覧",
@@ -154,7 +155,12 @@
     "anonymousTargetHttpRoute": "HTTPRoute（推奨）",
     "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — 特定ルートのみに適用",
     "corsFallbackHint": "このクラスタープロファイルではネイティブ Gateway API CORS が利用できません。CORS ポリシーは ResponseHeaderModifier の Access-Control-* ヘッダーと OPTIONS マッチで出力されます。",
-    "corsNativeHint": "このクラスタープロファイルでは CORS ポリシーにネイティブ Gateway API CORS フィルター（type: CORS）が使用されます。"
+    "corsNativeHint": "このクラスタープロファイルでは CORS ポリシーにネイティブ Gateway API CORS フィルター（type: CORS）が使用されます。",
+    "ipCheckMode": "IP Check 変換先",
+    "ipCheckModeAuthz": "AuthorizationPolicy（推奨）",
+    "ipCheckModeAuthzDesc": "Istio AuthorizationPolicy with remoteIpBlocks",
+    "ipCheckModeOpa": "AuthPolicy / OPA",
+    "ipCheckModeOpaDesc": "Kuadrant AuthPolicy authorization with OPA/Rego"
   },
   "yamlViewer": {
     "title": "YAML プレビュー",
@@ -274,8 +280,10 @@
       "gwNotReady": "Gateway の外部 URL がまだ割り当てられていません。しばらく待ってから再試行してください。",
       "gwWaitingLb": "LoadBalancer のアドレスを取得中...",
       "gwWaitingDns": "DNS の伝播を待機中です。新しい LoadBalancer の DNS が伝播するまで数分かかる場合があります...",
-      "gwDnsOk": "DNS 解決完了"
-    }
+      "gwDnsOk": "DNS 解決完了",
+      "gatewayUrl": "Gateway URL"
+    },
+    "labelNamespace": "Namespace"
   },
   "history": {
     "title": "変換履歴",
@@ -327,11 +335,14 @@
     "deleteError": "削除エラー: {{message}}",
     "loadError": "履歴の取得に失敗しました: {{message}}",
     "scoreUnit": "%",
-    "totalCount": "{{count}} 件"
+    "totalCount": "{{count}} 件",
+    "sourceZipImport": "ZIPインポート",
+    "sourceConvert": "変換"
   },
   "app": {
     "errorTitle": "ページの表示中にエラーが発生しました",
-    "btnRetry": "再試行"
+    "btnRetry": "再試行",
+    "copyright": "Copyright © 2026 Red Hat"
   },
   "supportedPolicies": {
     "title": "対応ポリシー設定",
@@ -347,6 +358,18 @@
     "sectionDatetime": "日時表示",
     "labelTimezone": "タイムゾーン",
     "timezoneHint": "変換履歴の実行日時表示に使用されます。変更は即時反映されます。",
-    "saved": "設定を保存しました"
+    "saved": "設定を保存しました",
+    "tz": {
+      "auto": "ブラウザ設定に従う",
+      "Asia/Tokyo": "日本標準時 (JST)",
+      "UTC": "協定世界時 (UTC)",
+      "Asia/Seoul": "韓国標準時 (KST)",
+      "Asia/Shanghai": "中国標準時 (CST)",
+      "Asia/Singapore": "シンガポール標準時",
+      "Europe/London": "グリニッジ標準時",
+      "Europe/Berlin": "中央欧州標準時 (CET)",
+      "America/New_York": "米国東部時間 (EST)",
+      "America/Los_Angeles": "米国西部時間 (PST)"
+    }
   }
 }
