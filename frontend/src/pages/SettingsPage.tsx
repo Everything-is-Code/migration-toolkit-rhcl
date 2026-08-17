@@ -13,7 +13,7 @@ import { CogIcon } from '@patternfly/react-icons';
 import { TIMEZONE_OPTIONS, getSavedTimezoneValue, setTimezone } from '../utils/timezone';
 
 const SettingsPage: React.FC = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [tzValue, setTzValue] = useState<string>(getSavedTimezoneValue);
   const [saved, setSaved] = useState(false);
 
@@ -23,8 +23,6 @@ const SettingsPage: React.FC = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
-
-  const lang = i18n.language?.startsWith('ja') ? 'ja' : 'en';
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 720 }}>
@@ -51,7 +49,7 @@ const SettingsPage: React.FC = () => {
               style={{ maxWidth: 400 }}
             >
               {TIMEZONE_OPTIONS.map(opt => {
-                const label = lang === 'ja' ? opt.labelJa : opt.labelEn;
+                const label = t(`settings.tz.${opt.value}`);
                 const display = opt.offset ? `${label} (${opt.offset})` : label;
                 return (
                   <FormSelectOption key={opt.value} value={opt.value} label={display} />

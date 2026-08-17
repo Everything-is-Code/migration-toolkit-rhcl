@@ -72,7 +72,8 @@
     "labelOssm": "OpenShift Service Mesh (OSSM)",
     "ossmExpected": "expected for OCP: {{version}}",
     "capCorsNative": "CORS: native filter",
-    "capCorsFallback": "CORS: ResponseHeaderModifier fallback"
+    "capCorsFallback": "CORS: ResponseHeaderModifier fallback",
+    "labelUrlShort": "3scale URL"
   },
   "apiSelection": {
     "title": "API List",
@@ -154,7 +155,12 @@
     "anonymousTargetHttpRoute": "HTTPRoute (recommended)",
     "anonymousTargetHttpRouteDesc": "targetRef.kind: HTTPRoute — applies only to the specific route",
     "corsFallbackHint": "Native Gateway API CORS is unavailable for this cluster profile. CORS policies will use ResponseHeaderModifier Access-Control-* headers plus OPTIONS matches.",
-    "corsNativeHint": "Native Gateway API CORS filter (type: CORS) will be used for CORS policies on this cluster profile."
+    "corsNativeHint": "Native Gateway API CORS filter (type: CORS) will be used for CORS policies on this cluster profile.",
+    "ipCheckMode": "IP Check target",
+    "ipCheckModeAuthz": "AuthorizationPolicy (recommended)",
+    "ipCheckModeAuthzDesc": "Istio AuthorizationPolicy with remoteIpBlocks",
+    "ipCheckModeOpa": "AuthPolicy / OPA",
+    "ipCheckModeOpaDesc": "Kuadrant AuthPolicy authorization with OPA/Rego"
   },
   "yamlViewer": {
     "title": "YAML Preview",
@@ -274,8 +280,10 @@
       "gwNotReady": "External URL for the Gateway is not yet assigned. Please wait a moment and try again.",
       "gwWaitingLb": "Waiting for LoadBalancer address...",
       "gwWaitingDns": "Waiting for DNS propagation. New LoadBalancer DNS may take a few minutes to propagate...",
-      "gwDnsOk": "DNS resolved"
-    }
+      "gwDnsOk": "DNS resolved",
+      "gatewayUrl": "Gateway URL"
+    },
+    "labelNamespace": "Namespace"
   },
   "history": {
     "title": "Conversion History",
@@ -327,11 +335,14 @@
     "deleteError": "Delete error: {{message}}",
     "loadError": "Failed to load history: {{message}}",
     "scoreUnit": "%",
-    "totalCount": "{{count}} entries"
+    "totalCount": "{{count}} entries",
+    "sourceZipImport": "ZIP Import",
+    "sourceConvert": "Convert"
   },
   "app": {
     "errorTitle": "An error occurred while rendering this page",
-    "btnRetry": "Retry"
+    "btnRetry": "Retry",
+    "copyright": "Copyright © 2026 Red Hat"
   },
   "supportedPolicies": {
     "title": "Supported Policies",
@@ -347,6 +358,18 @@
     "sectionDatetime": "Date & Time",
     "labelTimezone": "Timezone",
     "timezoneHint": "Used for displaying execution timestamps in Conversion History. Changes take effect immediately.",
-    "saved": "Settings saved"
+    "saved": "Settings saved",
+    "tz": {
+      "auto": "Browser default",
+      "Asia/Tokyo": "Japan Standard Time",
+      "UTC": "Coordinated Universal Time",
+      "Asia/Seoul": "Korea Standard Time",
+      "Asia/Shanghai": "China Standard Time",
+      "Asia/Singapore": "Singapore Time",
+      "Europe/London": "Greenwich Mean Time",
+      "Europe/Berlin": "Central European Time",
+      "America/New_York": "US Eastern Time",
+      "America/Los_Angeles": "US Pacific Time"
+    }
   }
 }

@@ -292,13 +292,13 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                     {hasIpCheckPolicy && (
                       <div>
                         <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
-                          {t('conversion.ipCheckMode', 'IP Check 変換先')}
+                          {t('conversion.ipCheckMode', 'IP Check target')}
                         </div>
                         <div style={{ display: 'flex', gap: '24px' }}>
                           <Radio
                             id="ip-check-authorization-policy"
                             name="ipCheckMode"
-                            label={t('conversion.ipCheckModeAuthz', 'AuthorizationPolicy（推奨）')}
+                            label={t('conversion.ipCheckModeAuthz', 'AuthorizationPolicy (recommended)')}
                             isChecked={ipCheckMode === 'authorizationPolicy'}
                             onChange={() => setIpCheckMode('authorizationPolicy')}
                             description={t('conversion.ipCheckModeAuthzDesc', 'Istio AuthorizationPolicy with remoteIpBlocks')}

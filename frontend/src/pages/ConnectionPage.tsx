@@ -254,7 +254,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               />
             )}
             <Form>
-              <FormGroup label="3scale URL" isRequired fieldId="url">
+              <FormGroup label={t('connection.labelUrlShort')} isRequired fieldId="url">
                 <InputGroup>
                   <InputGroupItem isFill>
                     <TextInput
@@ -483,7 +483,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               </Title>
               <DescriptionList style={{ marginTop: PF_SPACER_MD }}>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>3scale URL</DescriptionListTerm>
+                  <DescriptionListTerm>{t('connection.labelUrlShort')}</DescriptionListTerm>
                   <DescriptionListDescription>{appState.connection.url}</DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
