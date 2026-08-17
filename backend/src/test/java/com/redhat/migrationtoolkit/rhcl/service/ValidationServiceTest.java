@@ -231,8 +231,9 @@ class ValidationServiceTest {
                 "httproute.yaml", yaml("gateway.networking.k8s.io/v1", "HTTPRoute", "rt", "ns")
         );
         ValidationResult result = service.validate(files);
-        assertNotNull(result);
         assertTrue(result.valid, "Should be valid when no ERROR items");
+        assertFalse(result.items.isEmpty(), "Expected validation items for gateway/httproute");
+        assertTrue(result.items.stream().noneMatch(i -> "ERROR".equals(i.status)));
     }
 
     @Test

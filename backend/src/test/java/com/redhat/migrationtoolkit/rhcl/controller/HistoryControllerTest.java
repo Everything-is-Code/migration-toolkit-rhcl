@@ -206,17 +206,20 @@ class HistoryControllerTest {
         em.flush();
 
         java.time.LocalDateTime before = p.updatedAt;
-        // Small delay to distinguish timestamps
-        try { Thread.sleep(10); } catch (InterruptedException ignored) {}
 
         p.name = "Update-Test-v2";
         em.merge(p);
         em.flush();
 
-        // @PreUpdate fires during flush; updatedAt should be refreshed
+        // Assert persisted name change (avoid flaky Thread.sleep timestamp checks)
         com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity loaded =
                 em.find(com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity.class, p.id);
         org.junit.jupiter.api.Assertions.assertNotNull(loaded);
+        org.junit.jupiter.api.Assertions.assertEquals("Update-Test-v2", loaded.name);
+        if (before != null && loaded.updatedAt != null) {
+            org.junit.jupiter.api.Assertions.assertFalse(loaded.updatedAt.isBefore(before),
+                    "updatedAt must not move backwards on update");
+        }
     }
 
     // ── helper ────────────────────────────────────────────────────────────────

@@ -331,10 +331,9 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of();
         CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
-        assertNotNull(result);
+        assertNotNull(result.level);
+        assertTrue(result.score >= 0 && result.score <= 100);
     }
-
-    // ── Mapping rule checks ───────────────────────────────────────────────────
 
     @Test
     void check_nullMappingRules_warningItem() {
