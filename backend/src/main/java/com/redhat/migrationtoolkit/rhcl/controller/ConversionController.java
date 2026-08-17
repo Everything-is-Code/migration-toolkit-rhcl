@@ -24,6 +24,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,6 +38,8 @@ import java.util.Set;
 @Consumes(MediaType.APPLICATION_JSON)
 @Tag(name = "Conversion", description = "Convert 3scale services to Connectivity Link YAML")
 public class ConversionController {
+
+    private static final Logger LOG = Logger.getLogger(ConversionController.class);
 
     @Inject
     ThreeScaleExportService exportService;
@@ -112,6 +115,7 @@ public class ConversionController {
                 results.add(result);
 
             } catch (Exception e) {
+                LOG.warnf(e, "Conversion FAILED for service %s: %s", serviceId, e.getMessage());
                 ConversionHistoryEntity history = new ConversionHistoryEntity();
                 history.project = project;
                 history.serviceId = serviceId;
@@ -121,7 +125,7 @@ public class ConversionController {
                 results.add(Map.of(
                         "serviceId", serviceId,
                         "status", "FAILED",
-                        "error", e.getMessage()
+                        "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()
                 ));
             }
         }

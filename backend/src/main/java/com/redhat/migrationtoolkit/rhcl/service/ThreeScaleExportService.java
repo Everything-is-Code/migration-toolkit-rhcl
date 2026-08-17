@@ -50,6 +50,7 @@ public class ThreeScaleExportService {
             Map<String, Object> result = client.getServices(req.accessToken, 1, 1);
             return result != null;
         } catch (Exception e) {
+            LOG.warnf("Failed to test 3scale connection to %s: %s", req.url, e.getMessage());
             return false;
         }
     }
@@ -378,7 +379,7 @@ public class ThreeScaleExportService {
         }
     }
 
-    private List<MappingRule> fetchMappingRules(ThreeScaleClient client, String serviceId, String accessToken) {
+    List<MappingRule> fetchMappingRules(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
             Map<String, Object> resp = client.getMappingRules(serviceId, accessToken);
             List<Map<String, Object>> ruleList = extractList(resp, "mapping_rules");
@@ -398,11 +399,12 @@ public class ThreeScaleExportService {
             }
             return rules;
         } catch (Exception e) {
+            LOG.warnf("Failed to fetch mapping rules for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
 
-    private List<Metric> fetchMetrics(ThreeScaleClient client, String serviceId, String accessToken) {
+    List<Metric> fetchMetrics(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
             Map<String, Object> resp = client.getMetrics(serviceId, accessToken);
             List<Map<String, Object>> metricList = extractList(resp, "metrics");
@@ -421,6 +423,7 @@ public class ThreeScaleExportService {
             }
             return metrics;
         } catch (Exception e) {
+            LOG.warnf("Failed to fetch metrics for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -463,7 +466,7 @@ public class ThreeScaleExportService {
         }
     }
 
-    private Authentication extractAuthentication(Map<String, Object> svc) {
+    Authentication extractAuthentication(Map<String, Object> svc) {
         Authentication auth = new Authentication();
         String backendVersion = (String) svc.get("backend_version");
         if ("1".equals(backendVersion)) {
@@ -519,7 +522,7 @@ public class ThreeScaleExportService {
     }
 
     @SuppressWarnings("unchecked")
-    private List<String> fetchApplicationKeys(ThreeScaleClient client, String applicationId, String accessToken) {
+    List<String> fetchApplicationKeys(ThreeScaleClient client, String applicationId, String accessToken) {
         try {
             Map<String, Object> resp = client.getApplicationKeys(applicationId, accessToken);
             List<Map<String, Object>> keyList = extractList(resp, "keys");
@@ -629,6 +632,7 @@ public class ThreeScaleExportService {
         try {
             return client.getProxyConfig(serviceId, accessToken);
         } catch (Exception e) {
+            LOG.warnf("Failed to fetch proxy config for service %s: %s", serviceId, e.getMessage());
             return null;
         }
     }
@@ -640,12 +644,13 @@ public class ThreeScaleExportService {
             Map<String, Object> proxy = (Map<String, Object>) content.get("proxy");
             return (String) proxy.get("endpoint");
         } catch (Exception e) {
+            LOG.debugf("Failed to extract proxy endpoint from proxy config: %s", e.getMessage());
             return null;
         }
     }
 
     @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> extractList(Map<String, Object> response, String key) {
+    List<Map<String, Object>> extractList(Map<String, Object> response, String key) {
         Object val = response.get(key);
         if (val instanceof List) {
             return (List<Map<String, Object>>) val;
@@ -653,7 +658,7 @@ public class ThreeScaleExportService {
         return Collections.emptyList();
     }
 
-    private ThreeScaleClient buildClient(String baseUrl) {
+    ThreeScaleClient buildClient(String baseUrl) {
         try {
             return RestClientBuilder.newBuilder()
                     .baseUri(new URI(baseUrl))

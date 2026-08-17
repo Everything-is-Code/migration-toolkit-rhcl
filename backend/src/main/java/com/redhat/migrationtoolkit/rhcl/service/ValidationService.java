@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 import com.redhat.migrationtoolkit.rhcl.dto.ValidationResult;
 import com.redhat.migrationtoolkit.rhcl.dto.ValidationResult.ValidationItem;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.jboss.logging.Logger;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.ArrayList;
@@ -13,6 +14,8 @@ import java.util.Set;
 
 @ApplicationScoped
 public class ValidationService {
+
+    private static final Logger LOG = Logger.getLogger(ValidationService.class);
 
     private static final Set<String> KNOWN_CRDS = Set.of(
             "gateway.networking.k8s.io/v1",
@@ -98,6 +101,7 @@ public class ValidationService {
             }
             return items;
         } catch (Exception e) {
+            LOG.debugf("CRD validation skipped for %s after parse failure: %s", filename, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -124,6 +128,7 @@ public class ValidationService {
             }
             return items;
         } catch (Exception e) {
+            LOG.debugf("Namespace validation skipped for %s after parse failure: %s", filename, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -180,6 +185,7 @@ public class ValidationService {
 
         } catch (Exception e) {
             // ignore parse errors, already caught in syntax check
+            LOG.debugf("Reference validation skipped for %s after parse failure: %s", filename, e.getMessage());
         }
         return items;
     }

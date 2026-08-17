@@ -93,6 +93,7 @@ public class GatewayInfoController {
             InetAddress.getByName(hostname);
             return true;
         } catch (Exception e) {
+            LOG.debugf("DNS not yet resolvable for hostname %s: %s", hostname, e.getMessage());
             return false;
         }
     }
@@ -112,6 +113,7 @@ public class GatewayInfoController {
             Object value = addresses.get(0).get("value");
             return value != null ? value.toString() : null;
         } catch (Exception e) {
+            LOG.debugf("Failed to extract Gateway hostname from status: %s", e.getMessage());
             return null;
         }
     }

@@ -142,7 +142,9 @@ public class SetupController {
                     && "enabled".equals(ns.getMetadata().getLabels().get("istio-injection"));
             return new StepResult(stepName, labeled, labeled ? "Label present" : "Label missing");
         } catch (Exception e) {
-            return new StepResult(stepName, false, e.getMessage());
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            LOG.debugf("[Setup] Failed to check namespace label for %s: %s", namespace, msg);
+            return new StepResult(stepName, false, msg);
         }
     }
 
@@ -158,7 +160,9 @@ public class SetupController {
                     && gw.getMetadata().getAnnotations().containsKey("kuadrant.io/namespace"));
             return new StepResult(stepName, annotated, annotated ? "Annotation present" : "Annotation missing");
         } catch (Exception e) {
-            return new StepResult(stepName, false, e.getMessage());
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            LOG.debugf("[Setup] Failed to check Gateway annotation for %s: %s", namespace, msg);
+            return new StepResult(stepName, false, msg);
         }
     }
 

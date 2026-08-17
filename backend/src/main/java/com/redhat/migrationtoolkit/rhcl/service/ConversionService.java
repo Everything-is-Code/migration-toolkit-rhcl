@@ -215,6 +215,7 @@ public class ConversionService {
             }
             return new URI(s).getHost();
         } catch (Exception e) {
+            LOG.debugf("Failed to extract hostname from URL '%s': %s", url, e.getMessage());
             return null;
         }
     }
@@ -246,6 +247,7 @@ public class ConversionService {
             int port = new URI(s).getPort();
             return port > 0 ? port : defaultPort;
         } catch (Exception e) {
+            LOG.debugf("Failed to extract port from URL '%s': %s", url, e.getMessage());
             return defaultPort;
         }
     }

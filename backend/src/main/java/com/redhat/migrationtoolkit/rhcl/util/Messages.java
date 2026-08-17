@@ -1,12 +1,16 @@
 package com.redhat.migrationtoolkit.rhcl.util;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import org.jboss.logging.Logger;
+
 import java.text.MessageFormat;
 import java.util.Locale;
 import java.util.ResourceBundle;
 
 @ApplicationScoped
 public class Messages {
+
+    private static final Logger LOG = Logger.getLogger(Messages.class);
 
     private static final String BASE_NAME = "messages";
     // Default is English, matching the frontend default language (i18n.ts).
@@ -26,6 +30,7 @@ public class Messages {
             String pattern = bundle.getString(key);
             return args.length == 0 ? pattern : MessageFormat.format(pattern, args);
         } catch (Exception e) {
+            LOG.debugf("Missing message key '%s' (locale=%s): %s", key, resolved, e.getMessage());
             return key;
         }
     }
