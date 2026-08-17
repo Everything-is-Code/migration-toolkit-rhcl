@@ -35,6 +35,19 @@ jobs:
           source scripts/lib/version.sh
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
+      # Buildx must be created before registry login so the builder sees credentials.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Verify Quay credentials (push scope)
+        if: matrix.image == 'migration-toolkit-rhcl-backend'
+        env:
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+          QUAY_REGISTRY: ${{ env.QUAY_REGISTRY }}
+          QUAY_NAMESPACE: ${{ env.QUAY_NAMESPACE }}
+        run: bash scripts/ci/verify-quay-credentials.sh migration-toolkit-rhcl-backend
+
       - name: Login to Quay.io
         uses: docker/login-action@v4
         with:
@@ -55,9 +68,6 @@ jobs:
           registry: registry.redhat.io
           username: ${{ secrets.REDHAT_REGISTRY_USERNAME }}
           password: ${{ secrets.REDHAT_REGISTRY_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
 
       - name: Build and push ${{ matrix.image }}
         uses: docker/build-push-action@v7
