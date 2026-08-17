@@ -50,7 +50,7 @@ public class ThreeScaleExportService {
             Map<String, Object> result = client.getServices(req.accessToken, 1, 1);
             return result != null;
         } catch (Exception e) {
-            LOG.warnf("Failed to test 3scale connection to %s: %s", req.url, e.getMessage());
+            LOG.warnf(e, "Failed to test 3scale connection to %s: %s", req.url, e.getMessage());
             return false;
         }
     }
@@ -133,7 +133,7 @@ public class ThreeScaleExportService {
 
             LOG.info("Could not detect 3scale version from headers or HTML body");
         } catch (Exception e) {
-            LOG.warnf("Failed to detect 3scale version: %s", e.getMessage());
+            LOG.warnf(e, "Failed to detect 3scale version: %s", e.getMessage());
         }
         return null;
     }
@@ -282,7 +282,7 @@ public class ThreeScaleExportService {
                 page++;
             }
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch backend catalog: %s — continuing with empty catalog (per-backend GET fallback)",
+            LOG.warnf(e, "Failed to fetch backend catalog: %s — continuing with empty catalog (per-backend GET fallback)",
                     e.getMessage());
         }
         if (catalog.isEmpty()) {
@@ -326,12 +326,12 @@ public class ThreeScaleExportService {
                     backend.privateEndpoint = (String) b.get("private_endpoint");
                     backends.add(backend);
                 } catch (Exception ex) {
-                    LOG.warnf("Failed to fetch backend %s: %s", backendId, ex.getMessage());
+                    LOG.warnf(ex, "Failed to fetch backend %s: %s", backendId, ex.getMessage());
                 }
             }
             return backends;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -374,7 +374,7 @@ public class ThreeScaleExportService {
             }
             return policies;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch policies for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch policies for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -399,7 +399,7 @@ public class ThreeScaleExportService {
             }
             return rules;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch mapping rules for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch mapping rules for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -423,7 +423,7 @@ public class ThreeScaleExportService {
             }
             return metrics;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch metrics for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch metrics for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -456,12 +456,12 @@ public class ThreeScaleExportService {
                     backend.privateEndpoint = (String) b.get("private_endpoint");
                     backends.add(backend);
                 } catch (Exception ex) {
-                    LOG.warnf("Failed to fetch backend %s: %s", backendId, ex.getMessage());
+                    LOG.warnf(ex, "Failed to fetch backend %s: %s", backendId, ex.getMessage());
                 }
             }
             return backends;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -516,7 +516,7 @@ public class ThreeScaleExportService {
             }
             return applications;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch applications for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch applications for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -542,7 +542,7 @@ public class ThreeScaleExportService {
             }
             return keys;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch keys for application %s: %s", applicationId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch keys for application %s: %s", applicationId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -575,7 +575,7 @@ public class ThreeScaleExportService {
             }
             return plans;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch application plans for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch application plans for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -623,7 +623,7 @@ public class ThreeScaleExportService {
             }
             return limits;
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch limits for application plan %s: %s", planId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch limits for application plan %s: %s", planId, e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -632,7 +632,7 @@ public class ThreeScaleExportService {
         try {
             return client.getProxyConfig(serviceId, accessToken);
         } catch (Exception e) {
-            LOG.warnf("Failed to fetch proxy config for service %s: %s", serviceId, e.getMessage());
+            LOG.warnf(e, "Failed to fetch proxy config for service %s: %s", serviceId, e.getMessage());
             return null;
         }
     }

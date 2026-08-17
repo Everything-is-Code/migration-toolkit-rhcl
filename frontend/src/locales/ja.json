@@ -281,7 +281,8 @@
       "gwWaitingLb": "LoadBalancer のアドレスを取得中...",
       "gwWaitingDns": "DNS の伝播を待機中です。新しい LoadBalancer の DNS が伝播するまで数分かかる場合があります...",
       "gwDnsOk": "DNS 解決完了",
-      "gatewayUrl": "Gateway URL"
+      "gatewayUrl": "Gateway URL",
+      "namespace": "Namespace"
     },
     "labelNamespace": "Namespace"
   },
@@ -305,6 +306,7 @@
     "colType": "種別",
     "colPackageName": "APIパッケージ名",
     "colService": "サービス名",
+    "colNamespace": "Namespace",
     "colStatus": "ステータス",
     "colSuccessFail": "成功/失敗",
     "colScore": "互換性スコア",

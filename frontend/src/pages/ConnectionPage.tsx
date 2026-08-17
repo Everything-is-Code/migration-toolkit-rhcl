@@ -491,7 +491,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   <DescriptionListDescription>{appState.connection.tenant || '-'}</DescriptionListDescription>
                 </DescriptionListGroup>
                 <DescriptionListGroup>
-                  <DescriptionListTerm>Namespace</DescriptionListTerm>
+                  <DescriptionListTerm>{t('connection.labelNamespace')}</DescriptionListTerm>
                   <DescriptionListDescription>{appState.namespace}</DescriptionListDescription>
                 </DescriptionListGroup>
               </DescriptionList>

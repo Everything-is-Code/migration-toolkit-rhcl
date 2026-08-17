@@ -6,11 +6,17 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class HistoryControllerTest {
@@ -199,27 +205,34 @@ class HistoryControllerTest {
     @Test
     @Transactional
     void projectEntity_onUpdate_updatesTimestamp() {
-        com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity p = new com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity();
+        ProjectEntity p = new ProjectEntity();
         p.name = "Update-Test";
         p.threescaleUrl = "https://3scale.test";
         p.persist();
         em.flush();
 
         java.time.LocalDateTime before = p.updatedAt;
+        assertNotNull(before, "updatedAt should be set after persist/flush");
+
+        // Ensure wall clock can advance past `before` so @PreUpdate proves isAfter
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(2))
+                .until(() -> java.time.LocalDateTime.now().isAfter(before));
 
         p.name = "Update-Test-v2";
         em.merge(p);
         em.flush();
 
-        // Assert persisted name change (avoid flaky Thread.sleep timestamp checks)
-        com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity loaded =
-                em.find(com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity.class, p.id);
-        org.junit.jupiter.api.Assertions.assertNotNull(loaded);
-        org.junit.jupiter.api.Assertions.assertEquals("Update-Test-v2", loaded.name);
-        if (before != null && loaded.updatedAt != null) {
-            org.junit.jupiter.api.Assertions.assertFalse(loaded.updatedAt.isBefore(before),
-                    "updatedAt must not move backwards on update");
-        }
+        // Load inside the active transaction (Awaitility callbacks are not transactional)
+        ProjectEntity loaded = em.find(ProjectEntity.class, p.id);
+        assertNotNull(loaded);
+        assertEquals("Update-Test-v2", loaded.name);
+        assertNotNull(loaded.updatedAt);
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(2))
+                .until(() -> loaded.updatedAt.isAfter(before));
+        assertTrue(loaded.updatedAt.isAfter(before),
+                "updatedAt must advance via @PreUpdate on merge/flush");
     }
 
     // ── helper ────────────────────────────────────────────────────────────────

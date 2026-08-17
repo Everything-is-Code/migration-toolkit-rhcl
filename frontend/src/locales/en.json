@@ -281,7 +281,8 @@
       "gwWaitingLb": "Waiting for LoadBalancer address...",
       "gwWaitingDns": "Waiting for DNS propagation. New LoadBalancer DNS may take a few minutes to propagate...",
       "gwDnsOk": "DNS resolved",
-      "gatewayUrl": "Gateway URL"
+      "gatewayUrl": "Gateway URL",
+      "namespace": "Namespace"
     },
     "labelNamespace": "Namespace"
   },
@@ -305,6 +306,7 @@
     "colType": "Type",
     "colPackageName": "API Package",
     "colService": "Service Name",
+    "colNamespace": "Namespace",
     "colStatus": "Status",
     "colSuccessFail": "Success/Fail",
     "colScore": "Compatibility Score",
