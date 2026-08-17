@@ -659,6 +659,18 @@ Workflows default to `QUAY_NAMESPACE: everythingascode` and Helm values already 
 | `QUAY_USERNAME` | CI push to Quay | Quay robot account |
 | `QUAY_PASSWORD` | CI push to Quay | Quay robot token |
 
+**Troubleshooting — `Build and push to Quay.io` fails with `401 Unauthorized`**
+
+The Docker **build** usually succeeds; the failure is on **push** to `quay.io/everythingascode/...`.
+
+1. Confirm secrets exist: **Settings → Secrets and variables → Actions** (`QUAY_USERNAME`, `QUAY_PASSWORD`).
+2. Robot username format is `everythingascode+<robot-name>` (not your personal Quay login).
+3. Rotate the robot token on [quay.io](https://quay.io) → Organization **everythingascode** → Robot Accounts → regenerate token → update `QUAY_PASSWORD`.
+4. Ensure the robot has **Write** on `migration-toolkit-rhcl-backend` and `migration-toolkit-rhcl-frontend`.
+5. Re-run **Build and push to Quay.io** (workflow runs a pre-flight check via `scripts/ci/verify-quay-credentials.sh`).
+
+If you do not have write access to the `everythingascode` namespace, use **Path A** (public images already published) and skip Quay push until you own a namespace (Path B).
+
 ### Phase 4 — Enable and verify GitHub Actions
 
 1. **Settings → Actions → General:** allow Actions / workflows if restricted
