@@ -234,7 +234,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
             </div>
           )}
           {infoRow(t('import.testPanel.gatewayName'), <code style={{ fontSize: 12 }}>{testInfo.gatewayName}</code>)}
-          {infoRow('Namespace', <code style={{ fontSize: 12 }}>{namespace}</code>)}
+          {infoRow(t('import.testPanel.namespace'), <code style={{ fontSize: 12 }}>{namespace}</code>)}
         </div>
 
         {/* Authentication info */}

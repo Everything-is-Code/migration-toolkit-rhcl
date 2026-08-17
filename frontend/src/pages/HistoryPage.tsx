@@ -246,7 +246,7 @@ const HistoryPage: React.FC = () => {
                         <th scope="col" style={thS}>{t('history.colDateTime')}</th>
                         <th scope="col" style={thS}>{t('history.colType')}</th>
                         <th scope="col" style={thS}>{t('history.colPackageName')}</th>
-                        <th scope="col" style={thS}>Namespace</th>
+                        <th scope="col" style={thS}>{t('history.colNamespace')}</th>
                         <th scope="col" style={{ ...thS, textAlign: 'center' }}>{t('history.colStatus')}</th>
                         <th scope="col" style={{ ...thS, textAlign: 'center' }}>{t('history.colSuccessFail')}</th>
                         <th scope="col" style={{ ...thS, textAlign: 'center', width: 120 }}>{t('history.colOps')}</th>

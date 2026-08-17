@@ -113,7 +113,7 @@ class ThreeScaleExportServiceTest {
     // ── fetchApplications() mapping (real Admin API shape) ───────────────────
 
     @Test
-    void fetchApplications_mapsAppIdAndKeys() {
+    void applicationDto_fieldAssignment_mapsAppIdAndKeys() {
         Application app = new Application();
         app.id = "99";
         app.appId = "my-app-id";

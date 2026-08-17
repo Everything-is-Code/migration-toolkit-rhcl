@@ -143,7 +143,7 @@ public class SetupController {
             return new StepResult(stepName, labeled, labeled ? "Label present" : "Label missing");
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            LOG.debugf("[Setup] Failed to check namespace label for %s: %s", namespace, msg);
+            LOG.warnf("[Setup] Failed to check namespace label for %s: %s", namespace, msg);
             return new StepResult(stepName, false, msg);
         }
     }
@@ -161,7 +161,7 @@ public class SetupController {
             return new StepResult(stepName, annotated, annotated ? "Annotation present" : "Annotation missing");
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-            LOG.debugf("[Setup] Failed to check Gateway annotation for %s: %s", namespace, msg);
+            LOG.warnf("[Setup] Failed to check Gateway annotation for %s: %s", namespace, msg);
             return new StepResult(stepName, false, msg);
         }
     }
