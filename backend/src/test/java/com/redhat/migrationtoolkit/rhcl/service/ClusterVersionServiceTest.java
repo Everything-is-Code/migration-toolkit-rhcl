@@ -367,6 +367,8 @@ class ClusterVersionServiceTest {
                 "4.19.0", "1.2.1", null, null, "2.6");
         assertFalse(low.corsNative);
         assertTrue(low.timeoutsSupported);
+        assertTrue(low.retriesSupported,
+                "GAPI 1.2.1 / OCP 4.19 must support HTTPRoute retry.attempts");
 
         ClusterCapabilities high = ClusterVersionService.capabilitiesFrom(
                 "4.21.0", "1.3.0", "1.4.0", "3.0.1", "3.0");
@@ -374,6 +376,7 @@ class ClusterVersionServiceTest {
         assertTrue(high.kuadrantPresent);
         assertTrue(high.ossmPresent);
         assertTrue(high.ossmMatchesOcp);
+        assertTrue(high.retriesSupported);
 
         // OSSM newer than the OCP minimum (e.g. 3.4.1 vs expected 3.0) still matches
         ClusterCapabilities newer = ClusterVersionService.capabilitiesFrom(
@@ -384,6 +387,11 @@ class ClusterVersionServiceTest {
         ClusterCapabilities older = ClusterVersionService.capabilitiesFrom(
                 "4.21.0", "1.3.0", "1.4.0", "2.6.5", "3.0");
         assertFalse(older.ossmMatchesOcp);
+
+        ClusterCapabilities preRetry = ClusterVersionService.capabilitiesFrom(
+                "4.17.0", "1.1.0", null, null, null);
+        assertFalse(preRetry.retriesSupported,
+                "GAPI < 1.2 and OCP < 4.19 must not claim retriesSupported");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

@@ -14,4 +14,9 @@ public class ClusterCapabilities {
     public boolean ossmMatchesOcp;
     /** True when Gateway API timeouts are supported (GAPI ≥ 1.1 / OCP ≥ 4.18). */
     public boolean timeoutsSupported;
+    /**
+     * True when Gateway API HTTPRoute {@code retry.attempts} is available
+     * (GAPI ≥ 1.2 / OCP ≥ 4.19). When false, ConversionService emits EnvoyFilter fallback.
+     */
+    public boolean retriesSupported;
 }

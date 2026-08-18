@@ -4,6 +4,7 @@ import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
+import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
@@ -19,7 +20,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class ConversionService {
@@ -80,40 +83,29 @@ public class ConversionService {
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
-        // If the user did not explicitly specify a URL, auto-detect the type
-        // using the actual backend (privateEndpoint) registered in 3scale.
-        // By aligning with the configmap.yaml fallback, this prevents
-        // inconsistencies such as "the backend URL points to an ELB but the
-        // HTTPRoute points to a non-existent internal cluster Service".
-        String effectiveBackendUrl = backendUrl;
-        if ((effectiveBackendUrl == null || effectiveBackendUrl.isBlank())
-                && service.backends != null && !service.backends.isEmpty()) {
-            effectiveBackendUrl = service.backends.get(0).privateEndpoint;
+        int backendCount = service.backends != null ? service.backends.size() : 0;
+        boolean overrideIgnored = backendUrl != null && !backendUrl.isBlank() && backendCount > 1;
+        if (overrideIgnored) {
+            LOG.warnf("externalBackendUrl override ignored for service %s: %d backends present; keeping path-based multi-backend routing",
+                    name, backendCount);
         }
 
-        BackendType backendType = detectBackendType(effectiveBackendUrl);
-        String externalHost = backendType == BackendType.EXTERNAL ? extractHostname(effectiveBackendUrl) : null;
-        String internalService = backendType == BackendType.INTERNAL
-                ? extractInternalService(effectiveBackendUrl, name) : null;
-        int internalPort = backendType == BackendType.INTERNAL
-                ? extractPort(effectiveBackendUrl, ConversionConstants.DEFAULT_INTERNAL_PORT)
-                : ConversionConstants.DEFAULT_INTERNAL_PORT;
-        // The external backend port is determined from the URL scheme (http→80 / https→443)
-        // or an explicitly specified port. Hardcoding 443 would prevent connections to
-        // backends that only listen on HTTP (e.g., OpenShift Routes without TLS).
-        int externalDefaultPort = effectiveBackendUrl != null && effectiveBackendUrl.trim().startsWith("http://")
-                ? ConversionConstants.DEFAULT_HTTP_PORT : ConversionConstants.DEFAULT_HTTPS_PORT;
-        int externalPort = backendType == BackendType.EXTERNAL
-                ? extractPort(effectiveBackendUrl, externalDefaultPort)
-                : ConversionConstants.DEFAULT_HTTPS_PORT;
+        List<ResolvedBackend> resolved = resolveBackends(service, name, backendUrl, overrideIgnored);
+        BackendType primaryType = resolved.stream().anyMatch(b -> b.type == BackendType.EXTERNAL)
+                ? BackendType.EXTERNAL : BackendType.INTERNAL;
+        String primaryExternalHost = resolved.stream()
+                .filter(b -> b.type == BackendType.EXTERNAL && b.externalHost != null)
+                .map(b -> b.externalHost)
+                .findFirst()
+                .orElse(null);
 
-        files.put("gateway.yaml", generateGateway(name, namespace));
-        files.put("httproute.yaml",  generateHttpRoute(
-                name, namespace, service, backendType, externalHost, internalService,
-                internalPort, externalPort, opts.corsNative));
+        files.put("gateway.yaml", generateGateway(name, namespace,
+                opts.includeDnsPolicy ? opts.dnsHostname : null));
+        files.put("httproute.yaml", generateHttpRoute(
+                name, namespace, service, resolved, opts.corsNative, opts.retriesSupported));
         files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
-        files.put("configmap.yaml",  generateConfigMap(name, namespace, service, effectiveBackendUrl));
+        files.put("configmap.yaml",  generateConfigMap(name, namespace, service, resolved, overrideIgnored));
         files.put("apiproduct.yaml", generateApiProduct(name, namespace, service));
 
         String authType = service.authentication != null ? service.authentication.type : "none";
@@ -121,12 +113,17 @@ public class ConversionService {
             files.put("apikey.yaml", generateApiKey(name, namespace));
         }
 
-        if (backendType == BackendType.EXTERNAL) {
-            boolean externalUsesTls = externalPort == ConversionConstants.DEFAULT_HTTPS_PORT;
-            files.put("serviceentry.yaml",
-                    generateServiceEntry(name, namespace, externalHost, externalPort, externalUsesTls));
-            files.put("destinationrule.yaml",
-                    generateDestinationRule(name, namespace, externalHost, externalUsesTls));
+        List<ResolvedBackend> externals = resolved.stream()
+                .filter(b -> b.type == BackendType.EXTERNAL)
+                .toList();
+        if (!externals.isEmpty()) {
+            files.put("serviceentry.yaml", externals.stream()
+                    .map(b -> generateServiceEntry(b.seName, b.refName, namespace, name,
+                            b.externalHost, b.port, b.usesTls))
+                    .collect(Collectors.joining("---\n")));
+            files.put("destinationrule.yaml", externals.stream()
+                    .map(b -> generateDestinationRule(b.drName, namespace, name, b.externalHost, b.usesTls))
+                    .collect(Collectors.joining("---\n")));
         }
 
         Policy loggingPolicy = findLoggingPolicy(service);
@@ -153,6 +150,23 @@ public class ConversionService {
             }
         }
 
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits != null) {
+            Integer requestBytes = resolveContentLimitBytes(contentLimits, true);
+            if (requestBytes != null && requestBytes > 0) {
+                files.put("envoyfilter-content-limits.yaml",
+                        generateContentLimitsEnvoyFilter(name, namespace, requestBytes));
+            }
+        }
+
+        if (!opts.retriesSupported) {
+            Integer retries = resolveRetryAttempts(findRetryPolicy(service));
+            if (retries != null && retries > 0) {
+                files.put("envoyfilter-retry.yaml",
+                        generateRetryEnvoyFilter(name, namespace, retries));
+            }
+        }
+
         Policy ipCheck = findIpCheckPolicy(service);
         if (ipCheck != null && "authorizationPolicy".equals(ipCheckMode)) {
             files.put("authorizationpolicy.yaml",
@@ -164,12 +178,124 @@ public class ConversionService {
             files.put("ratelimitpolicy.yaml", rateLimitYaml);
         }
 
-        files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
+        if (opts.includeTlsPolicy) {
+            files.put("tlspolicy.yaml",
+                    generateTlsPolicy(name, namespace, opts.tlsIssuerKind, opts.tlsIssuerName));
+        }
+
+        if (opts.includeDnsPolicy) {
+            files.put("dnspolicy.yaml",
+                    generateDnsPolicy(name, namespace, opts.dnsProviderSecretName));
+        }
+
+        files.put("README.md", generateReadme(service, name, namespace, primaryType, primaryExternalHost,
+                resolved, overrideIgnored));
 
         if (!includeMigratedFromLabel) {
             files.replaceAll((fileName, content) -> stripMigratedFromLabel(content));
         }
         return files;
+    }
+
+    /**
+     * Resolved conversion target for one product backend (or a synthetic override/default).
+     */
+    static final class ResolvedBackend {
+        final BackendType type;
+        final String refName;
+        final String seName;
+        final String drName;
+        final String externalHost;
+        final int port;
+        final boolean usesTls;
+        final String mountPath;
+        final Integer weight;
+        final String privateEndpoint;
+
+        ResolvedBackend(BackendType type, String refName, String seName, String drName,
+                        String externalHost, int port, boolean usesTls,
+                        String mountPath, Integer weight, String privateEndpoint) {
+            this.type = type;
+            this.refName = refName;
+            this.seName = seName;
+            this.drName = drName;
+            this.externalHost = externalHost;
+            this.port = port;
+            this.usesTls = usesTls;
+            this.mountPath = mountPath;
+            this.weight = weight;
+            this.privateEndpoint = privateEndpoint;
+        }
+    }
+
+    List<ResolvedBackend> resolveBackends(ApiService service, String productName,
+                                          String backendUrl, boolean overrideIgnored) {
+        List<Backend> backends = service.backends != null ? service.backends : List.of();
+        boolean applyOverride = backendUrl != null && !backendUrl.isBlank() && !overrideIgnored;
+
+        if (applyOverride) {
+            return List.of(resolveOne(productName, backendUrl.trim(), null, "/", null, false));
+        }
+        if (backends.isEmpty()) {
+            return List.of(resolveOne(productName, null, null, "/", null, false));
+        }
+        boolean multi = backends.size() > 1;
+        List<ResolvedBackend> resolved = new ArrayList<>(backends.size());
+        for (Backend backend : backends) {
+            String sys = backend.systemName != null && !backend.systemName.isBlank()
+                    ? toKebabCase(backend.systemName)
+                    : (backend.name != null ? toKebabCase(backend.name) : "backend");
+            resolved.add(resolveOne(
+                    productName,
+                    backend.privateEndpoint,
+                    sys,
+                    normalizeMountPath(backend.path),
+                    backend.weight,
+                    multi));
+        }
+        return resolved;
+    }
+
+    private ResolvedBackend resolveOne(String productName, String url, String backendSys,
+                                       String mountPath, Integer weight, boolean multi) {
+        BackendType type = detectBackendType(url);
+        String externalHost = type == BackendType.EXTERNAL ? extractHostname(url) : null;
+        String internalService = type == BackendType.INTERNAL
+                ? extractInternalService(url, productName) : null;
+        int defaultPort = type == BackendType.EXTERNAL
+                ? (url != null && url.trim().startsWith("http://")
+                    ? ConversionConstants.DEFAULT_HTTP_PORT
+                    : ConversionConstants.DEFAULT_HTTPS_PORT)
+                : ConversionConstants.DEFAULT_INTERNAL_PORT;
+        int port = extractPort(url, defaultPort);
+        boolean usesTls = type == BackendType.EXTERNAL
+                && port == ConversionConstants.DEFAULT_HTTPS_PORT;
+
+        String refName;
+        String seName;
+        String drName;
+        if (multi && backendSys != null) {
+            refName = productName + "-" + backendSys + "-backend";
+            seName = productName + "-" + backendSys + "-external";
+            drName = productName + "-" + backendSys + "-backend-tls";
+        } else if (type == BackendType.INTERNAL && internalService != null) {
+            refName = internalService;
+            seName = productName + "-external";
+            drName = productName + "-backend-tls";
+        } else {
+            refName = productName + "-backend";
+            seName = productName + "-external";
+            drName = productName + "-backend-tls";
+        }
+        return new ResolvedBackend(type, refName, seName, drName, externalHost, port, usesTls,
+                mountPath, weight, url);
+    }
+
+    static String normalizeMountPath(String path) {
+        if (path == null || path.isBlank()) {
+            return "/";
+        }
+        return path.trim();
     }
 
     /** Remove the "migrated-from: 3scale" label line from the generated YAML (when disabled via checkbox). */
@@ -261,6 +387,13 @@ public class ConversionService {
     // ─────────────────────────────────────────────
 
     private String generateGateway(String name, String namespace) {
+        return generateGateway(name, namespace, null);
+    }
+
+    private String generateGateway(String name, String namespace, String hostname) {
+        String hostnameLine = (hostname != null && !hostname.isBlank())
+                ? "\n      hostname: " + hostname.trim()
+                : "";
         return """
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -275,13 +408,13 @@ spec:
   listeners:
     - name: http
       protocol: HTTP
-      port: %d
+      port: %d%s
       allowedRoutes:
         namespaces:
           from: Same
     - name: https
       protocol: HTTPS
-      port: %d
+      port: %d%s
       tls:
         mode: Terminate
         certificateRefs:
@@ -290,9 +423,67 @@ spec:
         namespaces:
           from: Same
 """.formatted(name, namespace, name,
-                ConversionConstants.DEFAULT_HTTP_PORT,
-                ConversionConstants.DEFAULT_HTTPS_PORT,
+                ConversionConstants.DEFAULT_HTTP_PORT, hostnameLine,
+                ConversionConstants.DEFAULT_HTTPS_PORT, hostnameLine,
                 name);
+    }
+
+    // ─────────────────────────────────────────────
+    // TLSPolicy (Kuadrant + cert-manager)
+    // ─────────────────────────────────────────────
+
+    private String generateTlsPolicy(String name, String namespace,
+                                     String issuerKind, String issuerName) {
+        String kind = (issuerKind != null && !issuerKind.isBlank()) ? issuerKind : "ClusterIssuer";
+        String issuer = (issuerName != null && !issuerName.isBlank()) ? issuerName : "letsencrypt-prod";
+        return """
+apiVersion: kuadrant.io/v1
+kind: TLSPolicy
+metadata:
+  name: %s-tls-policy
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: %s-gateway
+  issuerRef:
+    group: cert-manager.io
+    kind: %s
+    name: %s
+""".formatted(name, namespace, name, name, kind, issuer);
+    }
+
+    // ─────────────────────────────────────────────
+    // DNSPolicy (Kuadrant)
+    // ─────────────────────────────────────────────
+
+    private String generateDnsPolicy(String name, String namespace, String providerSecretName) {
+        String providerBlock = "";
+        if (providerSecretName != null && !providerSecretName.isBlank()) {
+            providerBlock = """
+  providerRefs:
+    - name: %s
+""".formatted(providerSecretName.trim());
+        }
+        return """
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: %s-dns-policy
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: %s-gateway
+%s""".formatted(name, namespace, name, name, providerBlock);
     }
 
     // ─────────────────────────────────────────────
@@ -300,31 +491,9 @@ spec:
     // ─────────────────────────────────────────────
 
     private String generateHttpRoute(String name, String namespace, ApiService service,
-                                     BackendType backendType, String externalHost,
-                                     String internalService, int internalPort, int externalPort,
-                                     boolean corsNative) {
-        int backendPort   = backendType == BackendType.EXTERNAL ? externalPort : internalPort;
-        String backendSvc = backendType == BackendType.EXTERNAL
-                ? (name + "-backend")
-                : (internalService != null ? internalService : name + "-backend");
-
-        // Build the filters block (combining URLRewrite + Header Modification + CORS)
-        StringBuilder filterItems = new StringBuilder();
-        if (backendType == BackendType.EXTERNAL) {
-            filterItems.append("""
-        - type: URLRewrite
-          urlRewrite:
-            hostname: "%s"
-""".formatted(externalHost));
-        }
-        filterItems.append(buildHeaderModificationFilters(service));
-        filterItems.append(buildCorsFilters(service, corsNative));
-
-        String filtersBlock = filterItems.length() > 0
-                ? "      filters:\n" + filterItems
-                : "";
-
-        String annotations = buildUpstreamAnnotations(service);
+                                     List<ResolvedBackend> backends, boolean corsNative,
+                                     boolean retriesSupported) {
+        String annotations = buildHttpRouteAnnotations(service);
         StringBuilder sb = new StringBuilder();
         sb.append("""
 apiVersion: gateway.networking.k8s.io/v1
@@ -344,8 +513,10 @@ metadata:
 """.formatted(name, namespace, name, annotations, name, namespace));
 
         String timeoutsBlock = buildTimeoutsBlock(service);
+        String retryBlock = retriesSupported ? buildRetryBlock(service) : "";
         boolean hasCors = findCorsPolicy(service) != null;
         LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
+        String sharedFilters = buildHeaderModificationFilters(service) + buildCorsFilters(service, corsNative);
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             // For HTTP methods that already have a "/" (catch-all) Mapping Rule,
@@ -364,28 +535,28 @@ metadata:
                 }
                 pathsForOptions.add(path);
 
+                List<ResolvedBackend> selected = selectBackendsForPath(backends, path);
+                String filtersBlock = buildRuleFiltersBlock(selected, sharedFilters);
                 sb.append("""
     - matches:
         - path:
             type: PathPrefix
             value: "%s"
           method: %s
-%s%s      backendRefs:
-        - name: %s
-          port: %d
-""".formatted(path, method, filtersBlock, timeoutsBlock, backendSvc, backendPort));
+%s%s%s      backendRefs:
+%s""".formatted(path, method, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
             }
         } else {
             pathsForOptions.add("/");
+            List<ResolvedBackend> selected = selectBackendsForPath(backends, "/");
+            String filtersBlock = buildRuleFiltersBlock(selected, sharedFilters);
             sb.append("""
     - matches:
         - path:
             type: PathPrefix
             value: "/"
-%s%s      backendRefs:
-        - name: %s
-          port: %d
-""".formatted(filtersBlock, timeoutsBlock, backendSvc, backendPort));
+%s%s%s      backendRefs:
+%s""".formatted(filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
         }
 
         // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
@@ -402,16 +573,86 @@ metadata:
                 if (!emittedOptions.add(path)) {
                     continue;
                 }
+                List<ResolvedBackend> selected = selectBackendsForPath(backends, path);
+                String filtersBlock = buildRuleFiltersBlock(selected, sharedFilters);
                 sb.append("""
     - matches:
         - path:
             type: PathPrefix
             value: "%s"
           method: OPTIONS
-%s%s      backendRefs:
-        - name: %s
-          port: %d
-""".formatted(path, filtersBlock, timeoutsBlock, backendSvc, backendPort));
+%s%s%s      backendRefs:
+%s""".formatted(path, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
+            }
+        }
+        return sb.toString();
+    }
+
+    private String buildRuleFiltersBlock(List<ResolvedBackend> selected, String sharedFilters) {
+        StringBuilder filterItems = new StringBuilder();
+        String rewriteHost = uniqueExternalHost(selected);
+        if (rewriteHost != null) {
+            filterItems.append("""
+        - type: URLRewrite
+          urlRewrite:
+            hostname: "%s"
+""".formatted(rewriteHost));
+        }
+        filterItems.append(sharedFilters);
+        return filterItems.length() > 0
+                ? "      filters:\n" + filterItems
+                : "";
+    }
+
+    private static String uniqueExternalHost(List<ResolvedBackend> selected) {
+        Set<String> hosts = selected.stream()
+                .filter(b -> b.type == BackendType.EXTERNAL && b.externalHost != null)
+                .map(b -> b.externalHost)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return hosts.size() == 1 ? hosts.iterator().next() : null;
+    }
+
+    List<ResolvedBackend> selectBackendsForPath(List<ResolvedBackend> backends, String rulePath) {
+        if (backends == null || backends.isEmpty()) {
+            return List.of();
+        }
+        String path = rulePath == null || rulePath.isBlank() ? "/" : rulePath;
+        List<ResolvedBackend> matches = new ArrayList<>();
+        int bestLen = -1;
+        for (ResolvedBackend backend : backends) {
+            if (!isMountPrefixOf(backend.mountPath, path)) {
+                continue;
+            }
+            int len = backend.mountPath.length();
+            if (len > bestLen) {
+                matches.clear();
+                matches.add(backend);
+                bestLen = len;
+            } else if (len == bestLen) {
+                matches.add(backend);
+            }
+        }
+        return matches.isEmpty() ? List.copyOf(backends) : matches;
+    }
+
+    static boolean isMountPrefixOf(String mountPath, String rulePath) {
+        String mount = normalizeMountPath(mountPath);
+        String path = rulePath == null || rulePath.isBlank() ? "/" : rulePath;
+        if ("/".equals(mount)) {
+            return true;
+        }
+        return path.equals(mount) || path.startsWith(mount.endsWith("/") ? mount : mount + "/");
+    }
+
+    private static String formatBackendRefs(List<ResolvedBackend> selected) {
+        boolean weighted = selected.size() > 1;
+        StringBuilder sb = new StringBuilder();
+        for (ResolvedBackend backend : selected) {
+            sb.append("        - name: ").append(backend.refName).append('\n');
+            sb.append("          port: ").append(backend.port).append('\n');
+            if (weighted) {
+                int weight = backend.weight != null ? backend.weight : 1;
+                sb.append("          weight: ").append(weight).append('\n');
             }
         }
         return sb.toString();
@@ -752,6 +993,85 @@ metadata:
         return "";
     }
 
+    private Policy findRetryPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "retry".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Map 3scale {@code retry.configuration.retries} → HTTPRoute {@code retry.attempts}.
+     * Ignores {@code retry_on} and {@code per_try_timeout} (no portable GAPI mapping).
+     */
+    private String buildRetryBlock(ApiService service) {
+        Integer attempts = resolveRetryAttempts(findRetryPolicy(service));
+        if (attempts == null || attempts <= 0) {
+            return "";
+        }
+        return """
+      retry:
+        attempts: %d
+""".formatted(attempts);
+    }
+
+    private Integer resolveRetryAttempts(Policy retryPolicy) {
+        if (retryPolicy == null || retryPolicy.configuration == null) {
+            return null;
+        }
+        Object raw = retryPolicy.configuration.get("retries");
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(raw.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Envoy route retry_policy fallback when Gateway API HTTPRoute retry is unavailable.
+     */
+    private String generateRetryEnvoyFilter(String name, String namespace, int numRetries) {
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-retry
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: retry
+    3scale-migration/note: "HTTPRoute retry unsupported on this cluster — Envoy route retry_policy fallback"
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: %s-gateway
+  configPatches:
+    - applyTo: HTTP_ROUTE
+      match:
+        context: GATEWAY
+      patch:
+        operation: MERGE
+        value:
+          route:
+            retry_policy:
+              retry_on: "5xx,reset,connect-failure,refused-stream"
+              num_retries: %d
+""".formatted(name, namespace, name, name, numRetries);
+    }
+
     /**
      * Return the upstream_connection send_timeout as an annotation (attached to HTTPRoute metadata).
      */
@@ -774,27 +1094,48 @@ metadata:
                 return "";
             }
             return """
-  annotations:
     3scale-migration/upstream-send-timeout: "%ss"
 """.formatted(sendRaw);
         }
         return "";
     }
 
+    /**
+     * Combine HTTPRoute metadata annotations (upstream send_timeout + content_limits response gap).
+     */
+    private String buildHttpRouteAnnotations(ApiService service) {
+        StringBuilder body = new StringBuilder();
+        String upstream = buildUpstreamAnnotations(service);
+        if (!upstream.isBlank()) {
+            body.append(upstream);
+        }
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits != null) {
+            Integer responseBytes = resolveContentLimitBytes(contentLimits, false);
+            if (responseBytes != null && responseBytes > 0) {
+                body.append(String.format(
+                        "    3scale-migration/response-content-limit: \"%d\"%n", responseBytes));
+            }
+        }
+        if (body.length() == 0) {
+            return "";
+        }
+        return "  annotations:\n" + body;
+    }
+
     // ─────────────────────────────────────────────
     // ServiceEntry (generated only for external backends)
     // ─────────────────────────────────────────────
 
-    private String generateServiceEntry(String name, String namespace, String externalHost,
-                                        int externalPort, boolean useTls) {
-        String backendSvc = name + "-backend";
+    private String generateServiceEntry(String seName, String backendSvc, String namespace, String appLabel,
+                                        String externalHost, int externalPort, boolean useTls) {
         String portName = useTls ? "https" : "http";
         String protocol = useTls ? "HTTPS" : "HTTP";
         return """
 apiVersion: networking.istio.io/v1alpha3
 kind: ServiceEntry
 metadata:
-  name: %s-external
+  name: %s
   namespace: %s
   labels:
     app: %s
@@ -823,15 +1164,16 @@ spec:
   ports:
   - name: %s
     port: %d
-""".formatted(name, namespace, name, externalHost, externalPort, portName, protocol,
-              backendSvc, namespace, name, externalHost, portName, externalPort);
+""".formatted(seName, namespace, appLabel, externalHost, externalPort, portName, protocol,
+              backendSvc, namespace, appLabel, externalHost, portName, externalPort);
     }
 
     // ─────────────────────────────────────────────
     // DestinationRule (generated only for external backends)
     // ─────────────────────────────────────────────
 
-    private String generateDestinationRule(String name, String namespace, String externalHost, boolean useTls) {
+    private String generateDestinationRule(String drName, String namespace, String appLabel,
+                                           String externalHost, boolean useTls) {
         String trafficPolicy = useTls
                 ? """
   trafficPolicy:
@@ -848,14 +1190,14 @@ spec:
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
 metadata:
-  name: %s-backend-tls
+  name: %s
   namespace: %s
   labels:
     app: %s
     migrated-from: 3scale
 spec:
   host: %s
-%s""".formatted(name, namespace, name, externalHost, trafficPolicy);
+%s""".formatted(drName, namespace, appLabel, externalHost, trafficPolicy);
     }
 
     // ─────────────────────────────────────────────
@@ -994,7 +1336,9 @@ spec:
     private String finalizeAuthPolicyAuthorization(String authPolicyYaml, ApiService service,
                                                     String ipCheckMode) {
         return appendIpCheckOpaIfNeeded(
-                appendJwtClaimCheckAuthorization(authPolicyYaml, service), service, ipCheckMode);
+                appendKeycloakRoleCheckAuthorization(
+                        appendJwtClaimCheckAuthorization(authPolicyYaml, service), service),
+                service, ipCheckMode);
     }
 
     /**
@@ -1150,6 +1494,127 @@ spec:
         return mergeAuthorizationNamedRules(authPolicyYaml, namedRule);
     }
 
+    private Policy findKeycloakRoleCheckPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "keycloak_role_check".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private record KeycloakRolePattern(String selector, String operator, String value) {}
+
+    /**
+     * Append AuthPolicy {@code keycloak-role-check} patternMatching for realm/resource roles.
+     * Skips with WARN when authentication is not JWT.
+     */
+    private String appendKeycloakRoleCheckAuthorization(String authPolicyYaml, ApiService service) {
+        Policy keycloak = findKeycloakRoleCheckPolicy(service);
+        if (keycloak == null) {
+            return authPolicyYaml;
+        }
+        String authType = service.authentication != null ? service.authentication.type : "none";
+        if (!"jwt".equals(authType)) {
+            LOG.warnf("keycloak_role_check enabled but authentication is '%s' (not jwt) — skipping AuthPolicy role rule",
+                    authType);
+            return authPolicyYaml;
+        }
+        String namedRule = buildKeycloakRoleCheckNamedRule(keycloak);
+        if (namedRule.isEmpty()) {
+            return authPolicyYaml;
+        }
+        return mergeAuthorizationNamedRules(authPolicyYaml, namedRule);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String buildKeycloakRoleCheckNamedRule(Policy policy) {
+        if (policy == null || policy.configuration == null) {
+            return "";
+        }
+        Map<String, Object> cfg = policy.configuration;
+        String checkType = String.valueOf(cfg.getOrDefault("type", "whitelist")).trim().toLowerCase(Locale.ROOT);
+        boolean blacklist = "blacklist".equals(checkType);
+        String operator = blacklist ? "excl" : "incl";
+
+        List<KeycloakRolePattern> patterns = new ArrayList<>();
+        Object scopesRaw = cfg.get("scopes");
+        if (!(scopesRaw instanceof List<?> scopes)) {
+            return "";
+        }
+        for (Object scopeObj : scopes) {
+            if (!(scopeObj instanceof Map<?, ?> scopeMap)) {
+                continue;
+            }
+            Map<String, Object> scope = (Map<String, Object>) scopeMap;
+            Object realmRolesRaw = scope.get("realm_roles");
+            if (realmRolesRaw instanceof List<?> realmRoles) {
+                for (Object roleObj : realmRoles) {
+                    String roleName = extractKeycloakRoleName(roleObj);
+                    if (roleName != null) {
+                        patterns.add(new KeycloakRolePattern(
+                                "auth.identity.realm_access.roles", operator, roleName));
+                    }
+                }
+            }
+            Object clientRolesRaw = firstNonNull(scope.get("client_roles"), scope.get("resource_roles"));
+            if (clientRolesRaw instanceof List<?> clientRoles) {
+                for (Object clientObj : clientRoles) {
+                    if (!(clientObj instanceof Map<?, ?> clientMap)) {
+                        continue;
+                    }
+                    Map<String, Object> client = (Map<String, Object>) clientMap;
+                    Object clientNameRaw = client.get("name");
+                    if (clientNameRaw == null || clientNameRaw.toString().isBlank()) {
+                        continue;
+                    }
+                    String clientName = clientNameRaw.toString().trim();
+                    Object rolesRaw = client.get("roles");
+                    if (rolesRaw instanceof List<?> roles) {
+                        for (Object roleObj : roles) {
+                            String roleName = extractKeycloakRoleName(roleObj);
+                            if (roleName != null) {
+                                patterns.add(new KeycloakRolePattern(
+                                        "auth.identity.resource_access." + clientName + ".roles",
+                                        operator, roleName));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (patterns.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("      keycloak-role-check:\n");
+        sb.append("        patternMatching:\n");
+        sb.append("          patterns:\n");
+        for (KeycloakRolePattern pattern : patterns) {
+            sb.append("            - selector: ").append(pattern.selector()).append('\n');
+            sb.append("              operator: ").append(pattern.operator()).append('\n');
+            sb.append("              value: ").append(yamlDoubleQuoted(pattern.value())).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String extractKeycloakRoleName(Object roleObj) {
+        if (roleObj instanceof Map<?, ?> roleMap) {
+            Object name = roleMap.get("name");
+            if (name != null && !name.toString().isBlank()) {
+                return name.toString().trim();
+            }
+            return null;
+        }
+        if (roleObj != null && !roleObj.toString().isBlank()) {
+            return roleObj.toString().trim();
+        }
+        return null;
+    }
+
     /**
      * Merge a named authorization rule body (indented under {@code authorization:}) into AuthPolicy YAML.
      * Creates the {@code authorization:} map when missing; otherwise inserts as a sibling entry.
@@ -1229,7 +1694,8 @@ spec:
             package ipcheck
             import future.keywords
             cidrs := [%s]
-            client_ip := input.attributes.source.address
+            # WARNING: peer connection IP under Authorino; for end-client IP allowlists prefer AuthorizationPolicy (remoteIpBlocks).
+            client_ip := input.source.address
 %s""".formatted(cidrList, allowBody);
     }
 
@@ -1649,6 +2115,87 @@ spec:
                 .orElse(null);
     }
 
+    private Policy findContentLimitsPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "content_limits".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Resolve request or response byte limit from content_limits configuration.
+     * Accepts short keys ({@code request}/{@code response}) and aliases
+     * ({@code request_content_limit}/{@code response_content_limit}).
+     */
+    private Integer resolveContentLimitBytes(Policy policy, boolean request) {
+        if (policy == null || policy.configuration == null) {
+            return null;
+        }
+        Map<String, Object> cfg = policy.configuration;
+        Object raw = request
+                ? firstNonNull(cfg.get("request"), cfg.get("request_content_limit"))
+                : firstNonNull(cfg.get("response"), cfg.get("response_content_limit"));
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(raw.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Object firstNonNull(Object a, Object b) {
+        return a != null ? a : b;
+    }
+
+    /**
+     * Envoy buffer filter for request body byte limit (response limits are honesty-only).
+     */
+    private String generateContentLimitsEnvoyFilter(String name, String namespace, int maxRequestBytes) {
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-content-limits
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: content_limits
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: %s-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+              subFilter:
+                name: "envoy.filters.http.router"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.buffer
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+            max_request_bytes: %d
+""".formatted(name, namespace, name, name, maxRequestBytes);
+    }
+
     // ─────────────────────────────────────────────
     // URL Rewriting (path) → EnvoyFilter (Lua)
     // ─────────────────────────────────────────────
@@ -1659,9 +2206,9 @@ spec:
      * so an Istio EnvoyFilter is used to inject an envoy.filters.http.lua filter
      * that rewrites the request path.
      *
-     * 3scale regex/replace uses PCRE + ngx.re.sub syntax (\d, capture references $1).
+     * 3scale regex/replace uses PCRE + ngx.re.sub syntax (\\d, capture references $1).
      * The Envoy Lua filter can only use Lua's standard string.gsub (Lua patterns), so
-     * commonly used notations are converted on a best-effort basis (\d → %d, \w → %w, $1/\1 → %1, etc.).
+     * commonly used notations are converted on a best-effort basis (\\d → %d, \\w → %w, $1/\\1 → %1, etc.).
      * Complex PCRE constructs (lookahead, etc.) cannot be converted, so the generated
      * Lua patterns must be manually verified.
      */
@@ -2205,14 +2752,23 @@ spec:
 """.formatted(name, namespace, name, name, name);
     }
 
-    private String generateConfigMap(String name, String namespace, ApiService service, String backendUrl) {
-        String url = "";
-        if (backendUrl != null && !backendUrl.isBlank()) {
-            url = backendUrl.trim();
-        } else if (service.backends != null && !service.backends.isEmpty()) {
-            url = service.backends.get(0).privateEndpoint != null
-                    ? service.backends.get(0).privateEndpoint : "";
+    private String generateConfigMap(String name, String namespace, ApiService service,
+                                     List<ResolvedBackend> backends, boolean overrideIgnored) {
+        String primary = "";
+        if (backends != null && !backends.isEmpty()
+                && backends.get(0).privateEndpoint != null
+                && !backends.get(0).privateEndpoint.isBlank()) {
+            primary = backends.get(0).privateEndpoint.trim();
         }
+        String allUrls = backends == null ? "" : backends.stream()
+                .map(b -> b.privateEndpoint)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.joining(", "));
+        String overrideNote = overrideIgnored
+                ? "ignored-multi-backend"
+                : "not-applicable";
         return """
 apiVersion: v1
 kind: ConfigMap
@@ -2224,9 +2780,11 @@ metadata:
     migrated-from: 3scale
 data:
   backend-url: "%s"
+  backend-urls: "%s"
+  external-backend-url-override: "%s"
   service-name: "%s"
   original-3scale-service-id: "%s"
-""".formatted(name, namespace, name, url, service.name, service.id);
+""".formatted(name, namespace, name, primary, allUrls, overrideNote, service.name, service.id);
     }
 
     // ─────────────────────────────────────────────
@@ -2234,7 +2792,8 @@ data:
     // ─────────────────────────────────────────────
 
     private String generateReadme(ApiService service, String name, String namespace,
-                                  BackendType backendType, String externalHost) {
+                                  BackendType backendType, String externalHost,
+                                  List<ResolvedBackend> backends, boolean overrideIgnored) {
         String backendSection = switch (backendType) {
             case EXTERNAL -> """
 
@@ -2249,7 +2808,7 @@ The backend is an HTTPS endpoint outside the cluster.
 | serviceentry.yaml | Register the external host with Istio (ServiceEntry + ExternalName Service) |
 | destinationrule.yaml | Apply TLS (SIMPLE) for connections to the external host |
 | httproute.yaml | Rewrite the Host header to the external hostname via `URLRewrite` |
-""".formatted(externalHost);
+""".formatted(externalHost != null ? externalHost : "");
             case INTERNAL -> """
 
 ## Internal Backend (Service within OpenShift)
@@ -2261,6 +2820,32 @@ ServiceEntry, DestinationRule, and URLRewrite filters are not needed and have no
 """;
         };
 
+        boolean multiBackend = backends != null && backends.size() > 1;
+        String multiBackendNotes = "";
+        if (multiBackend) {
+            String mounts = backends.stream()
+                    .map(b -> "- `" + b.mountPath + "` → `" + b.refName + "`"
+                            + (b.privateEndpoint != null ? " (" + b.privateEndpoint + ")" : ""))
+                    .collect(Collectors.joining("\n"));
+            multiBackendNotes = """
+
+## Multiple backends (path-first)
+
+This product has %d backends. HTTPRoute rules select `backendRefs` by longest mount-path prefix match.
+Equal mounts (including blank/`/`) share weighted `backendRefs`. AuthPolicy and RateLimitPolicy still
+target the single HTTPRoute `%s-route`.
+
+%s
+""".formatted(backends.size(), name, mounts);
+            if (overrideIgnored) {
+                multiBackendNotes += """
+
+> **Note:** `externalBackendUrl` override was **ignored** because more than one backend is present.
+> Routing stays path-based across all backends.
+""";
+            }
+        }
+
         boolean hasLogging = findLoggingPolicy(service) != null;
         String loggingFile = hasLogging
                 ? "| gateway.yaml | Gateway + Istio Telemetry / EnvoyFilter (access log configuration) |\n" : "";
@@ -2270,8 +2855,15 @@ ServiceEntry, DestinationRule, and URLRewrite filters are not needed and have no
                 ? "| envoyfilter-url-rewriting.yaml | Reproduces the 3scale URL Rewriting policy via Lua filter (PCRE→Lua pattern conversion is best-effort — verify before use) |\n"
                 : "";
 
+        Policy contentLimits = findContentLimitsPolicy(service);
+        Integer requestLimit = contentLimits != null ? resolveContentLimitBytes(contentLimits, true) : null;
+        String contentLimitsFile = (requestLimit != null && requestLimit > 0)
+                ? "| envoyfilter-content-limits.yaml | Envoy buffer filter enforcing request body byte limit from 3scale content_limits |\n"
+                : "";
+
         String fileList = loggingFile
                 + urlRewritingFile
+                + contentLimitsFile
                 + (backendType == BackendType.EXTERNAL
                     ? "| serviceentry.yaml | Istio ServiceEntry + ExternalName Service for external backend |\n"
                     + "| destinationrule.yaml | TLS origination to external host |"
@@ -2308,6 +2900,7 @@ Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before a
 
         String rateLimitNotes = buildRateLimitApproximationNotes(service);
         String jwtClaimCheckNotes = buildJwtClaimCheckReadmeNotes(service);
+        String contentLimitsNotes = buildContentLimitsReadmeNotes(service);
 
         return """
 # %s - Connectivity Link Migration
@@ -2318,7 +2911,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 **Original 3scale service:** %s (ID: %s)
 **Target Namespace:** %s
 **Backend type:** %s
-%s
+%s%s
 ## Files
 
 | File | Description |
@@ -2329,7 +2922,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 | secret.yaml | Credentials (replace values before applying) |
 | configmap.yaml | Configuration data |
 %s
-%s%s%s
+%s%s%s%s
 ## Prerequisites
 - OpenShift with Connectivity Link (Kuadrant) operator
 - Gateway API CRDs
@@ -2350,16 +2943,19 @@ kubectl get httproute %s-route -n %s
 ## Notes
 - Make sure to update the credentials in `secret.yaml` before applying
 - Verify that the backend service name in `httproute.yaml` matches the actual Service name
+- AuthPolicy / RateLimitPolicy target the single HTTPRoute (`%s-route`)
 - Test in a staging environment first
 """.formatted(
             service.name, service.name, service.id, namespace,
             backendType == BackendType.EXTERNAL ? "External HTTPS" : "Internal OpenShift Service",
             backendSection,
+            multiBackendNotes,
             fileList,
             tokenIntrospectionNotes,
             rateLimitNotes,
             jwtClaimCheckNotes,
-            namespace, name, namespace, name, namespace
+            contentLimitsNotes,
+            namespace, name, namespace, name, namespace, name
         );
     }
 
@@ -2444,6 +3040,35 @@ Review the following limitations before apply:
 Liquid claim/value templates, `combine_op=or`, and path/method-gated deny semantics are not fully
 reproduced — verify authorization behavior against the original APIcast policy.
 """.formatted(bullets);
+    }
+
+    private String buildContentLimitsReadmeNotes(ApiService service) {
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits == null) {
+            return "";
+        }
+        Integer responseBytes = resolveContentLimitBytes(contentLimits, false);
+        if (responseBytes == null || responseBytes <= 0) {
+            Integer requestBytes = resolveContentLimitBytes(contentLimits, true);
+            if (requestBytes != null && requestBytes > 0) {
+                return """
+
+## Response/Request Content Limits
+
+`envoyfilter-content-limits.yaml` enforces the request body byte limit via Envoy buffer filter.
+""";
+            }
+            return "";
+        }
+        return """
+
+## WARNING: Response content limit not enforced
+
+3scale `content_limits` response / `response_content_limit` (%d bytes) is recorded on the HTTPRoute
+annotation `3scale-migration/response-content-limit` but is **not** hard-enforced in Envoy.
+Gateway API / Istio has no portable response-body size filter in this converter — verify manually
+if response size must be capped.
+""".formatted(responseBytes);
     }
 
     // ─────────────────────────────────────────────
