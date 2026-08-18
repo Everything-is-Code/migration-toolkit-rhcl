@@ -30,12 +30,20 @@ import {
 } from '@patternfly/react-core';
 import { CheckCircleIcon, TimesCircleIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import { conversionApi } from '../api/client';
+import { clusterApi, conversionApi } from '../api/client';
 import { ConversionResultItem } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { PF_DANGER, PF_SUCCESS } from '../styles/pfTokens';
 import styles from '../styles/shared.module.css';
+
+/** Match backend toKebabCase for hostname prefill: {kebab}.{clusterDomain}. */
+function toKebabName(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 interface Props {
   appState: AppState;
@@ -55,6 +63,12 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [anonymousTarget, setAnonymousTarget] = useState<'httproute' | 'gateway'>('httproute');
   const [ipCheckMode, setIpCheckMode] = useState<'authorizationPolicy' | 'authPolicyOpa'>('authorizationPolicy');
   const [includeMigratedFromLabel, setIncludeMigratedFromLabel] = useState(true);
+  const [includeTlsPolicy, setIncludeTlsPolicy] = useState(false);
+  const [tlsIssuerKind, setTlsIssuerKind] = useState('ClusterIssuer');
+  const [tlsIssuerName, setTlsIssuerName] = useState('letsencrypt-prod');
+  const [includeDnsPolicy, setIncludeDnsPolicy] = useState(false);
+  const [dnsHostname, setDnsHostname] = useState('');
+  const [dnsProviderSecretName, setDnsProviderSecretName] = useState('');
 
   // Show the corresponding target setting only when any selected service
   // has a Logging / Anonymous Access / IP Check policy enabled.
@@ -89,6 +103,15 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
         anonymousTarget,
         includeMigratedFromLabel,
         ipCheckMode,
+        includeTlsPolicy: includeTlsPolicy || undefined,
+        tlsIssuerKind: includeTlsPolicy ? tlsIssuerKind : undefined,
+        tlsIssuerName: includeTlsPolicy ? tlsIssuerName : undefined,
+        includeDnsPolicy: includeDnsPolicy || undefined,
+        dnsHostname: includeDnsPolicy ? dnsHostname || undefined : undefined,
+        dnsProviderSecretName:
+          includeDnsPolicy && dnsProviderSecretName.trim()
+            ? dnsProviderSecretName.trim()
+            : undefined,
       });
       setProgress(100);
       const convResults: ConversionResultItem[] = resp.data.results;
@@ -221,6 +244,146 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                         onChange={(_e, checked) => setIncludeMigratedFromLabel(checked)}
                       />
                     </FormGroup>
+                    <FormGroup>
+                      <Checkbox
+                        id="include-tls-policy"
+                        label={t('conversion.includeTlsPolicy', 'Generate TLSPolicy (cert-manager)')}
+                        isChecked={includeTlsPolicy}
+                        onChange={(_e, checked) => {
+                          setIncludeTlsPolicy(checked);
+                          if (checked) {
+                            setTlsIssuerKind((prev) => prev || 'ClusterIssuer');
+                            setTlsIssuerName((prev) => prev || 'letsencrypt-prod');
+                          }
+                        }}
+                        description={t(
+                          'conversion.includeTlsPolicyDesc',
+                          'Opt-in Kuadrant TLSPolicy targeting the Gateway. Requires a ClusterIssuer (default: letsencrypt-prod). Secret {name}-tls is issued by cert-manager — no Certificate CR is generated.',
+                        )}
+                      />
+                    </FormGroup>
+                    {includeTlsPolicy && (
+                      <>
+                        <FormGroup
+                          label={t('conversion.tlsIssuerKind', 'TLS issuer kind')}
+                          fieldId="tls-issuer-kind"
+                        >
+                          <TextInput
+                            id="tls-issuer-kind"
+                            value={tlsIssuerKind}
+                            onChange={(_e, val) => setTlsIssuerKind(val)}
+                            aria-label={t('conversion.tlsIssuerKind', 'TLS issuer kind')}
+                          />
+                        </FormGroup>
+                        <FormGroup
+                          label={t('conversion.tlsIssuerName', 'TLS issuer name')}
+                          fieldId="tls-issuer-name"
+                        >
+                          <TextInput
+                            id="tls-issuer-name"
+                            value={tlsIssuerName}
+                            onChange={(_e, val) => setTlsIssuerName(val)}
+                            aria-label={t('conversion.tlsIssuerName', 'TLS issuer name')}
+                          />
+                          <FormHelperText>
+                            <HelperText>
+                              <HelperTextItem>
+                                {t(
+                                  'conversion.tlsIssuerHelp',
+                                  'Prefills ClusterIssuer / letsencrypt-prod when TLSPolicy is enabled. Edit if your cluster uses a different issuer.',
+                                )}
+                              </HelperTextItem>
+                            </HelperText>
+                          </FormHelperText>
+                        </FormGroup>
+                      </>
+                    )}
+                    <FormGroup>
+                      <Checkbox
+                        id="include-dns-policy"
+                        label={t('conversion.includeDnsPolicy', 'Generate DNSPolicy + Gateway hostname')}
+                        isChecked={includeDnsPolicy}
+                        onChange={async (_e, checked) => {
+                          setIncludeDnsPolicy(checked);
+                          if (!checked) {
+                            return;
+                          }
+                          // Prefill once when enabling if the field is still empty.
+                          if (dnsHostname.trim()) {
+                            return;
+                          }
+                          const first = appState.selectedServices[0];
+                          const kebab = toKebabName(
+                            (first?.systemName || first?.name || '').trim() || 'app',
+                          );
+                          try {
+                            const res = await clusterApi.getDomain();
+                            const domain = res.data?.domain?.trim();
+                            // cluster domain already includes apps. prefix — do not add another.
+                            if (domain) {
+                              setDnsHostname(`${kebab}.${domain}`);
+                            }
+                          } catch {
+                            // Domain API failure: leave hostname empty/editable (no hard fail).
+                          }
+                        }}
+                        description={t(
+                          'conversion.includeDnsPolicyDesc',
+                          'Sets hostname on both Gateway http and https listeners and emits dnspolicy.yaml. Prefill uses {kebabName}.{clusterDomain} (domain already has apps.).',
+                        )}
+                      />
+                    </FormGroup>
+                    {includeDnsPolicy && (
+                      <>
+                        <FormGroup
+                          label={t('conversion.dnsHostname', 'Gateway hostname')}
+                          fieldId="dns-hostname"
+                          isRequired
+                        >
+                          <TextInput
+                            id="dns-hostname"
+                            value={dnsHostname}
+                            onChange={(_e, val) => setDnsHostname(val)}
+                            aria-label={t('conversion.dnsHostname', 'Gateway hostname')}
+                            placeholder="my-app.apps.cluster.example.com"
+                          />
+                          <FormHelperText>
+                            <HelperText>
+                              <HelperTextItem>
+                                {t(
+                                  'conversion.dnsHostnameHelp',
+                                  'Applied to both http and https listeners. Override the prefill if needed.',
+                                )}
+                              </HelperTextItem>
+                            </HelperText>
+                          </FormHelperText>
+                        </FormGroup>
+                        <FormGroup
+                          label={t('conversion.dnsProviderSecretName', 'DNS provider Secret name (optional)')}
+                          fieldId="dns-provider-secret"
+                        >
+                          <TextInput
+                            id="dns-provider-secret"
+                            value={dnsProviderSecretName}
+                            onChange={(_e, val) => setDnsProviderSecretName(val)}
+                            aria-label={t(
+                              'conversion.dnsProviderSecretName',
+                              'DNS provider Secret name (optional)',
+                            )}
+                          />
+                          <FormHelperText>
+                            <HelperText>
+                              <HelperTextItem>
+                                {t(
+                                  'conversion.dnsProviderSecretHelp',
+                                  'If set, DNSPolicy includes providerRefs[{name}]. If blank, omit providerRefs and rely on the cluster default-provider Secret. Never embed credentials in the package.',
+                                )}
+                              </HelperTextItem>
+                            </HelperText>
+                          </FormHelperText>
+                        </FormGroup>
+                      </>
+                    )}
                   </Form>
                 </div>
 

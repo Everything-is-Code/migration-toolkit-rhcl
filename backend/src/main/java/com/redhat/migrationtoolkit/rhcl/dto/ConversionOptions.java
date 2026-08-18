@@ -26,4 +26,37 @@ public class ConversionOptions {
      * Access-Control-* headers plus OPTIONS matches.
      */
     public boolean corsNative = false;
+
+    /**
+     * When true, emit HTTPRoute {@code rules[].retry.attempts} from 3scale retry policy.
+     * When false (default), emit EnvoyFilter retry fallback instead.
+     */
+    public boolean retriesSupported = false;
+
+    /**
+     * When true, emit Kuadrant TLSPolicy targeting the generated Gateway.
+     * Default OFF — packages unchanged until the user opts in.
+     */
+    public boolean includeTlsPolicy = false;
+
+    /** cert-manager Issuer/ClusterIssuer kind for TLSPolicy issuerRef (e.g. ClusterIssuer). */
+    public String tlsIssuerKind;
+
+    /** cert-manager Issuer/ClusterIssuer name for TLSPolicy issuerRef (e.g. letsencrypt-prod). */
+    public String tlsIssuerName;
+
+    /**
+     * When true, emit Kuadrant DNSPolicy and set Gateway listener hostnames.
+     * Default OFF — packages unchanged until the user opts in.
+     */
+    public boolean includeDnsPolicy = false;
+
+    /** Hostname applied to both Gateway http and https listeners when DNS is enabled. */
+    public String dnsHostname;
+
+    /**
+     * Optional DNS provider Secret name for DNSPolicy providerRefs.
+     * When blank, providerRefs is omitted (cluster default-provider Secret is used).
+     */
+    public String dnsProviderSecretName;
 }

@@ -293,6 +293,114 @@ class CompatibilityServiceTest {
                 && "JWT Claim Check".equals(i.name)));
     }
 
+    /**
+     * After content_limits converter lands (PR-A), DEFAULT_SUPPORTED includes
+     * Response/Request Content Limits.
+     */
+    @Test
+    void check_contentLimits_defaultSupported() {
+        Set<String> defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection",
+                "JWT Claim Check",
+                "Response/Request Content Limits");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("content_limits"));
+        CompatibilityResult result = service.check(svc, defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Response/Request Content Limits".equals(i.name)));
+    }
+
+    /**
+     * After retry converter lands (PR-B), DEFAULT_SUPPORTED includes Retry.
+     */
+    @Test
+    void check_retry_defaultSupported() {
+        Set<String> defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection",
+                "JWT Claim Check",
+                "Response/Request Content Limits",
+                "Retry");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("retry"));
+        CompatibilityResult result = service.check(svc, defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Retry".equals(i.name)));
+    }
+
+    /**
+     * After keycloak converter lands (PR-C), DEFAULT_SUPPORTED includes RH-SSO/Keycloak Role Check
+     * and KUADRANT_BOUND includes keycloak_role_check.
+     */
+    @Test
+    void check_keycloakRoleCheck_defaultSupported() {
+        Set<String> defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection",
+                "JWT Claim Check",
+                "Response/Request Content Limits",
+                "Retry",
+                "RH-SSO/Keycloak Role Check");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("keycloak_role_check"));
+        CompatibilityResult result = service.check(svc, defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "RH-SSO/Keycloak Role Check".equals(i.name)));
+    }
+
+    @Test
+    void check_keycloakRoleCheck_withoutKuadrant_warnsKuadrantBound() {
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.corsNative = true;
+        caps.kuadrantPresent = false;
+        caps.ossmPresent = true;
+        caps.ossmMatchesOcp = true;
+        caps.timeoutsSupported = true;
+
+        ApiService svc = basicService();
+        svc.authentication = auth("none");
+        svc.policies = List.of(enabledPolicy("keycloak_role_check"));
+        CompatibilityResult result = service.check(svc, Set.of("RH-SSO/Keycloak Role Check"), caps);
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "Kuadrant / RHCL".equals(i.name)
+                && "kuadrantPresent".equals(i.capability)),
+                "keycloak_role_check must be KUADRANT_BOUND");
+    }
+
     @Test
     void check_customSupportedListWithoutCors_stillWarns() {
         // User override / saved custom list without CORS must keep WARNING until reset.
@@ -438,6 +546,36 @@ class CompatibilityServiceTest {
         svc.backends = List.of(b);
         CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)));
+    }
+
+    @Test
+    void check_multipleBackends_emitsWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Backend a = backend("https://a.example.com");
+        a.name = "A";
+        Backend b = backend("https://b.example.com");
+        b.name = "B";
+        svc.backends = List.of(a, b);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
+        assertTrue(result.items.stream().anyMatch(i ->
+                "WARNING".equals(i.status)
+                        && i.name != null
+                        && i.name.toLowerCase().contains("multiple")
+                        && i.name.toLowerCase().contains("backend")));
+    }
+
+    @Test
+    void check_singleBackend_noMultipleBackendsWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(backend("https://only.example.com"));
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
+        assertTrue(result.items.stream().noneMatch(i ->
+                "WARNING".equals(i.status)
+                        && i.name != null
+                        && i.name.toLowerCase().contains("multiple")
+                        && i.name.toLowerCase().contains("backend")));
     }
 
     // ── Score and level calculation ───────────────────────────────────────────
