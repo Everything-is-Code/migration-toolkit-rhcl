@@ -10,7 +10,9 @@ import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Metric;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.RestClientBuilder;
 import org.jboss.logging.Logger;
 
@@ -38,11 +40,17 @@ public class ThreeScaleExportService {
 
     private static final Logger LOG = Logger.getLogger(ThreeScaleExportService.class);
 
-    /** Page size for Admin API list endpoints. */
-    static final int LIST_PAGE_SIZE = 500;
+    /** Page size for Admin API list endpoints (shared with {@link ThreeScaleClient} @DefaultValue). */
+    static final int LIST_PAGE_SIZE = ConversionConstants.LIST_PAGE_SIZE;
 
     /** Max wait for list-enrich virtual-thread pool shutdown. */
     static final long LIST_ENRICH_TERMINATION_SECONDS = 60;
+
+    @ConfigProperty(name = "threescale.connect-timeout")
+    int connectTimeoutSeconds;
+
+    @ConfigProperty(name = "threescale.detect-timeout")
+    int detectTimeoutSeconds;
 
     public boolean testConnection(ConnectionRequest req) {
         try {
@@ -63,12 +71,12 @@ public class ThreeScaleExportService {
         try {
             String accountUrl = url.replaceAll("/+$", "") + "/admin/api/account.json?access_token=" + accessToken;
             HttpClient httpClient = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
+                    .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
                     .followRedirects(HttpClient.Redirect.NORMAL)
                     .build();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(new URI(accountUrl))
-                    .timeout(Duration.ofSeconds(5))
+                    .timeout(Duration.ofSeconds(connectTimeoutSeconds))
                     .GET()
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -95,7 +103,7 @@ public class ThreeScaleExportService {
             String dashboardUrl = url.replaceAll("/+$", "") + "/p/admin/dashboard";
             HttpRequest dashRequest = HttpRequest.newBuilder()
                     .uri(new URI(dashboardUrl + "?access_token=" + accessToken))
-                    .timeout(Duration.ofSeconds(8))
+                    .timeout(Duration.ofSeconds(detectTimeoutSeconds))
                     .GET()
                     .build();
             HttpResponse<String> dashResponse = httpClient.send(dashRequest, HttpResponse.BodyHandlers.ofString());

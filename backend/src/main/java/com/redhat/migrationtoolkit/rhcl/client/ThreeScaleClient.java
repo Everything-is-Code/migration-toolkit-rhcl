@@ -8,6 +8,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
+import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import java.util.List;
 import java.util.Map;
 
@@ -19,7 +20,7 @@ public interface ThreeScaleClient {
     @Path("/admin/api/services.json")
     Map<String, Object> getServices(@QueryParam("access_token") String accessToken,
                                      @QueryParam("page") @DefaultValue("1") int page,
-                                     @QueryParam("per_page") @DefaultValue("500") int perPage);
+                                     @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/services/{serviceId}.json")
@@ -30,7 +31,7 @@ public interface ThreeScaleClient {
     @Path("/admin/api/backends.json")
     Map<String, Object> getBackends(@QueryParam("access_token") String accessToken,
                                      @QueryParam("page") @DefaultValue("1") int page,
-                                     @QueryParam("per_page") @DefaultValue("500") int perPage);
+                                     @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/services/{serviceId}/backend_usages.json")
@@ -67,7 +68,7 @@ public interface ThreeScaleClient {
     Map<String, Object> getApplications(@PathParam("serviceId") String serviceId,
                                          @QueryParam("access_token") String accessToken,
                                          @QueryParam("page") @DefaultValue("1") int page,
-                                         @QueryParam("per_page") @DefaultValue("500") int perPage);
+                                         @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/applications/{applicationId}/keys.json")

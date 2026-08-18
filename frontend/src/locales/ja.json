@@ -135,6 +135,7 @@
     "backendType": "バックエンド設定",
     "externalBackend": "バックエンドはクラスター外部のサービス (AWS ECS / 外部 HTTPS エンドポイント)",
     "externalBackendUrl": "外部バックエンド URL",
+    "externalBackendUrlPlaceholder": "",
     "externalBackendUrlHelp": "例: https://foo.ecs.us-east-2.on.aws",
     "externalNote": "外部サービス向けに以下のリソースが追加生成されます：",
     "externalNoteEnvoy": "<code>envoyfilter.yaml</code> — Istio Gateway の Envoy に外部 HTTPS cluster を直接注入（STRICT_DNS + TLS SNI）",

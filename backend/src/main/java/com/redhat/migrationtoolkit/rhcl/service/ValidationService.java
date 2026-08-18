@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ValidationResult;
 import com.redhat.migrationtoolkit.rhcl.dto.ValidationResult.ValidationItem;
+import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 import org.yaml.snakeyaml.Yaml;
@@ -178,7 +179,7 @@ public class ValidationService {
                 }
             }
 
-            if (content.contains("REPLACE_ME")) {
+            if (content.contains(ConversionConstants.CREDENTIAL_PLACEHOLDER)) {
                 items.add(new ValidationItem("Secret Values: " + filename, "WARNING",
                         "Contains placeholder values - update before applying"));
             }
