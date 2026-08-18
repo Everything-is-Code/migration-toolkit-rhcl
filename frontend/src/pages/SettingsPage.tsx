@@ -11,6 +11,8 @@ import {
 } from '@patternfly/react-core';
 import { CogIcon } from '@patternfly/react-icons';
 import { TIMEZONE_OPTIONS, getSavedTimezoneValue, setTimezone } from '../utils/timezone';
+import { PF_COLOR_MUTED, PF_FONT_SIZE_XS, PF_SPACER_MD } from '../styles/pfTokens';
+import styles from '../styles/shared.module.css';
 
 const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
@@ -27,10 +29,10 @@ const SettingsPage: React.FC = () => {
   return (
     <div style={{ padding: '24px 32px', maxWidth: 720 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-        <CogIcon style={{ fontSize: '1.8rem', color: '#6a6e73' }} />
+        <CogIcon style={{ fontSize: '1.8rem', color: PF_COLOR_MUTED }} />
         <Title headingLevel="h1" size="xl">{t('settings.title')}</Title>
       </div>
-      <p style={{ color: '#6a6e73', marginBottom: 24 }}>{t('settings.subtitle')}</p>
+      <p className={styles.mutedText} style={{ marginBottom: PF_SPACER_MD }}>{t('settings.subtitle')}</p>
 
       {saved && (
         <Alert variant="success" isInline title={t('settings.saved')} style={{ marginBottom: 16 }} />
@@ -57,7 +59,7 @@ const SettingsPage: React.FC = () => {
               })}
             </FormSelect>
           </FormGroup>
-          <p style={{ fontSize: 12, color: '#6a6e73', marginTop: 8 }}>
+          <p className={styles.mutedText} style={{ fontSize: PF_FONT_SIZE_XS, marginTop: 8 }}>
             {t('settings.timezoneHint')}
           </p>
         </CardBody>
