@@ -86,6 +86,9 @@ class DtoTest {
         assertFalse(opts.includeTlsPolicy, "TLSPolicy opt-in must default OFF");
         assertNull(opts.tlsIssuerKind);
         assertNull(opts.tlsIssuerName);
+        assertFalse(opts.includeDnsPolicy, "DNSPolicy opt-in must default OFF");
+        assertNull(opts.dnsHostname);
+        assertNull(opts.dnsProviderSecretName);
     }
 
     // ── ValidationResult ─────────────────────────────────────────────────────

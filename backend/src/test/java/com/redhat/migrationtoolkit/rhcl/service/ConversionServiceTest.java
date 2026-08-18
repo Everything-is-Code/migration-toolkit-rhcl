@@ -1633,6 +1633,82 @@ class ConversionServiceTest {
         assertFalse(off.containsKey("tlspolicy.yaml"));
     }
 
+    // ── DNSPolicy + Gateway hostname (issue #21 / PR2) ────────────────────────
+
+    @Test
+    void convert_dnsPolicyOffByDefault_noDnsArtifacts() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        Map<String, String> files = service.convert(svc, "ns", null, new ConversionOptions());
+        assertFalse(files.containsKey("dnspolicy.yaml"));
+        String gw = files.get("gateway.yaml");
+        assertFalse(gw.contains("hostname:"),
+                "Gateway listeners must omit DNS hostname when DNSPolicy is OFF");
+    }
+
+    @Test
+    void convert_dnsPolicyOn_setsHostnameOnBothListenersAndEmitsDnsPolicy() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        ConversionOptions opts = new ConversionOptions();
+        opts.includeDnsPolicy = true;
+        opts.dnsHostname = "my-api.apps.cluster.example.com";
+        opts.dnsProviderSecretName = "my-dns-secret";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String gw = files.get("gateway.yaml");
+        assertTrue(gw.contains("hostname: my-api.apps.cluster.example.com"));
+        // Both http and https listeners must carry hostname
+        int hostnameCount = gw.split("hostname: my-api.apps.cluster.example.com", -1).length - 1;
+        assertEquals(2, hostnameCount, "hostname must appear on both http and https listeners");
+
+        assertTrue(files.containsKey("dnspolicy.yaml"));
+        String dns = files.get("dnspolicy.yaml");
+        assertTrue(dns.contains("apiVersion: kuadrant.io/v1"));
+        assertTrue(dns.contains("kind: DNSPolicy"));
+        assertTrue(dns.contains("name: my-api-dns-policy"));
+        assertTrue(dns.contains("name: my-api-gateway"));
+        assertTrue(dns.contains("providerRefs:"));
+        assertTrue(dns.contains("name: my-dns-secret"));
+        assertFalse(dns.toLowerCase().contains("accesskey"));
+        assertFalse(dns.toLowerCase().contains("secretkey"));
+        assertFalse(dns.contains("AWS_ACCESS"));
+    }
+
+    @Test
+    void convert_dnsPolicyOn_omitsProviderRefsWhenSecretBlank() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        ConversionOptions opts = new ConversionOptions();
+        opts.includeDnsPolicy = true;
+        opts.dnsHostname = "app.apps.cluster.example.com";
+        opts.dnsProviderSecretName = "  ";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertTrue(files.containsKey("dnspolicy.yaml"));
+        String dns = files.get("dnspolicy.yaml");
+        assertFalse(dns.contains("providerRefs"),
+                "blank provider secret name must omit providerRefs (use cluster default-provider)");
+        assertTrue(dns.contains("name: my-api-gateway"));
+    }
+
+    @Test
+    void convert_dnsPolicyOn_destinationRuleUnchanged() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        String backend = "https://api.external.example.com";
+
+        Map<String, String> off = service.convert(svc, "ns", backend, new ConversionOptions());
+        ConversionOptions onOpts = new ConversionOptions();
+        onOpts.includeDnsPolicy = true;
+        onOpts.dnsHostname = "my-api.apps.cluster.example.com";
+        Map<String, String> on = service.convert(svc, "ns", backend, onOpts);
+
+        assertEquals(off.get("destinationrule.yaml"), on.get("destinationrule.yaml"));
+        assertTrue(on.containsKey("dnspolicy.yaml"));
+        assertFalse(off.containsKey("dnspolicy.yaml"));
+    }
+
     private ApiService basicService(String name, String systemName) {
         ApiService svc = new ApiService();
         svc.id = "svc-1";

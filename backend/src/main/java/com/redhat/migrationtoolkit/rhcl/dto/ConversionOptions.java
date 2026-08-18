@@ -38,4 +38,19 @@ public class ConversionOptions {
 
     /** cert-manager Issuer/ClusterIssuer name for TLSPolicy issuerRef (e.g. letsencrypt-prod). */
     public String tlsIssuerName;
+
+    /**
+     * When true, emit Kuadrant DNSPolicy and set Gateway listener hostnames.
+     * Default OFF — packages unchanged until the user opts in.
+     */
+    public boolean includeDnsPolicy = false;
+
+    /** Hostname applied to both Gateway http and https listeners when DNS is enabled. */
+    public String dnsHostname;
+
+    /**
+     * Optional DNS provider Secret name for DNSPolicy providerRefs.
+     * When blank, providerRefs is omitted (cluster default-provider Secret is used).
+     */
+    public String dnsProviderSecretName;
 }
