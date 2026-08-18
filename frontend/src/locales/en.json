@@ -132,6 +132,7 @@
     "ariaResult": "Conversion results",
     "btnNext": "Next: YAML Preview",
     "errorConvert": "Conversion failed: {{message}}",
+    "errorDnsHostnameRequired": "Gateway hostname is required when DNSPolicy generation is enabled.",
     "backendType": "Backend Configuration",
     "externalBackend": "Backend is an external service (AWS ECS / external HTTPS endpoint)",
     "externalBackendUrl": "External Backend URL",

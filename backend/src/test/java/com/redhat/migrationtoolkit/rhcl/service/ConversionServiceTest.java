@@ -1709,6 +1709,43 @@ class ConversionServiceTest {
         assertFalse(off.containsKey("dnspolicy.yaml"));
     }
 
+    @Test
+    void convert_dnsPolicyOn_blankHostname_skipsDnsArtifacts() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        ConversionOptions opts = new ConversionOptions();
+        opts.includeDnsPolicy = true;
+        opts.dnsHostname = "   ";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertFalse(files.containsKey("dnspolicy.yaml"),
+                "Blank dnsHostname must not emit inert dnspolicy.yaml");
+        String gw = files.get("gateway.yaml");
+        assertFalse(gw.contains("hostname:"),
+                "Blank dnsHostname must not set Gateway hostname");
+        assertFalse(files.get("README.md").contains("dnspolicy.yaml"),
+                "README must not list dnspolicy when not emitted");
+    }
+
+    @Test
+    void convert_tlsAndDns_readmeListsPolicyFilesWhenEmitted() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        ConversionOptions opts = new ConversionOptions();
+        opts.includeTlsPolicy = true;
+        opts.tlsIssuerKind = "ClusterIssuer";
+        opts.tlsIssuerName = "letsencrypt-prod";
+        opts.includeDnsPolicy = true;
+        opts.dnsHostname = "my-api.apps.cluster.example.com";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("| tlspolicy.yaml |"),
+                "README Files table must list tlspolicy.yaml: " + readme);
+        assertTrue(readme.contains("| dnspolicy.yaml |"),
+                "README Files table must list dnspolicy.yaml: " + readme);
+    }
+
     private ApiService basicService(String name, String systemName) {
         ApiService svc = new ApiService();
         svc.id = "svc-1";

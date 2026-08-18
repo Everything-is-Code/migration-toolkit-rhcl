@@ -62,6 +62,13 @@ public class ConversionController {
     public Response convert(@Valid ConversionRequest request) {
         String namespace = request.namespace != null ? request.namespace : "default";
 
+        if (Boolean.TRUE.equals(request.includeDnsPolicy)
+                && (request.dnsHostname == null || request.dnsHostname.isBlank())) {
+            return Response.status(400).entity(Map.of(
+                    "error", "dnsHostname is required when includeDnsPolicy is true"
+            )).build();
+        }
+
         ProjectEntity project = new ProjectEntity();
         project.name = "Migration-" + System.currentTimeMillis();
         project.threescaleUrl = request.threescaleUrl;

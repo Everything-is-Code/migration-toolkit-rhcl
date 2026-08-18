@@ -88,6 +88,13 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
     setProgress(10);
 
     try {
+      if (includeDnsPolicy && !dnsHostname.trim()) {
+        setError(t(
+          'conversion.errorDnsHostnameRequired',
+          'Gateway hostname is required when DNSPolicy generation is enabled.',
+        ));
+        return;
+      }
       const supportedPolicies = await loadSupportedPolicies();
       const resp = await conversionApi.convert({
         threescaleUrl: appState.connection.url,
@@ -105,7 +112,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
         tlsIssuerKind: includeTlsPolicy ? tlsIssuerKind : undefined,
         tlsIssuerName: includeTlsPolicy ? tlsIssuerName : undefined,
         includeDnsPolicy: includeDnsPolicy || undefined,
-        dnsHostname: includeDnsPolicy ? dnsHostname || undefined : undefined,
+        dnsHostname: includeDnsPolicy ? dnsHostname.trim() || undefined : undefined,
         dnsProviderSecretName:
           includeDnsPolicy && dnsProviderSecretName.trim()
             ? dnsProviderSecretName.trim()
