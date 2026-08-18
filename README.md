@@ -345,6 +345,11 @@ Resources generated via the `from-3scale-to-connectivity-link` adapter:
 
 > Replace `REPLACE_ME` placeholders in `secret.yaml` with actual values before applying.
 
+**IP check (AuthPolicy OPA mode)**: When `ipCheckMode=authPolicyOpa`, generated Rego binds
+the peer connection IP via Authorino WellKnown `input.source.address` (see
+`testdata/authorino-authorization-json-ip.json`). For production **end-client** IP
+allowlists, prefer the default `authorizationPolicy` mode (Istio `remoteIpBlocks`).
+
 **External backend detection**: If the "backend is an external service" checkbox is left
 unchecked, the backend type is no longer inferred only from that checkbox — it also falls
 back to the backend URL already registered in 3scale (`service.backends[0].privateEndpoint`),

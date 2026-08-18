@@ -783,8 +783,12 @@ class ConversionServiceTest {
         String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
 
         assertNotNull(policy);
-        assertTrue(policy.contains("input.attributes.source.address"),
-                "OPA Rego must use Envoy source.address (non-spoofable)");
+        assertTrue(policy.contains("input.source.address"),
+                "OPA Rego must use Authorino WellKnown input.source.address");
+        assertFalse(policy.contains("input.attributes.source.address"),
+                "OPA Rego must not use Envoy input.attributes.source.address");
+        assertFalse(policy.contains("input.attributes"),
+                "OPA Rego must not bind client IP via input.attributes");
         assertFalse(policy.contains("x-forwarded-for"),
                 "OPA Rego must not use spoofable X-Forwarded-For header");
         assertFalse(policy.contains("X-Forwarded-For"));
@@ -801,7 +805,12 @@ class ConversionServiceTest {
         String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
 
         assertNotNull(policy);
-        assertTrue(policy.contains("input.attributes.source.address"));
+        assertTrue(policy.contains("input.source.address"),
+                "OPA Rego must use Authorino WellKnown input.source.address");
+        assertFalse(policy.contains("input.attributes.source.address"),
+                "OPA Rego must not use Envoy input.attributes.source.address");
+        assertFalse(policy.contains("input.attributes"),
+                "OPA Rego must not bind client IP via input.attributes");
         assertFalse(policy.contains("x-forwarded-for"));
         assertTrue(policy.contains("denied") || policy.contains("not denied"),
                 "blacklist path must still emit deny Rego");

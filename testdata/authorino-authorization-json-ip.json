@@ -1,0 +1,26 @@
+{
+  "context": {
+    "deadline": "2026-01-01T00:00:00Z",
+    "namespace": "example-ns"
+  },
+  "request": {
+    "http": {
+      "method": "GET",
+      "path": "/api",
+      "host": "api.example.com",
+      "headers": {
+        "authorization": "Bearer example-token"
+      }
+    }
+  },
+  "source": {
+    "address": "192.0.2.10"
+  },
+  "destination": {
+    "address": "10.0.0.5",
+    "port": 8080
+  },
+  "auth": {
+    "identity": {}
+  }
+}
