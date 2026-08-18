@@ -77,6 +77,9 @@ export const conversionApi = {
     includeTlsPolicy?: boolean;
     tlsIssuerKind?: string;
     tlsIssuerName?: string;
+    includeDnsPolicy?: boolean;
+    dnsHostname?: string;
+    dnsProviderSecretName?: string;
   }) => api.post('/api/convert', data),
 };
 

@@ -35,11 +35,11 @@ import { useNavigate } from 'react-router-dom';
 import { clusterProfileI18nKey, shouldShowClusterVersionsCard } from './clusterCapabilityUi';
 import { clearPersistedConnection } from '../utils/appStateStorage';
 import {
-  PF_COLOR_MUTED,
   PF_FONT_SIZE_SM,
   PF_SPACER_MD,
   PF_SPACER_SM,
 } from '../styles/pfTokens';
+import shared from '../styles/shared.module.css';
 
 interface Props {
   appState: AppState;
@@ -231,7 +231,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('connection.title')}</Title>
-        <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED }}>
+        <p className={shared.pageDescription}>
           {t('connection.description')}
         </p>
       </PageSection>
@@ -379,7 +379,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   {versionsLoading ? t('connection.versionsRefreshing') : t('connection.btnRefreshVersions')}
                 </Button>
               </div>
-              <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: PF_FONT_SIZE_SM }}>
+              <p className={shared.mutedText} style={{ marginTop: PF_SPACER_SM, fontSize: PF_FONT_SIZE_SM }}>
                 {t('connection.versionsDescription')}
               </p>
 
@@ -415,7 +415,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               </FormGroup>
 
               {versionsLoading && !versions ? (
-                <div style={{ textAlign: 'center', padding: PF_SPACER_MD }}>
+                <div className={shared.centeredBlock} style={{ padding: PF_SPACER_MD }}>
                   <Spinner size="md" /> {t('connection.versionsLoading')}
                 </div>
               ) : versions ? (
@@ -448,7 +448,7 @@ const ConnectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       <DescriptionListDescription>
                         {displayOrDash(versions.ossm)}
                         {versions.ossmExpectedForOcp && (
-                          <span style={{ marginLeft: PF_SPACER_SM, color: PF_COLOR_MUTED, fontSize: PF_FONT_SIZE_SM }}>
+                          <span className={shared.mutedText} style={{ marginLeft: PF_SPACER_SM, fontSize: PF_FONT_SIZE_SM }}>
                             ({t('connection.ossmExpected', { version: versions.ossmExpectedForOcp })})
                           </span>
                         )}

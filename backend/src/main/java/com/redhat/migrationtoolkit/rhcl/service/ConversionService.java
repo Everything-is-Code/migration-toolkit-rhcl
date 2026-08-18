@@ -99,8 +99,10 @@ public class ConversionService {
                 .findFirst()
                 .orElse(null);
 
-        files.put("gateway.yaml", generateGateway(name, namespace));
-        files.put("httproute.yaml", generateHttpRoute(name, namespace, service, resolved, opts.corsNative));
+        files.put("gateway.yaml", generateGateway(name, namespace,
+                opts.includeDnsPolicy ? opts.dnsHostname : null));
+        files.put("httproute.yaml", generateHttpRoute(
+                name, namespace, service, resolved, opts.corsNative, opts.retriesSupported));
         files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
         files.put("configmap.yaml",  generateConfigMap(name, namespace, service, resolved, overrideIgnored));
@@ -148,6 +150,23 @@ public class ConversionService {
             }
         }
 
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits != null) {
+            Integer requestBytes = resolveContentLimitBytes(contentLimits, true);
+            if (requestBytes != null && requestBytes > 0) {
+                files.put("envoyfilter-content-limits.yaml",
+                        generateContentLimitsEnvoyFilter(name, namespace, requestBytes));
+            }
+        }
+
+        if (!opts.retriesSupported) {
+            Integer retries = resolveRetryAttempts(findRetryPolicy(service));
+            if (retries != null && retries > 0) {
+                files.put("envoyfilter-retry.yaml",
+                        generateRetryEnvoyFilter(name, namespace, retries));
+            }
+        }
+
         Policy ipCheck = findIpCheckPolicy(service);
         if (ipCheck != null && "authorizationPolicy".equals(ipCheckMode)) {
             files.put("authorizationpolicy.yaml",
@@ -162,6 +181,11 @@ public class ConversionService {
         if (opts.includeTlsPolicy) {
             files.put("tlspolicy.yaml",
                     generateTlsPolicy(name, namespace, opts.tlsIssuerKind, opts.tlsIssuerName));
+        }
+
+        if (opts.includeDnsPolicy) {
+            files.put("dnspolicy.yaml",
+                    generateDnsPolicy(name, namespace, opts.dnsProviderSecretName));
         }
 
         files.put("README.md", generateReadme(service, name, namespace, primaryType, primaryExternalHost,
@@ -405,6 +429,13 @@ public class ConversionService {
     // ─────────────────────────────────────────────
 
     private String generateGateway(String name, String namespace) {
+        return generateGateway(name, namespace, null);
+    }
+
+    private String generateGateway(String name, String namespace, String hostname) {
+        String hostnameLine = (hostname != null && !hostname.isBlank())
+                ? "\n      hostname: " + hostname.trim()
+                : "";
         return """
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -419,13 +450,13 @@ spec:
   listeners:
     - name: http
       protocol: HTTP
-      port: %d
+      port: %d%s
       allowedRoutes:
         namespaces:
           from: Same
     - name: https
       protocol: HTTPS
-      port: %d
+      port: %d%s
       tls:
         mode: Terminate
         certificateRefs:
@@ -434,8 +465,8 @@ spec:
         namespaces:
           from: Same
 """.formatted(name, namespace, name,
-                ConversionConstants.DEFAULT_HTTP_PORT,
-                ConversionConstants.DEFAULT_HTTPS_PORT,
+                ConversionConstants.DEFAULT_HTTP_PORT, hostnameLine,
+                ConversionConstants.DEFAULT_HTTPS_PORT, hostnameLine,
                 name);
     }
 
@@ -469,12 +500,42 @@ spec:
     }
 
     // ─────────────────────────────────────────────
+    // DNSPolicy (Kuadrant)
+    // ─────────────────────────────────────────────
+
+    private String generateDnsPolicy(String name, String namespace, String providerSecretName) {
+        String providerBlock = "";
+        if (providerSecretName != null && !providerSecretName.isBlank()) {
+            providerBlock = """
+  providerRefs:
+    - name: %s
+""".formatted(providerSecretName.trim());
+        }
+        return """
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: %s-dns-policy
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: %s-gateway
+%s""".formatted(name, namespace, name, name, providerBlock);
+    }
+
+    // ─────────────────────────────────────────────
     // HTTPRoute
     // ─────────────────────────────────────────────
 
     private String generateHttpRoute(String name, String namespace, ApiService service,
-                                     List<ResolvedBackend> backends, boolean corsNative) {
-        String annotations = buildUpstreamAnnotations(service);
+                                     List<ResolvedBackend> backends, boolean corsNative,
+                                     boolean retriesSupported) {
+        String annotations = buildHttpRouteAnnotations(service);
         StringBuilder sb = new StringBuilder();
         sb.append("""
 apiVersion: gateway.networking.k8s.io/v1
@@ -494,6 +555,7 @@ metadata:
 """.formatted(name, namespace, name, annotations, name, namespace));
 
         String timeoutsBlock = buildTimeoutsBlock(service);
+        String retryBlock = retriesSupported ? buildRetryBlock(service) : "";
         boolean hasCors = findCorsPolicy(service) != null;
         LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
         String sharedFilters = buildHeaderModificationFilters(service) + buildCorsFilters(service, corsNative);
@@ -523,8 +585,8 @@ metadata:
             type: PathPrefix
             value: "%s"
           method: %s
-%s%s      backendRefs:
-%s""".formatted(path, method, filtersBlock, timeoutsBlock, formatBackendRefs(selected)));
+%s%s%s      backendRefs:
+%s""".formatted(path, method, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
             }
         } else {
             pathsForOptions.add("/");
@@ -535,8 +597,8 @@ metadata:
         - path:
             type: PathPrefix
             value: "/"
-%s%s      backendRefs:
-%s""".formatted(filtersBlock, timeoutsBlock, formatBackendRefs(selected)));
+%s%s%s      backendRefs:
+%s""".formatted(filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
         }
 
         // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
@@ -561,8 +623,8 @@ metadata:
             type: PathPrefix
             value: "%s"
           method: OPTIONS
-%s%s      backendRefs:
-%s""".formatted(path, filtersBlock, timeoutsBlock, formatBackendRefs(selected)));
+%s%s%s      backendRefs:
+%s""".formatted(path, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
             }
         }
         return sb.toString();
@@ -995,6 +1057,85 @@ metadata:
         return "";
     }
 
+    private Policy findRetryPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "retry".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Map 3scale {@code retry.configuration.retries} → HTTPRoute {@code retry.attempts}.
+     * Ignores {@code retry_on} and {@code per_try_timeout} (no portable GAPI mapping).
+     */
+    private String buildRetryBlock(ApiService service) {
+        Integer attempts = resolveRetryAttempts(findRetryPolicy(service));
+        if (attempts == null || attempts <= 0) {
+            return "";
+        }
+        return """
+      retry:
+        attempts: %d
+""".formatted(attempts);
+    }
+
+    private Integer resolveRetryAttempts(Policy retryPolicy) {
+        if (retryPolicy == null || retryPolicy.configuration == null) {
+            return null;
+        }
+        Object raw = retryPolicy.configuration.get("retries");
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(raw.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Envoy route retry_policy fallback when Gateway API HTTPRoute retry is unavailable.
+     */
+    private String generateRetryEnvoyFilter(String name, String namespace, int numRetries) {
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-retry
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: retry
+    3scale-migration/note: "HTTPRoute retry unsupported on this cluster — Envoy route retry_policy fallback"
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: %s-gateway
+  configPatches:
+    - applyTo: HTTP_ROUTE
+      match:
+        context: GATEWAY
+      patch:
+        operation: MERGE
+        value:
+          route:
+            retry_policy:
+              retry_on: "5xx,reset,connect-failure,refused-stream"
+              num_retries: %d
+""".formatted(name, namespace, name, name, numRetries);
+    }
+
     /**
      * Return the upstream_connection send_timeout as an annotation (attached to HTTPRoute metadata).
      */
@@ -1017,11 +1158,33 @@ metadata:
                 return "";
             }
             return """
-  annotations:
     3scale-migration/upstream-send-timeout: "%ss"
 """.formatted(sendRaw);
         }
         return "";
+    }
+
+    /**
+     * Combine HTTPRoute metadata annotations (upstream send_timeout + content_limits response gap).
+     */
+    private String buildHttpRouteAnnotations(ApiService service) {
+        StringBuilder body = new StringBuilder();
+        String upstream = buildUpstreamAnnotations(service);
+        if (!upstream.isBlank()) {
+            body.append(upstream);
+        }
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits != null) {
+            Integer responseBytes = resolveContentLimitBytes(contentLimits, false);
+            if (responseBytes != null && responseBytes > 0) {
+                body.append(String.format(
+                        "    3scale-migration/response-content-limit: \"%d\"%n", responseBytes));
+            }
+        }
+        if (body.length() == 0) {
+            return "";
+        }
+        return "  annotations:\n" + body;
     }
 
     // ─────────────────────────────────────────────
@@ -1237,7 +1400,9 @@ spec:
     private String finalizeAuthPolicyAuthorization(String authPolicyYaml, ApiService service,
                                                     String ipCheckMode) {
         return appendIpCheckOpaIfNeeded(
-                appendJwtClaimCheckAuthorization(authPolicyYaml, service), service, ipCheckMode);
+                appendKeycloakRoleCheckAuthorization(
+                        appendJwtClaimCheckAuthorization(authPolicyYaml, service), service),
+                service, ipCheckMode);
     }
 
     /**
@@ -1391,6 +1556,127 @@ spec:
             return authPolicyYaml;
         }
         return mergeAuthorizationNamedRules(authPolicyYaml, namedRule);
+    }
+
+    private Policy findKeycloakRoleCheckPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "keycloak_role_check".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private record KeycloakRolePattern(String selector, String operator, String value) {}
+
+    /**
+     * Append AuthPolicy {@code keycloak-role-check} patternMatching for realm/resource roles.
+     * Skips with WARN when authentication is not JWT.
+     */
+    private String appendKeycloakRoleCheckAuthorization(String authPolicyYaml, ApiService service) {
+        Policy keycloak = findKeycloakRoleCheckPolicy(service);
+        if (keycloak == null) {
+            return authPolicyYaml;
+        }
+        String authType = service.authentication != null ? service.authentication.type : "none";
+        if (!"jwt".equals(authType)) {
+            LOG.warnf("keycloak_role_check enabled but authentication is '%s' (not jwt) — skipping AuthPolicy role rule",
+                    authType);
+            return authPolicyYaml;
+        }
+        String namedRule = buildKeycloakRoleCheckNamedRule(keycloak);
+        if (namedRule.isEmpty()) {
+            return authPolicyYaml;
+        }
+        return mergeAuthorizationNamedRules(authPolicyYaml, namedRule);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String buildKeycloakRoleCheckNamedRule(Policy policy) {
+        if (policy == null || policy.configuration == null) {
+            return "";
+        }
+        Map<String, Object> cfg = policy.configuration;
+        String checkType = String.valueOf(cfg.getOrDefault("type", "whitelist")).trim().toLowerCase(Locale.ROOT);
+        boolean blacklist = "blacklist".equals(checkType);
+        String operator = blacklist ? "excl" : "incl";
+
+        List<KeycloakRolePattern> patterns = new ArrayList<>();
+        Object scopesRaw = cfg.get("scopes");
+        if (!(scopesRaw instanceof List<?> scopes)) {
+            return "";
+        }
+        for (Object scopeObj : scopes) {
+            if (!(scopeObj instanceof Map<?, ?> scopeMap)) {
+                continue;
+            }
+            Map<String, Object> scope = (Map<String, Object>) scopeMap;
+            Object realmRolesRaw = scope.get("realm_roles");
+            if (realmRolesRaw instanceof List<?> realmRoles) {
+                for (Object roleObj : realmRoles) {
+                    String roleName = extractKeycloakRoleName(roleObj);
+                    if (roleName != null) {
+                        patterns.add(new KeycloakRolePattern(
+                                "auth.identity.realm_access.roles", operator, roleName));
+                    }
+                }
+            }
+            Object clientRolesRaw = firstNonNull(scope.get("client_roles"), scope.get("resource_roles"));
+            if (clientRolesRaw instanceof List<?> clientRoles) {
+                for (Object clientObj : clientRoles) {
+                    if (!(clientObj instanceof Map<?, ?> clientMap)) {
+                        continue;
+                    }
+                    Map<String, Object> client = (Map<String, Object>) clientMap;
+                    Object clientNameRaw = client.get("name");
+                    if (clientNameRaw == null || clientNameRaw.toString().isBlank()) {
+                        continue;
+                    }
+                    String clientName = clientNameRaw.toString().trim();
+                    Object rolesRaw = client.get("roles");
+                    if (rolesRaw instanceof List<?> roles) {
+                        for (Object roleObj : roles) {
+                            String roleName = extractKeycloakRoleName(roleObj);
+                            if (roleName != null) {
+                                patterns.add(new KeycloakRolePattern(
+                                        "auth.identity.resource_access." + clientName + ".roles",
+                                        operator, roleName));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (patterns.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("      keycloak-role-check:\n");
+        sb.append("        patternMatching:\n");
+        sb.append("          patterns:\n");
+        for (KeycloakRolePattern pattern : patterns) {
+            sb.append("            - selector: ").append(pattern.selector()).append('\n');
+            sb.append("              operator: ").append(pattern.operator()).append('\n');
+            sb.append("              value: ").append(yamlDoubleQuoted(pattern.value())).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String extractKeycloakRoleName(Object roleObj) {
+        if (roleObj instanceof Map<?, ?> roleMap) {
+            Object name = roleMap.get("name");
+            if (name != null && !name.toString().isBlank()) {
+                return name.toString().trim();
+            }
+            return null;
+        }
+        if (roleObj != null && !roleObj.toString().isBlank()) {
+            return roleObj.toString().trim();
+        }
+        return null;
     }
 
     /**
@@ -1893,6 +2179,87 @@ spec:
                 .orElse(null);
     }
 
+    private Policy findContentLimitsPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "content_limits".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Resolve request or response byte limit from content_limits configuration.
+     * Accepts short keys ({@code request}/{@code response}) and aliases
+     * ({@code request_content_limit}/{@code response_content_limit}).
+     */
+    private Integer resolveContentLimitBytes(Policy policy, boolean request) {
+        if (policy == null || policy.configuration == null) {
+            return null;
+        }
+        Map<String, Object> cfg = policy.configuration;
+        Object raw = request
+                ? firstNonNull(cfg.get("request"), cfg.get("request_content_limit"))
+                : firstNonNull(cfg.get("response"), cfg.get("response_content_limit"));
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(raw.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Object firstNonNull(Object a, Object b) {
+        return a != null ? a : b;
+    }
+
+    /**
+     * Envoy buffer filter for request body byte limit (response limits are honesty-only).
+     */
+    private String generateContentLimitsEnvoyFilter(String name, String namespace, int maxRequestBytes) {
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-content-limits
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: content_limits
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: %s-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+              subFilter:
+                name: "envoy.filters.http.router"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.buffer
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+            max_request_bytes: %d
+""".formatted(name, namespace, name, name, maxRequestBytes);
+    }
+
     // ─────────────────────────────────────────────
     // URL Rewriting (path) → EnvoyFilter (Lua)
     // ─────────────────────────────────────────────
@@ -1903,9 +2270,9 @@ spec:
      * so an Istio EnvoyFilter is used to inject an envoy.filters.http.lua filter
      * that rewrites the request path.
      *
-     * 3scale regex/replace uses PCRE + ngx.re.sub syntax (\d, capture references $1).
+     * 3scale regex/replace uses PCRE + ngx.re.sub syntax (\\d, capture references $1).
      * The Envoy Lua filter can only use Lua's standard string.gsub (Lua patterns), so
-     * commonly used notations are converted on a best-effort basis (\d → %d, \w → %w, $1/\1 → %1, etc.).
+     * commonly used notations are converted on a best-effort basis (\\d → %d, \\w → %w, $1/\\1 → %1, etc.).
      * Complex PCRE constructs (lookahead, etc.) cannot be converted, so the generated
      * Lua patterns must be manually verified.
      */
@@ -2577,8 +2944,15 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
                 ? "| envoyfilter-url-rewriting.yaml | Reproduces the 3scale URL Rewriting policy via Lua filter (PCRE→Lua pattern conversion is best-effort — verify before use) |\n"
                 : "";
 
+        Policy contentLimits = findContentLimitsPolicy(service);
+        Integer requestLimit = contentLimits != null ? resolveContentLimitBytes(contentLimits, true) : null;
+        String contentLimitsFile = (requestLimit != null && requestLimit > 0)
+                ? "| envoyfilter-content-limits.yaml | Envoy buffer filter enforcing request body byte limit from 3scale content_limits |\n"
+                : "";
+
         String fileList = loggingFile
                 + urlRewritingFile
+                + contentLimitsFile
                 + (backendType == BackendType.EXTERNAL
                     ? "| serviceentry.yaml | Istio ServiceEntry + ExternalName Service for external backend |\n"
                     + "| destinationrule.yaml | TLS origination to external host |"
@@ -2615,6 +2989,7 @@ Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before a
 
         String rateLimitNotes = buildRateLimitApproximationNotes(service);
         String jwtClaimCheckNotes = buildJwtClaimCheckReadmeNotes(service);
+        String contentLimitsNotes = buildContentLimitsReadmeNotes(service);
 
         return """
 # %s - Connectivity Link Migration
@@ -2636,7 +3011,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 | secret.yaml | Credentials (replace values before applying) |
 | configmap.yaml | Configuration data |
 %s
-%s%s%s
+%s%s%s%s
 ## Prerequisites
 - OpenShift with Connectivity Link (Kuadrant) operator
 - Gateway API CRDs
@@ -2668,6 +3043,7 @@ kubectl get httproute %s-route -n %s
             tokenIntrospectionNotes,
             rateLimitNotes,
             jwtClaimCheckNotes,
+            contentLimitsNotes,
             namespace, name, namespace, name, namespace, name
         );
     }
@@ -2753,6 +3129,35 @@ Review the following limitations before apply:
 Liquid claim/value templates, `combine_op=or`, and path/method-gated deny semantics are not fully
 reproduced — verify authorization behavior against the original APIcast policy.
 """.formatted(bullets);
+    }
+
+    private String buildContentLimitsReadmeNotes(ApiService service) {
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits == null) {
+            return "";
+        }
+        Integer responseBytes = resolveContentLimitBytes(contentLimits, false);
+        if (responseBytes == null || responseBytes <= 0) {
+            Integer requestBytes = resolveContentLimitBytes(contentLimits, true);
+            if (requestBytes != null && requestBytes > 0) {
+                return """
+
+## Response/Request Content Limits
+
+`envoyfilter-content-limits.yaml` enforces the request body byte limit via Envoy buffer filter.
+""";
+            }
+            return "";
+        }
+        return """
+
+## WARNING: Response content limit not enforced
+
+3scale `content_limits` response / `response_content_limit` (%d bytes) is recorded on the HTTPRoute
+annotation `3scale-migration/response-content-limit` but is **not** hard-enforced in Envoy.
+Gateway API / Istio has no portable response-body size filter in this converter — verify manually
+if response size must be capped.
+""".formatted(responseBytes);
     }
 
     // ─────────────────────────────────────────────

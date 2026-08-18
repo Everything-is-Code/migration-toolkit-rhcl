@@ -19,6 +19,8 @@ import { validationApi } from '../api/client';
 import { ValidationResult } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import { PF_DANGER, PF_SUCCESS, PF_WARNING } from '../styles/pfTokens';
+import styles from '../styles/shared.module.css';
 
 interface Props {
   appState: AppState;
@@ -27,9 +29,9 @@ interface Props {
 
 const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   switch (status) {
-    case 'OK': return <CheckCircleIcon color="#3e8635" />;
-    case 'WARNING': return <ExclamationTriangleIcon color="#f0ab00" />;
-    case 'ERROR': return <TimesCircleIcon color="#c9190b" />;
+    case 'OK': return <CheckCircleIcon color={PF_SUCCESS} />;
+    case 'WARNING': return <ExclamationTriangleIcon color={PF_WARNING} />;
+    case 'ERROR': return <TimesCircleIcon color={PF_DANGER} />;
     default: return null;
   }
 };
@@ -79,7 +81,7 @@ const ValidationPage: React.FC<Props> = ({ appState }) => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('validation.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+        <p className={styles.pageDescription}>
           {t('validation.description')}
         </p>
       </PageSection>
@@ -112,8 +114,8 @@ const ValidationPage: React.FC<Props> = ({ appState }) => {
                 <CardTitle>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     {result.valid
-                      ? <CheckCircleIcon color="#3e8635" />
-                      : <TimesCircleIcon color="#c9190b" />}
+                      ? <CheckCircleIcon color={PF_SUCCESS} />
+                      : <TimesCircleIcon color={PF_DANGER} />}
                     <Title headingLevel="h3" size="lg">{service}</Title>
                     <Label color={result.valid ? 'green' : 'red'}>
                       {result.valid ? 'VALID' : 'INVALID'}
@@ -122,25 +124,25 @@ const ValidationPage: React.FC<Props> = ({ appState }) => {
                 </CardTitle>
                 <CardBody>
                   <Stack hasGutter>
-                    {result.items.map((item, i) => (
+                    {result.items.map((item, i) => {
+                      const statusClass =
+                        item.status === 'OK'
+                          ? styles.statusOk
+                          : item.status === 'WARNING'
+                            ? styles.statusWarning
+                            : styles.statusError;
+                      return (
                       <StackItem key={i}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '12px',
-                          padding: '8px 12px',
-                          borderRadius: '4px',
-                          background: item.status === 'OK' ? '#f4f4f4' :
-                            item.status === 'WARNING' ? '#fff7e6' : '#fdf2f2',
-                        }}>
+                        <div className={`${styles.statusRow} ${statusClass}`}>
                           <StatusIcon status={item.status} />
                           <div>
                             <strong>{item.check}</strong>
-                            <span style={{ marginLeft: '8px', color: '#6a6e73' }}>{item.message}</span>
+                            <span className={styles.mutedText} style={{ marginLeft: '8px' }}>{item.message}</span>
                           </div>
                         </div>
                       </StackItem>
-                    ))}
+                      );
+                    })}
                   </Stack>
                 </CardBody>
               </Card>
@@ -148,7 +150,7 @@ const ValidationPage: React.FC<Props> = ({ appState }) => {
           ))}
 
           <StackItem>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div className={styles.actionRow}>
               <Button variant="secondary" onClick={() => navigate('/yaml')}>{t('validation.btnBack')}</Button>
               <Button
                 variant="primary"

@@ -1,0 +1,61 @@
+.policyPanel {
+  margin-top: var(--pf-v5-global--spacer--sm);
+  padding: var(--pf-v5-global--spacer--sm) var(--pf-v5-global--spacer--md);
+  background: var(--pf-v5-global--BackgroundColor--200);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+}
+
+.policyPanelTitle {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  font-weight: 600;
+  color: var(--pf-v5-global--Color--200);
+  margin-bottom: var(--pf-v5-global--spacer--xs);
+}
+
+.policyCode {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  background: var(--pf-v5-global--BackgroundColor--100);
+  border: 1px solid var(--pf-v5-global--BorderColor--100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  padding: 1px 5px;
+}
+
+.policyMeta {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  color: var(--pf-v5-global--Color--400);
+}
+
+.policyConfigLine {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  color: var(--pf-v5-global--Color--100);
+  line-height: 1.6;
+}
+
+.listHeader {
+  pointer-events: none;
+  background: var(--pf-v5-global--BackgroundColor--200);
+  border-left: 3px solid transparent;
+  cursor: default;
+}
+
+.colHeader {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  font-weight: 600;
+  color: var(--pf-v5-global--Color--200);
+  text-transform: uppercase;
+}
+
+.serviceRow {
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+
+.serviceRow.isSelected {
+  background: var(--pf-v5-global--palette--blue-50);
+  border-left: 3px solid var(--pf-v5-global--primary-color--100);
+}
+
+.publishedBadge {
+  background-color: var(--pf-v5-global--success-color--100);
+}

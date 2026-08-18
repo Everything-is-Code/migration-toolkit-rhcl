@@ -75,6 +75,7 @@ export interface ClusterCapabilities {
   ossmPresent: boolean;
   ossmMatchesOcp: boolean;
   timeoutsSupported: boolean;
+  retriesSupported: boolean;
 }
 
 /** Profile override for cluster version resolution. */
@@ -119,6 +120,9 @@ export interface ConversionRequest {
   includeTlsPolicy?: boolean;
   tlsIssuerKind?: string;
   tlsIssuerName?: string;
+  includeDnsPolicy?: boolean;
+  dnsHostname?: string;
+  dnsProviderSecretName?: string;
 }
 
 export interface ConversionResultItem {

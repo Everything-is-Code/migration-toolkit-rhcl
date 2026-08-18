@@ -57,6 +57,7 @@ import {
   ClusterProfile,
 } from './api/types';
 import { loadPersistedConnection, savePersistedConnection } from './utils/appStateStorage';
+import styles from './App.module.css';
 
 /* ── Root-level Error Boundary ──
    Even if a page component crashes,
@@ -80,22 +81,16 @@ class RouteErrorBoundary extends Component<{ children: ReactNode }, EBState> {
     if (this.state.hasError) {
       return (
         <div style={{ padding: '32px' }}>
-          <div style={{
-            background: '#fff1f1', border: '1px solid #c9190b', borderRadius: '6px',
-            padding: '20px 24px',
-          }}>
-            <p style={{ margin: 0, fontWeight: 700, color: '#c9190b', fontSize: '15px' }}>
+          <div className={styles.errorBanner}>
+            <p className={styles.errorTitle}>
               {i18next.t('app.errorTitle')}
             </p>
-            <p style={{ margin: '8px 0 0', fontFamily: 'monospace', fontSize: '13px', color: '#3c3f42', wordBreak: 'break-word' }}>
+            <p className={styles.errorMessage}>
               {this.state.message}
             </p>
             <button
               onClick={() => this.setState({ hasError: false, message: '', path: '' })}
-              style={{
-                marginTop: '14px', padding: '6px 16px', fontSize: '13px', cursor: 'pointer',
-                background: '#c9190b', color: '#fff', border: 'none', borderRadius: '4px',
-              }}
+              className={styles.errorRetry}
             >
               {i18next.t('app.btnRetry')}
             </button>
@@ -140,18 +135,11 @@ const LangSwitcher: React.FC = () => {
       onClick={() => setLanguage(lang)}
       aria-pressed={current === lang}
       aria-label={ariaLabel}
-      style={{
-        padding: '4px 12px',
-        fontSize: '13px',
-        fontWeight: current === lang ? 700 : 400,
-        color: current === lang ? '#ffffff' : '#b8bbbe',
-        background: current === lang ? '#ee0000' : 'transparent',
-        border: `1px solid ${current === lang ? '#ee0000' : '#6a6e73'}`,
-        borderRadius: lang === 'ja' ? '4px 0 0 4px' : '0 4px 4px 0',
-        cursor: 'pointer',
-        transition: 'all 0.15s',
-        lineHeight: '1.4',
-      }}
+      className={[
+        styles.langButton,
+        current === lang ? styles.isActive : '',
+        lang === 'ja' ? styles.langButtonJa : styles.langButtonEn,
+      ].filter(Boolean).join(' ')}
     >
       {label}
     </button>
@@ -188,10 +176,7 @@ const RHHatIcon: React.FC<{ size?: number }> = ({ size = 32 }) => (
 const RedHatLogo: React.FC = () => (
   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
     <RHHatIcon size={30} />
-    <span style={{
-      fontFamily: "'Red Hat Display','Liberation Sans','Arial Black',sans-serif",
-      fontSize: '15px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.2px',
-    }}>
+    <span className={styles.brandWordmark}>
       Red Hat
     </span>
   </div>
@@ -201,17 +186,7 @@ const RedHatLogo: React.FC = () => (
 const Footer: React.FC = () => {
   const { t } = useTranslation();
   return (
-  <div style={{
-    borderTop: '1px solid #3c3f42',
-    padding: '12px 24px',
-    background: '#212427',
-    color: '#8a8d90',
-    fontSize: '12px',
-    display: 'flex',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    gap: '16px',
-  }}>
+  <div className={styles.footer}>
     <span>{t('app.copyright')}</span>
   </div>
   );
@@ -371,7 +346,7 @@ const AppContent: React.FC = () => {
           <ToolbarContent>
             <ToolbarItem>
               <TextContent>
-                <Text component={TextVariants.p} style={{ color: '#ffffff', fontSize: '14px', fontWeight: 500, marginLeft: '16px' }}>
+                <Text component={TextVariants.p} className={styles.appTitle}>
                   {t('nav.appTitle')}
                 </Text>
               </TextContent>
@@ -379,7 +354,7 @@ const AppContent: React.FC = () => {
             <ToolbarItem align={{ default: 'alignRight' }}>
               {appState.connection.connected && (
                 <TextContent>
-                  <Text component={TextVariants.small} style={{ color: '#8a8d90', marginRight: '16px' }}>
+                  <Text component={TextVariants.small} className={styles.connectedHint}>
                     {t('nav.connected', { url: appState.connection.url })}
                   </Text>
                 </TextContent>

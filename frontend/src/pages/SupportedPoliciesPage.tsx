@@ -12,6 +12,7 @@ import {
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '../api/client';
+import styles from '../styles/shared.module.css';
 
 export const ALL_POLICIES = [
   '3scale APIcast',
@@ -50,7 +51,7 @@ export const ALL_POLICIES = [
   'URL Rewriting with Captures',
 ];
 
-export const DEFAULT_SUPPORTED_POLICIES = ['3scale APIcast', 'Header Modification', 'Upstream Connection', 'Logging', 'Anonymous Access', 'URL Rewriting', '3scale Auth Caching', 'CORS Request Handling', 'IP Check', 'Edge Limiting', 'OAuth 2.0 Token Introspection', 'JWT Claim Check'];
+export const DEFAULT_SUPPORTED_POLICIES = ['3scale APIcast', 'Header Modification', 'Upstream Connection', 'Logging', 'Anonymous Access', 'URL Rewriting', '3scale Auth Caching', 'CORS Request Handling', 'IP Check', 'Edge Limiting', 'OAuth 2.0 Token Introspection', 'JWT Claim Check', 'Response/Request Content Limits', 'Retry', 'RH-SSO/Keycloak Role Check'];
 const SETTINGS_KEY = 'supportedPolicies';
 
 export async function loadSupportedPolicies(): Promise<string[]> {
@@ -102,7 +103,7 @@ const SupportedPoliciesPage: React.FC = () => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('supportedPolicies.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+        <p className={styles.pageDescription}>
           {t('supportedPolicies.description')}
         </p>
       </PageSection>
@@ -116,7 +117,7 @@ const SupportedPoliciesPage: React.FC = () => {
         <Card>
           <CardBody>
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div className={styles.centeredBlock}>
                 <Spinner size="xl" />
               </div>
             ) : (
@@ -132,7 +133,7 @@ const SupportedPoliciesPage: React.FC = () => {
                     />
                   ))}
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div className={styles.actionRow}>
                   <Button variant="primary" onClick={handleSave}>{t('supportedPolicies.btnSave')}</Button>
                   <Button variant="secondary" onClick={handleReset}>{t('supportedPolicies.btnReset')}</Button>
                 </div>
