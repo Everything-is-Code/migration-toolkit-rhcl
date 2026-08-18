@@ -30,6 +30,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.backend.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -45,17 +49,17 @@ spec:
             - name: DB_NAME
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "migration-toolkit-rhcl.fullname" . }}-config
+                  name: {{ include "migration-toolkit-rhcl.dbSecretName" . }}
                   key: DB_NAME
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "migration-toolkit-rhcl.fullname" . }}-config
+                  name: {{ include "migration-toolkit-rhcl.dbSecretName" . }}
                   key: DB_USER
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "migration-toolkit-rhcl.fullname" . }}-config
+                  name: {{ include "migration-toolkit-rhcl.dbSecretName" . }}
                   key: DB_PASSWORD
             {{- if .Values.backend.threescale.defaultUrl }}
             - name: THREESCALE_DEFAULT_URL
@@ -68,6 +72,10 @@ spec:
                   name: {{ include "migration-toolkit-rhcl.fullname" . }}-config
                   key: THREESCALE_DEFAULT_TOKEN
             {{- end }}
+          {{- with .Values.backend.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           readinessProbe:
             httpGet:
               path: /q/health/ready

@@ -783,8 +783,12 @@ class ConversionServiceTest {
         String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
 
         assertNotNull(policy);
-        assertTrue(policy.contains("input.attributes.source.address"),
-                "OPA Rego must use Envoy source.address (non-spoofable)");
+        assertTrue(policy.contains("input.source.address"),
+                "OPA Rego must use Authorino WellKnown input.source.address");
+        assertFalse(policy.contains("input.attributes.source.address"),
+                "OPA Rego must not use Envoy input.attributes.source.address");
+        assertFalse(policy.contains("input.attributes"),
+                "OPA Rego must not bind client IP via input.attributes");
         assertFalse(policy.contains("x-forwarded-for"),
                 "OPA Rego must not use spoofable X-Forwarded-For header");
         assertFalse(policy.contains("X-Forwarded-For"));
@@ -801,7 +805,12 @@ class ConversionServiceTest {
         String policy = service.convert(svc, "ns", null, opts).get("policy.yaml");
 
         assertNotNull(policy);
-        assertTrue(policy.contains("input.attributes.source.address"));
+        assertTrue(policy.contains("input.source.address"),
+                "OPA Rego must use Authorino WellKnown input.source.address");
+        assertFalse(policy.contains("input.attributes.source.address"),
+                "OPA Rego must not use Envoy input.attributes.source.address");
+        assertFalse(policy.contains("input.attributes"),
+                "OPA Rego must not bind client IP via input.attributes");
         assertFalse(policy.contains("x-forwarded-for"));
         assertTrue(policy.contains("denied") || policy.contains("not denied"),
                 "blacklist path must still emit deny Rego");
@@ -1414,6 +1423,156 @@ class ConversionServiceTest {
                 "authorizationPolicy mode must not put OPA ip-check in AuthPolicy");
     }
 
+    // ── Multi-backend path-first conversion (#28) ─────────────────────────────
+
+    @Test
+    void convert_multiBackend_distinctMounts_mapToMatchingRefs() {
+        ApiService svc = basicService("Multi API", "multi-api");
+        svc.authentication = auth("jwt");
+        Backend orders = backend("orders", "orders", "https://orders.example.com", "/orders");
+        Backend catalog = backend("catalog", "catalog", "https://catalog.example.com", "/catalog");
+        svc.backends = List.of(orders, catalog);
+        svc.mappingRules = List.of(
+                mappingRule("GET", "/orders/list"),
+                mappingRule("GET", "/catalog/items"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String route = files.get("httproute.yaml");
+        assertNotNull(route);
+        assertTrue(route.contains("multi-api-orders-backend"),
+                "Orders path should ref orders backend: " + route);
+        assertTrue(route.contains("multi-api-catalog-backend"),
+                "Catalog path should ref catalog backend: " + route);
+        String policy = files.get("policy.yaml");
+        assertTrue(policy.contains("name: multi-api-route")
+                        || policy.contains("multi-api-route"),
+                "Auth must still target the single HTTPRoute");
+        assertFalse(policy.contains("orders-backend") && policy.contains("targetRef")
+                        && policy.contains("catalog-backend"),
+                "Auth must not split targetRefs across backends");
+    }
+
+    @Test
+    void convert_multiBackend_blankPath_normalizesToRootAndCollidesWithWeights() {
+        ApiService svc = basicService("Root API", "root-api");
+        svc.authentication = auth("jwt");
+        Backend a = backend("a", "alpha", "https://a.example.com", null);
+        Backend b = backend("b", "beta", "https://b.example.com", "  ");
+        a.weight = 2;
+        b.weight = 3;
+        svc.backends = List.of(a, b);
+        svc.mappingRules = List.of(mappingRule("GET", "/anything"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("root-api-alpha-backend"));
+        assertTrue(route.contains("root-api-beta-backend"));
+        assertTrue(route.contains("weight: 2") || route.contains("weight: 3"),
+                "Colliding mounts must emit weights: " + route);
+    }
+
+    @Test
+    void convert_multiBackend_external_emitsMultiDocSeAndDrWithSystemNames() {
+        ApiService svc = basicService("Ext Multi", "ext-multi");
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(
+                backend("Orders", "orders", "https://orders.example.com", "/orders"),
+                backend("Pay", "pay", "https://pay.example.com", "/pay"));
+        svc.mappingRules = List.of(
+                mappingRule("GET", "/orders"),
+                mappingRule("GET", "/pay"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String se = files.get("serviceentry.yaml");
+        String dr = files.get("destinationrule.yaml");
+        assertNotNull(se);
+        assertNotNull(dr);
+        assertTrue(se.contains("---"), "SE must be multi-doc: " + se);
+        assertTrue(dr.contains("---"), "DR must be multi-doc: " + dr);
+        assertTrue(se.contains("ext-multi-orders-external"));
+        assertTrue(se.contains("ext-multi-pay-external"));
+        assertTrue(se.contains("ext-multi-orders-backend"));
+        assertTrue(se.contains("ext-multi-pay-backend"));
+        assertTrue(dr.contains("ext-multi-orders-backend-tls"));
+        assertTrue(dr.contains("ext-multi-pay-backend-tls"));
+    }
+
+    @Test
+    void convert_singleBackend_keepsLegacyBackendServiceName() {
+        ApiService svc = basicService("Solo", "solo");
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(backend("Only", "only", "https://only.example.com", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/api"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("solo-backend"),
+                "Single-backend must keep {svc}-backend naming: " + route);
+        assertFalse(route.contains("solo-only-backend"),
+                "Must not include systemName in single-backend ref name");
+        String se = files.get("serviceentry.yaml");
+        assertTrue(se.contains("name: solo-external"));
+        assertFalse(se.contains("solo-only-external"));
+    }
+
+    @Test
+    void convert_overrideIgnoredWhenMultipleBackends_keepsPathRouting() {
+        ApiService svc = basicService("Override Multi", "ovr-multi");
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(
+                backend("A", "a", "https://a.example.com", "/a"),
+                backend("B", "b", "https://b.example.com", "/b"));
+        svc.mappingRules = List.of(
+                mappingRule("GET", "/a/x"),
+                mappingRule("GET", "/b/y"));
+
+        Map<String, String> files = service.convert(svc, "ns", "https://override.example.com");
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("ovr-multi-a-backend"));
+        assertTrue(route.contains("ovr-multi-b-backend"));
+        assertFalse(route.contains("override.example.com"),
+                "Override host must not collapse multi-backend routing");
+        String cm = files.get("configmap.yaml");
+        assertTrue(cm.toLowerCase().contains("ignored") || cm.contains("override"),
+                "ConfigMap must note override ignored: " + cm);
+        String readme = files.get("README.md");
+        assertTrue(readme.toLowerCase().contains("ignored")
+                        || readme.toLowerCase().contains("override"),
+                "README must document override ignore: " + readme);
+    }
+
+    @Test
+    void convert_overrideStillWinsWhenSingleBackend() {
+        ApiService svc = basicService("Override Solo", "ovr-solo");
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(backend("Only", "only", "https://only.example.com", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/api"));
+
+        Map<String, String> files = service.convert(svc, "ns", "https://override.example.com");
+        String se = files.get("serviceentry.yaml");
+        assertTrue(se.contains("override.example.com"));
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("URLRewrite") && route.contains("override.example.com"));
+    }
+
+    @Test
+    void convert_multiBackend_doesNotSilentlyDropNonFirstBackend() {
+        ApiService svc = basicService("No Drop", "no-drop");
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(
+                backend("First", "first", "https://first.example.com", "/first"),
+                backend("Second", "second", "https://second.example.com", "/second"));
+        svc.mappingRules = List.of(
+                mappingRule("GET", "/first"),
+                mappingRule("GET", "/second"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String joined = String.join("\n", files.values());
+        assertTrue(joined.contains("first.example.com"));
+        assertTrue(joined.contains("second.example.com"));
+        assertTrue(joined.contains("no-drop-second-backend"));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     // ── TLSPolicy (issue #21 / PR1) ───────────────────────────────────────────
@@ -1562,6 +1721,22 @@ class ConversionServiceTest {
         Authentication a = new Authentication();
         a.type = type;
         return a;
+    }
+
+    private Backend backend(String name, String systemName, String endpoint, String path) {
+        Backend b = new Backend();
+        b.name = name;
+        b.systemName = systemName;
+        b.privateEndpoint = endpoint;
+        b.path = path;
+        return b;
+    }
+
+    private MappingRule mappingRule(String method, String pattern) {
+        MappingRule r = new MappingRule();
+        r.httpMethod = method;
+        r.pattern = pattern;
+        return r;
     }
 
     private Policy headerPolicy(String name, String header, String value) {
