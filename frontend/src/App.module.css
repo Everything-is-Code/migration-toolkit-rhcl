@@ -16,7 +16,7 @@
   margin: 8px 0 0;
   font-family: var(--pf-v5-global--FontFamily--monospace);
   font-size: var(--pf-v5-global--FontSize--sm);
-  color: var(--pf-v5-global--Color--100);
+  color: var(--pf-v5-global--Color--300);
   word-break: break-word;
 }
 
@@ -35,7 +35,7 @@
   padding: 4px 12px;
   font-size: var(--pf-v5-global--FontSize--sm);
   font-weight: 400;
-  color: var(--pf-v5-global--Color--light-200);
+  color: var(--pf-v5-global--Color--light-300);
   background: transparent;
   border: 1px solid var(--pf-v5-global--Color--200);
   cursor: pointer;
@@ -67,9 +67,9 @@
 }
 
 .footer {
-  border-top: 1px solid var(--pf-v5-global--BorderColor--dark-100);
+  border-top: 1px solid var(--pf-v5-global--Color--300);
   padding: 12px 24px;
-  background: var(--pf-v5-global--BackgroundColor--dark-200);
+  background: var(--pf-v5-global--BackgroundColor--dark-300);
   color: var(--pf-v5-global--Color--400);
   font-size: var(--pf-v5-global--FontSize--xs);
   display: flex;
