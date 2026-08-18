@@ -1,0 +1,47 @@
+.pageDescription {
+  margin-top: var(--pf-v5-global--spacer--sm);
+  color: var(--pf-v5-global--Color--200);
+  white-space: pre-line;
+}
+
+.mutedHint {
+  color: var(--pf-v5-global--Color--200);
+}
+
+.policyHighlight {
+  color: var(--pf-v5-global--palette--orange-300);
+}
+
+.modifiedDot {
+  margin-left: 6px;
+  color: var(--pf-v5-global--warning-color--100);
+  font-size: 10px;
+}
+
+.resetButton {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  color: var(--pf-v5-global--Color--200);
+  padding: 2px 8px;
+}
+
+.editor {
+  width: 100%;
+  min-height: 420px;
+  background: var(--pf-v5-global--palette--black-900);
+  color: var(--pf-v5-global--Color--light-200);
+  font-family: var(--pf-v5-global--FontFamily--monospace);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  border: 1px solid var(--pf-v5-global--BorderColor--dark-100);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  padding: var(--pf-v5-global--spacer--md);
+  overflow: auto;
+}
+
+.editor.isModified {
+  border-color: var(--pf-v5-global--warning-color--100);
+}
+
+.lineMeta {
+  font-size: var(--pf-v5-global--FontSize--xs);
+  color: var(--pf-v5-global--Color--200);
+}
