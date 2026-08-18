@@ -132,6 +132,7 @@
     "ariaResult": "変換結果",
     "btnNext": "次へ: YAMLプレビュー",
     "errorConvert": "変換処理に失敗しました: {{message}}",
+    "errorDnsHostnameRequired": "DNSPolicy を生成する場合は Gateway hostname が必須です。",
     "backendType": "バックエンド設定",
     "externalBackend": "バックエンドはクラスター外部のサービス (AWS ECS / 外部 HTTPS エンドポイント)",
     "externalBackendUrl": "外部バックエンド URL",

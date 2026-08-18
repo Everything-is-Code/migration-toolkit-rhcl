@@ -100,7 +100,7 @@ public class ConversionService {
                 .orElse(null);
 
         files.put("gateway.yaml", generateGateway(name, namespace,
-                opts.includeDnsPolicy ? opts.dnsHostname : null));
+                emitDnsPolicy(opts) ? opts.dnsHostname.trim() : null));
         files.put("httproute.yaml", generateHttpRoute(
                 name, namespace, service, resolved, opts.corsNative, opts.retriesSupported));
         files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
@@ -183,18 +183,29 @@ public class ConversionService {
                     generateTlsPolicy(name, namespace, opts.tlsIssuerKind, opts.tlsIssuerName));
         }
 
-        if (opts.includeDnsPolicy) {
+        if (emitDnsPolicy(opts)) {
             files.put("dnspolicy.yaml",
                     generateDnsPolicy(name, namespace, opts.dnsProviderSecretName));
+        } else if (opts.includeDnsPolicy) {
+            LOG.warnf(
+                    "includeDnsPolicy set but dnsHostname blank/null; skipping dnspolicy.yaml and Gateway hostname");
         }
 
         files.put("README.md", generateReadme(service, name, namespace, primaryType, primaryExternalHost,
-                resolved, overrideIgnored));
+                resolved, overrideIgnored, opts.includeTlsPolicy, emitDnsPolicy(opts)));
 
         if (!includeMigratedFromLabel) {
             files.replaceAll((fileName, content) -> stripMigratedFromLabel(content));
         }
         return files;
+    }
+
+    /** True when DNSPolicy opt-in is on and hostname is non-blank (avoids inert CRs). */
+    static boolean emitDnsPolicy(ConversionOptions opts) {
+        return opts != null
+                && opts.includeDnsPolicy
+                && opts.dnsHostname != null
+                && !opts.dnsHostname.isBlank();
     }
 
     /**
@@ -2857,7 +2868,8 @@ data:
 
     private String generateReadme(ApiService service, String name, String namespace,
                                   BackendType backendType, String externalHost,
-                                  List<ResolvedBackend> backends, boolean overrideIgnored) {
+                                  List<ResolvedBackend> backends, boolean overrideIgnored,
+                                  boolean includeTlsPolicy, boolean includeDnsPolicy) {
         List<String> externalHosts = backends == null ? List.of() : backends.stream()
                 .filter(b -> b.type == BackendType.EXTERNAL && b.externalHost != null)
                 .map(b -> b.externalHost)
@@ -2944,6 +2956,12 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
                 ? "| envoyfilter-url-rewriting.yaml | Reproduces the 3scale URL Rewriting policy via Lua filter (PCRE→Lua pattern conversion is best-effort — verify before use) |\n"
                 : "";
 
+        String tlsFile = includeTlsPolicy
+                ? "| tlspolicy.yaml | Kuadrant TLSPolicy (cert-manager issuerRef on Gateway) |\n"
+                : "";
+        String dnsFile = includeDnsPolicy
+                ? "| dnspolicy.yaml | Kuadrant DNSPolicy targeting the Gateway |\n"
+                : "";
         Policy contentLimits = findContentLimitsPolicy(service);
         Integer requestLimit = contentLimits != null ? resolveContentLimitBytes(contentLimits, true) : null;
         String contentLimitsFile = (requestLimit != null && requestLimit > 0)
@@ -2952,6 +2970,8 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
 
         String fileList = loggingFile
                 + urlRewritingFile
+                + tlsFile
+                + dnsFile
                 + contentLimitsFile
                 + (backendType == BackendType.EXTERNAL
                     ? "| serviceentry.yaml | Istio ServiceEntry + ExternalName Service for external backend |\n"
