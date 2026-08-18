@@ -1,0 +1,108 @@
+{{- if .Values.networkPolicy.enabled }}
+{{/*
+Stock NetworkPolicies (optional). Default networkPolicy.enabled=false.
+Allows: OpenShift router → frontend:8080, frontend → backend:8080, backend → postgresql:5432.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "migration-toolkit-rhcl.frontend" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "migration-toolkit-rhcl.frontend" . }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: {{ include "migration-toolkit-rhcl.backend" . }}
+      ports:
+        - protocol: TCP
+          port: 8080
+    # DNS (CoreDNS / OpenShift DNS)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "migration-toolkit-rhcl.backend" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "migration-toolkit-rhcl.backend" . }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {{ include "migration-toolkit-rhcl.frontend" . }}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    {{- if .Values.postgresql.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- if .Values.postgresql.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "migration-toolkit-rhcl.postgresql" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {{ include "migration-toolkit-rhcl.backend" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}
+{{- end }}
