@@ -1801,6 +1801,72 @@ class ConversionServiceTest {
         assertTrue(joined.contains("no-drop-second-backend"));
     }
 
+    @Test
+    void convert_multiBackend_collidingKebabNames_areDisambiguated() {
+        ApiService svc = basicService("Collide", "collide");
+        svc.authentication = auth("jwt");
+        // Distinct display names, but kebab(systemName) collides after toKebabCase
+        svc.backends = List.of(
+                backend("Orders A", "Orders_API", "https://a.example.com", "/a"),
+                backend("Orders B", "orders-api", "https://b.example.com", "/b"));
+        svc.mappingRules = List.of(
+                mappingRule("GET", "/a"),
+                mappingRule("GET", "/b"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String se = files.get("serviceentry.yaml");
+        String route = files.get("httproute.yaml");
+        assertNotNull(se);
+        assertTrue(se.contains("---"));
+        // Both refs must appear; second gets -2 suffix on collision
+        assertTrue(route.contains("collide-orders-api-backend"));
+        assertTrue(route.contains("collide-orders-api-backend-2")
+                        || se.contains("collide-orders-api-external-2"),
+                "Colliding kebab names must be disambiguated: route=" + route + " se=" + se);
+        long seNames = se.lines().filter(l -> l.contains("name: collide-orders-api-external")).count();
+        assertTrue(seNames >= 2, "Two distinct SE names expected: " + se);
+    }
+
+    @Test
+    void convert_multiBackend_sharedMountDistinctHosts_skipsHostRewrite() {
+        ApiService svc = basicService("Shared Mount", "shared-mount");
+        svc.authentication = auth("jwt");
+        Backend a = backend("A", "a", "https://a.example.com", "/");
+        Backend b = backend("B", "b", "https://b.example.com", "/");
+        a.weight = 1;
+        b.weight = 1;
+        svc.backends = List.of(a, b);
+        svc.mappingRules = List.of(mappingRule("GET", "/api"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("shared-mount-a-backend"));
+        assertTrue(route.contains("shared-mount-b-backend"));
+        assertFalse(route.contains("URLRewrite"),
+                "Distinct external hosts on one rule must skip Host URLRewrite: " + route);
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("a.example.com") && readme.contains("b.example.com"),
+                "README must list all external hosts: " + readme);
+        assertTrue(readme.toLowerCase().contains("urlrewrite")
+                        || readme.contains("Host rewrite")
+                        || readme.contains("primary (first)"),
+                "README must document Host rewrite / primary host caveat: " + readme);
+    }
+
+    @Test
+    void selectBackendsForPath_noMatch_fallsBackToAll() {
+        ApiService svc = basicService("Fallback", "fallback");
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(
+                backend("A", "a", "https://a.example.com", "/a"),
+                backend("B", "b", "https://b.example.com", "/b"));
+        List<ConversionService.ResolvedBackend> resolved =
+                service.resolveBackends(svc, "fallback", null, false);
+        List<ConversionService.ResolvedBackend> selected =
+                service.selectBackendsForPath(resolved, "/unrelated");
+        assertEquals(2, selected.size());
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     // ── TLSPolicy (issue #21 / PR1) ───────────────────────────────────────────

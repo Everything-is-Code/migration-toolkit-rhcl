@@ -28,6 +28,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
 import { importApi, downloadApi, applyApi, gatewayApi } from '../api/client';
+import { fixHttpRoutePort } from '../utils/fixHttpRoutePort';
 import { PF_SUCCESS } from '../styles/pfTokens';
 import styles from './ImportPage.module.css';
 
@@ -537,19 +538,6 @@ const ImportPageInner: React.FC = () => {
     if ('serviceentry.yaml' in editMap) return true;
     return Object.values(editMap).some(
       yaml => /type:\s*ExternalName/i.test(yaml) || /kind:\s*ServiceEntry/i.test(yaml)
-    );
-  };
-
-  /**
-   * HTTPRoute backendRefs.port 8080 → 443 conversion.
-   * Only targets the backendRefs block; does not change Gateway listener ports etc.
-   * Rewrites every port: 8080 inside each backendRefs block (multi-ref collide case).
-   */
-  const fixHttpRoutePort = (yaml: string): string => {
-    return yaml.replace(
-      /(^[ \t]*backendRefs:\n)((?:[ \t]+.*\n)*)/gm,
-      (_full, header: string, body: string) =>
-        header + body.replace(/([ \t]+port:[ \t]*)8080([ \t]*(?:\n|$))/g, '$1443$2')
     );
   };
 
