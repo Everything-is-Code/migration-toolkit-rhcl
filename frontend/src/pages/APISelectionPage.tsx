@@ -29,14 +29,8 @@ import { servicesApi } from '../api/client';
 import { ApiService, Policy } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
-import {
-  PF_BG_DEFAULT,
-  PF_COLOR_MUTED,
-  PF_FONT_SIZE_XS,
-  PF_PRIMARY,
-  PF_PRIMARY_BG,
-  PF_SPACER_SM,
-} from '../styles/pfTokens';
+import shared from '../styles/shared.module.css';
+import styles from './APISelectionPage.module.css';
 
 interface Props {
   appState: AppState;
@@ -53,22 +47,22 @@ const PolicyPanel: React.FC<{ policies: Policy[] }> = ({ policies }) => {
   const { t } = useTranslation();
   if (policies.length === 0) return null;
   return (
-    <div style={{ marginTop: 10, padding: '10px 14px', background: '#f9f9f9', borderRadius: 4, border: '1px solid #e8e8e8' }}>
-      <div style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, marginBottom: 6 }}>{t('apiSelection.policyDefinitions', 'Policy Definitions')}</div>
+    <div className={styles.policyPanel}>
+      <div className={styles.policyPanelTitle}>{t('apiSelection.policyDefinitions', 'Policy Definitions')}</div>
       {policies.map((p, i) => (
         <div key={i} style={{ marginBottom: i < policies.length - 1 ? 8 : 0, opacity: p.enabled ? 1 : 0.45 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-            <code style={{ fontSize: 12, background: '#fff', border: '1px solid #d2d2d2', borderRadius: 3, padding: '1px 5px' }}>
+            <code className={styles.policyCode}>
               {p.name}
             </code>
-            {p.version && <span style={{ fontSize: 11, color: '#8a8d90' }}>{p.version}</span>}
-            {!p.enabled && <span style={{ fontSize: 11, color: '#8a8d90' }}>(disabled)</span>}
+            {p.version && <span className={styles.policyMeta}>{p.version}</span>}
+            {!p.enabled && <span className={styles.policyMeta}>(disabled)</span>}
           </div>
           {p.configuration && Object.keys(p.configuration).length > 0 && (
             <div style={{ paddingLeft: 12 }}>
               {Object.entries(p.configuration).map(([k, v]) => (
-                <div key={k} style={{ fontSize: 12, color: '#3c3f42', lineHeight: 1.6 }}>
-                  <span style={{ color: PF_COLOR_MUTED }}>{k}:</span>{' '}
+                <div key={k} className={styles.policyConfigLine}>
+                  <span className={shared.mutedText}>{k}:</span>{' '}
                   <span style={{ fontFamily: 'monospace' }}>{renderConfigValue(v)}</span>
                 </div>
               ))}
@@ -135,7 +129,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('apiSelection.title')}</Title>
-        <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED }}>
+        <p className={shared.pageDescription}>
           {t('apiSelection.description')}
         </p>
       </PageSection>
@@ -169,7 +163,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
             </Toolbar>
 
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div className={shared.centeredBlock}>
                 <Spinner size="xl" />
                 <p>{t('apiSelection.loading')}</p>
               </div>
@@ -192,41 +186,33 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 <DataListItem
                   id="api-list-header"
                   aria-labelledby="api-list-header-label"
-                  style={{
-                    pointerEvents: 'none',
-                    background: PF_BG_DEFAULT,
-                    borderLeft: '3px solid transparent',
-                    cursor: 'default',
-                  }}
+                  className={styles.listHeader}
                 >
                   <DataListItemRow>
                     <DataListItemCells
                       dataListCells={[
                         <DataListCell key="h-name" width={2}>
-                          <span
-                            id="api-list-header-label"
-                            style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}
-                          >
+                          <span id="api-list-header-label" className={styles.colHeader}>
                             {t('apiSelection.colName')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-state">
-                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
+                          <span className={styles.colHeader}>
                             {t('apiSelection.colState')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-auth">
-                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
+                          <span className={styles.colHeader}>
                             {t('apiSelection.colAuth')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-policy">
-                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
+                          <span className={styles.colHeader}>
                             {t('apiSelection.colPolicies')}
                           </span>
                         </DataListCell>,
                         <DataListCell key="h-backends">
-                          <span style={{ fontSize: PF_FONT_SIZE_XS, fontWeight: 600, color: PF_COLOR_MUTED, textTransform: 'uppercase' }}>
+                          <span className={styles.colHeader}>
                             {t('apiSelection.colBackends')}
                           </span>
                         </DataListCell>,
@@ -243,11 +229,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                       key={service.id}
                       id={service.id}
                       aria-labelledby={`service-${service.id}`}
-                      style={{
-                        cursor: 'pointer',
-                        background: isSelected ? PF_PRIMARY_BG : undefined,
-                        borderLeft: isSelected ? `3px solid ${PF_PRIMARY}` : '3px solid transparent',
-                      }}
+                      className={`${styles.serviceRow}${isSelected ? ` ${styles.isSelected}` : ''}`}
                     >
                       <DataListItemRow>
                         <DataListItemCells
@@ -257,7 +239,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                                 {service.name}
                               </span>
                               <br />
-                              <small style={{ color: PF_COLOR_MUTED }}>{service.systemName}</small>
+                              <small className={shared.mutedText}>{service.systemName}</small>
                               {isSelected && allPolicies.length > 0 && (
                                 <PolicyPanel policies={allPolicies} />
                               )}
@@ -265,7 +247,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                             <DataListCell key="state">
                               <Badge
                                 isRead={service.state !== 'published'}
-                                style={{ backgroundColor: service.state === 'published' ? '#3e8635' : undefined }}
+                                className={service.state === 'published' ? styles.publishedBadge : undefined}
                               >
                                 {service.state || 'unknown'}
                               </Badge>
@@ -294,7 +276,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               </DataList>
             )}
 
-            <div style={{ marginTop: '24px', display: 'flex', gap: '8px' }}>
+            <div className={shared.actionRow} style={{ marginTop: '24px' }}>
               <Button variant="secondary" onClick={() => navigate('/')}>{t('apiSelection.btnBack')}</Button>
               <Button
                 variant="primary"
