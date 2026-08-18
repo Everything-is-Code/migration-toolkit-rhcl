@@ -115,6 +115,9 @@ export interface ConversionRequest {
   includeTlsPolicy?: boolean;
   tlsIssuerKind?: string;
   tlsIssuerName?: string;
+  includeDnsPolicy?: boolean;
+  dnsHostname?: string;
+  dnsProviderSecretName?: string;
 }
 
 export interface ConversionResultItem {

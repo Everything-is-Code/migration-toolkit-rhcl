@@ -39,4 +39,13 @@ public class ConversionRequest {
 
     /** cert-manager Issuer name for TLSPolicy issuerRef. */
     public String tlsIssuerName;
+
+    /** When true, emit Kuadrant DNSPolicy and Gateway listener hostnames (default: false). */
+    public Boolean includeDnsPolicy;
+
+    /** Hostname for Gateway http+https listeners when DNSPolicy is enabled. */
+    public String dnsHostname;
+
+    /** Optional DNS provider Secret name for DNSPolicy providerRefs. */
+    public String dnsProviderSecretName;
 }

@@ -107,7 +107,8 @@ public class ConversionService {
                 ? extractPort(effectiveBackendUrl, externalDefaultPort)
                 : ConversionConstants.DEFAULT_HTTPS_PORT;
 
-        files.put("gateway.yaml", generateGateway(name, namespace));
+        files.put("gateway.yaml", generateGateway(name, namespace,
+                opts.includeDnsPolicy ? opts.dnsHostname : null));
         files.put("httproute.yaml",  generateHttpRoute(
                 name, namespace, service, backendType, externalHost, internalService,
                 internalPort, externalPort, opts.corsNative));
@@ -167,6 +168,11 @@ public class ConversionService {
         if (opts.includeTlsPolicy) {
             files.put("tlspolicy.yaml",
                     generateTlsPolicy(name, namespace, opts.tlsIssuerKind, opts.tlsIssuerName));
+        }
+
+        if (opts.includeDnsPolicy) {
+            files.put("dnspolicy.yaml",
+                    generateDnsPolicy(name, namespace, opts.dnsProviderSecretName));
         }
 
         files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
@@ -266,6 +272,13 @@ public class ConversionService {
     // ─────────────────────────────────────────────
 
     private String generateGateway(String name, String namespace) {
+        return generateGateway(name, namespace, null);
+    }
+
+    private String generateGateway(String name, String namespace, String hostname) {
+        String hostnameLine = (hostname != null && !hostname.isBlank())
+                ? "\n      hostname: " + hostname.trim()
+                : "";
         return """
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -280,13 +293,13 @@ spec:
   listeners:
     - name: http
       protocol: HTTP
-      port: %d
+      port: %d%s
       allowedRoutes:
         namespaces:
           from: Same
     - name: https
       protocol: HTTPS
-      port: %d
+      port: %d%s
       tls:
         mode: Terminate
         certificateRefs:
@@ -295,8 +308,8 @@ spec:
         namespaces:
           from: Same
 """.formatted(name, namespace, name,
-                ConversionConstants.DEFAULT_HTTP_PORT,
-                ConversionConstants.DEFAULT_HTTPS_PORT,
+                ConversionConstants.DEFAULT_HTTP_PORT, hostnameLine,
+                ConversionConstants.DEFAULT_HTTPS_PORT, hostnameLine,
                 name);
     }
 
@@ -327,6 +340,35 @@ spec:
     kind: %s
     name: %s
 """.formatted(name, namespace, name, name, kind, issuer);
+    }
+
+    // ─────────────────────────────────────────────
+    // DNSPolicy (Kuadrant)
+    // ─────────────────────────────────────────────
+
+    private String generateDnsPolicy(String name, String namespace, String providerSecretName) {
+        String providerBlock = "";
+        if (providerSecretName != null && !providerSecretName.isBlank()) {
+            providerBlock = """
+  providerRefs:
+    - name: %s
+""".formatted(providerSecretName.trim());
+        }
+        return """
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: %s-dns-policy
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: %s-gateway
+%s""".formatted(name, namespace, name, name, providerBlock);
     }
 
     // ─────────────────────────────────────────────

@@ -91,6 +91,9 @@ public class ConversionController {
                 opts.includeTlsPolicy = Boolean.TRUE.equals(request.includeTlsPolicy);
                 opts.tlsIssuerKind = request.tlsIssuerKind;
                 opts.tlsIssuerName = request.tlsIssuerName;
+                opts.includeDnsPolicy = Boolean.TRUE.equals(request.includeDnsPolicy);
+                opts.dnsHostname = request.dnsHostname;
+                opts.dnsProviderSecretName = request.dnsProviderSecretName;
                 Map<String, String> yamlFiles = conversionService.convert(
                         service, namespace, request.externalBackendUrl, opts);
 
