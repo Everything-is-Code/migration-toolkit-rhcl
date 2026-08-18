@@ -19,6 +19,15 @@ backend:
     limits:
       cpu: "1"
       memory: 1Gi
+  # OpenShift-safe defaults; override per install. Do not set readOnlyRootFilesystem here.
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
 
 frontend:
   image:
@@ -33,6 +42,14 @@ frontend:
     limits:
       cpu: 500m
       memory: 256Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
 
 postgresql:
   enabled: true
@@ -41,10 +58,21 @@ postgresql:
   port: "5432"
   database: migrationtool
   username: migrationtool
-  password: migrationtool
+  # Required when existingSecret is empty (breaking vs chart 0.1.0).
+  password: ""
+  # Optional: Secret name with keys DB_USER, DB_PASSWORD, DB_NAME (skips chart DB keys).
+  existingSecret: ""
+  persistence:
+    enabled: true
+    size: 8Gi
+    # Empty = cluster default StorageClass
+    storageClassName: ""
   image:
     repository: registry.redhat.io/rhel9/postgresql-15
-    tag: "latest"
+    # Pinned digest from RHBA-2026:9103 (amd64). Not `latest`.
+    # Re-verify when bumping: skopeo inspect docker://registry.redhat.io/rhel9/postgresql-15:latest
+    tag: "1"
+    digest: "sha256:df15212ae9cc010ebe9dd61b19332a845c8b7df3dd00fb70e47d6e925f8b75e7"
     pullPolicy: IfNotPresent
   resources:
     requests:
@@ -53,6 +81,18 @@ postgresql:
     limits:
       cpu: 500m
       memory: 512Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
+# Optional NetworkPolicy (default off). When enabled, stock allows only.
+networkPolicy:
+  enabled: false
 
 route:
   enabled: true

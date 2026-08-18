@@ -2,8 +2,8 @@ apiVersion: v2
 name: migration-toolkit-rhcl
 description: 3scale to Red Hat Connectivity Link migration toolkit
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 1.0.0
+appVersion: "1.0.0"
 home: https://github.com/Everything-is-Code/migration-toolkit-rhcl
 sources:
   - https://github.com/Everything-is-Code/migration-toolkit-rhcl
@@ -20,5 +20,5 @@ annotations:
       image: quay.io/everythingascode/migration-toolkit-rhcl-frontend:v0.1.0
       whitelisted: true
     - name: postgresql
-      image: registry.redhat.io/rhel9/postgresql-15:latest
+      image: registry.redhat.io/rhel9/postgresql-15@sha256:df15212ae9cc010ebe9dd61b19332a845c8b7df3dd00fb70e47d6e925f8b75e7
       whitelisted: true
