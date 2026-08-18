@@ -325,7 +325,7 @@ public class ThreeScaleExportService {
                 String backendId = String.valueOf(backendIdObj);
                 Backend fromCatalog = catalog.get(backendId);
                 if (fromCatalog != null) {
-                    backends.add(fromCatalog);
+                    backends.add(cloneBackendWithUsage(fromCatalog, usage));
                     continue;
                 }
                 // Fallback only when catalog miss (should be rare)
@@ -340,7 +340,7 @@ public class ThreeScaleExportService {
                     backend.name = (String) b.get("name");
                     backend.systemName = (String) b.get("system_name");
                     backend.privateEndpoint = (String) b.get("private_endpoint");
-                    backends.add(backend);
+                    backends.add(cloneBackendWithUsage(backend, usage));
                 } catch (Exception ex) {
                     LOG.warnf(ex, "Failed to fetch backend %s: %s", backendId, ex.getMessage());
                 }
@@ -470,7 +470,7 @@ public class ThreeScaleExportService {
                     backend.name = (String) b.get("name");
                     backend.systemName = (String) b.get("system_name");
                     backend.privateEndpoint = (String) b.get("private_endpoint");
-                    backends.add(backend);
+                    backends.add(cloneBackendWithUsage(backend, usage));
                 } catch (Exception ex) {
                     LOG.warnf(ex, "Failed to fetch backend %s: %s", backendId, ex.getMessage());
                 }
@@ -479,6 +479,54 @@ public class ThreeScaleExportService {
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Clone a catalog/API Backend and attach usage-specific mount path and optional weight
+     * without mutating the shared catalog entry.
+     */
+    static Backend cloneBackendWithUsage(Backend source, Map<String, Object> usage) {
+        Backend clone = new Backend();
+        if (source != null) {
+            clone.id = source.id;
+            clone.name = source.name;
+            clone.description = source.description;
+            clone.systemName = source.systemName;
+            clone.privateEndpoint = source.privateEndpoint;
+            clone.mappingRules = source.mappingRules;
+            clone.metrics = source.metrics;
+        }
+        Object pathObj = usage != null ? usage.get("path") : null;
+        clone.path = normalizeMountPath(pathObj != null ? String.valueOf(pathObj) : null);
+        if (usage != null) {
+            clone.weight = parseOptionalWeight(usage.get("weight"));
+        }
+        return clone;
+    }
+
+    static String normalizeMountPath(String path) {
+        if (path == null || path.isBlank()) {
+            return "/";
+        }
+        return path.trim();
+    }
+
+    private static Integer parseOptionalWeight(Object weightObj) {
+        if (weightObj == null) {
+            return null;
+        }
+        if (weightObj instanceof Number number) {
+            return number.intValue();
+        }
+        String text = String.valueOf(weightObj).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return null;
         }
     }
 

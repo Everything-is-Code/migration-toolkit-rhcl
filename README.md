@@ -336,6 +336,8 @@ Resources generated via the `from-3scale-to-connectivity-link` adapter:
   gateway.yaml         # Kuadrant Gateway
   httproute.yaml       # HTTPRoute
   policy.yaml          # AuthPolicy / RateLimitPolicy
+  tlspolicy.yaml       # Kuadrant TLSPolicy (opt-in; cert-manager issuerRef)
+  dnspolicy.yaml       # Kuadrant DNSPolicy (opt-in; optional providerRefs)
   secret.yaml          # Credentials (REPLACE_ME placeholders)
   configmap.yaml       # Configuration values
   destinationrule.yaml # Istio DestinationRule (TLS)
@@ -344,6 +346,25 @@ Resources generated via the `from-3scale-to-connectivity-link` adapter:
 ```
 
 > Replace `REPLACE_ME` placeholders in `secret.yaml` with actual values before applying.
+
+**TLSPolicy (opt-in)**: When "Generate TLSPolicy" is enabled on the Conversion page, the package
+includes `tlspolicy.yaml` targeting `{name}-gateway` with a cert-manager `issuerRef`
+(UI prefills `ClusterIssuer` / `letsencrypt-prod`). The Gateway https listener continues to
+reference Secret `{name}-tls`; cert-manager creates that Secret after apply. A raw Certificate
+CR is **not** generated. The ClusterIssuer must already exist on the cluster.
+
+**DNSPolicy (opt-in)**: When "Generate DNSPolicy + Gateway hostname" is enabled, both Gateway
+`http` and `https` listeners get `hostname: {dnsHostname}` (UI prefills
+`{kebabName}.{clusterDomain}` from `GET /api/cluster/domain` — the domain already includes
+`apps.`, so do not add another `apps.`). The package includes `dnspolicy.yaml` targeting
+`{name}-gateway`. If a DNS provider Secret name is provided, `providerRefs: [{ name }]` is
+included; if blank, `providerRefs` is omitted and Kuadrant uses the cluster
+`kuadrant.io/default-provider=true` Secret. Provider credentials are never written into the package.
+
+**IP check (AuthPolicy OPA mode)**: When `ipCheckMode=authPolicyOpa`, generated Rego binds
+the peer connection IP via Authorino WellKnown `input.source.address` (see
+`testdata/authorino-authorization-json-ip.json`). For production **end-client** IP
+allowlists, prefer the default `authorizationPolicy` mode (Istio `remoteIpBlocks`).
 
 **External backend detection**: If the "backend is an external service" checkbox is left
 unchecked, the backend type is no longer inferred only from that checkbox — it also falls
@@ -1021,6 +1042,8 @@ Migration Score (0–100%) でトータルの移行難易度を数値化しま�
   gateway.yaml        # Kuadrant Gateway
   httproute.yaml      # HTTPRoute
   policy.yaml         # AuthPolicy / RateLimitPolicy
+  tlspolicy.yaml      # Kuadrant TLSPolicy（オプトイン; cert-manager issuerRef）
+  dnspolicy.yaml      # Kuadrant DNSPolicy（オプトイン; 任意の providerRefs）
   secret.yaml         # 認証情報 (REPLACE_ME プレースホルダー)
   configmap.yaml      # 設定値
   destinationrule.yaml # Istio DestinationRule (TLS 設定)
@@ -1029,6 +1052,20 @@ Migration Score (0–100%) でトータルの移行難易度を数値化しま�
 ```
 
 > `secret.yaml` 内の `REPLACE_ME` は手動で実際の値に置き換えてください。
+
+**TLSPolicy（オプトイン）**: Conversion 画面で「TLSPolicy を生成」を有効にすると、
+`{name}-gateway` を対象とし cert-manager の `issuerRef`（UI 初期値: `ClusterIssuer` /
+`letsencrypt-prod`）を持つ `tlspolicy.yaml` がパッケージに含まれます。Gateway の https
+listener は引き続き Secret `{name}-tls` を参照し、適用後に cert-manager がその Secret を作成します。
+生の Certificate CR は生成しません。ClusterIssuer はクラスタ上に事前に存在する必要があります。
+
+**DNSPolicy（オプトイン）**: 「DNSPolicy と Gateway hostname を生成」を有効にすると、Gateway の
+`http` / `https` 両 listener に `hostname: {dnsHostname}` が設定されます（UI 初期値は
+`GET /api/cluster/domain` から `{kebabName}.{clusterDomain}` — domain には既に `apps.` が
+含まれるため二重に付けません）。パッケージには `{name}-gateway` を対象とする
+`dnspolicy.yaml` が含まれます。DNS provider Secret 名を指定すると `providerRefs: [{ name }]`
+を含め、空なら `providerRefs` を省略してクラスタの `kuadrant.io/default-provider=true`
+Secret を使います。provider の認証情報はパッケージに書き込みません。
 
 **外部バックエンドの自動判定**: 「バックエンドは外部サービス」チェックボックスをオフのままでも、
 バックエンドタイプの判定はチェックボックスの値だけでなく、3scale に登録済みのバックエンド URL

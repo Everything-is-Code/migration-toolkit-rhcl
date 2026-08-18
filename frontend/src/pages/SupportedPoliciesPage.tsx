@@ -51,7 +51,7 @@ export const ALL_POLICIES = [
   'URL Rewriting with Captures',
 ];
 
-export const DEFAULT_SUPPORTED_POLICIES = ['3scale APIcast', 'Header Modification', 'Upstream Connection', 'Logging', 'Anonymous Access', 'URL Rewriting', '3scale Auth Caching', 'CORS Request Handling', 'IP Check', 'Edge Limiting', 'OAuth 2.0 Token Introspection', 'JWT Claim Check'];
+export const DEFAULT_SUPPORTED_POLICIES = ['3scale APIcast', 'Header Modification', 'Upstream Connection', 'Logging', 'Anonymous Access', 'URL Rewriting', '3scale Auth Caching', 'CORS Request Handling', 'IP Check', 'Edge Limiting', 'OAuth 2.0 Token Introspection', 'JWT Claim Check', 'Response/Request Content Limits', 'Retry', 'RH-SSO/Keycloak Role Check'];
 const SETTINGS_KEY = 'supportedPolicies';
 
 export async function loadSupportedPolicies(): Promise<string[]> {

@@ -1,0 +1,23 @@
+CHART: {{ .Chart.Name }} {{ .Chart.Version }} (app {{ .Chart.AppVersion }})
+NAMESPACE: {{ .Release.Namespace }}
+
+Database credentials (breaking vs 0.1.0)
+  - Provide --set postgresql.password=<secret> OR postgresql.existingSecret=<Secret name>
+  - existingSecret must contain keys: DB_USER, DB_PASSWORD, DB_NAME
+  - Embedded Postgres and the backend read those keys via secretKeyRef
+
+Persistence
+  - Embedded Postgres uses a PVC (default size {{ .Values.postgresql.persistence.size }}) when postgresql.persistence.enabled=true
+  - WARNING: upgrading from chart 0.1.0 emptyDir does NOT migrate data. Export/backup before upgrade if you need prior demo data.
+
+NetworkPolicy
+  - networkPolicy.enabled={{ .Values.networkPolicy.enabled }} (default false)
+  - When true, stock allows: OpenShift router → frontend:8080, frontend → backend:8080, backend → postgresql:5432
+
+RBAC
+  - Default: scoped ClusterRole aligned with deploy/backend/06-rbac.yaml (apply apiGroups keep resources:["*"] plus detection rules)
+  - rbac.clusterAdmin={{ .Values.rbac.clusterAdmin }} — when true, binds cluster-admin (not recommended for shared clusters)
+
+{{- if .Values.route.enabled }}
+Route: enabled (host={{ .Values.route.host | default "auto" }})
+{{- end }}

@@ -543,12 +543,13 @@ const ImportPageInner: React.FC = () => {
   /**
    * HTTPRoute backendRefs.port 8080 → 443 conversion.
    * Only targets the backendRefs block; does not change Gateway listener ports etc.
+   * Rewrites every port: 8080 inside each backendRefs block (multi-ref collide case).
    */
   const fixHttpRoutePort = (yaml: string): string => {
-    // Find the backendRefs block and convert port: 8080 to port: 443 within it
     return yaml.replace(
-      /([ \t]*backendRefs:[\s\S]*?)([ \t]+port:[ \t]*)8080([ \t]*(?:\n|$))/g,
-      '$1$2443$3'
+      /(^[ \t]*backendRefs:\n)((?:[ \t]+.*\n)*)/gm,
+      (_full, header: string, body: string) =>
+        header + body.replace(/([ \t]+port:[ \t]*)8080([ \t]*(?:\n|$))/g, '$1443$2')
     );
   };
 

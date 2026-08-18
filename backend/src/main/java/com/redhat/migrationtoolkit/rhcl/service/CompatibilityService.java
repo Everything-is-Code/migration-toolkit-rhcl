@@ -72,6 +72,7 @@ public class CompatibilityService {
             "anonymous_access",
             "default_credentials",
             "jwt_claim_check",
+            "keycloak_role_check",
             "rate_limit_headers"
     );
 
@@ -240,6 +241,13 @@ public class CompatibilityService {
         if (service.backends == null || service.backends.isEmpty()) {
             items.add(new CompatibilityItem("Backend", "WARNING", "No backend configured"));
             return;
+        }
+        if (service.backends.size() > 1) {
+            items.add(new CompatibilityItem(
+                    "Multiple backends",
+                    "WARNING",
+                    "Product has " + service.backends.size()
+                            + " backends; conversion uses path-based routing across all backends"));
         }
         for (Backend backend : service.backends) {
             if (backend.privateEndpoint != null && backend.privateEndpoint.startsWith("https://")) {
