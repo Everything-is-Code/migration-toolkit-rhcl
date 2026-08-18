@@ -53,6 +53,9 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [anonymousTarget, setAnonymousTarget] = useState<'httproute' | 'gateway'>('httproute');
   const [ipCheckMode, setIpCheckMode] = useState<'authorizationPolicy' | 'authPolicyOpa'>('authorizationPolicy');
   const [includeMigratedFromLabel, setIncludeMigratedFromLabel] = useState(true);
+  const [includeTlsPolicy, setIncludeTlsPolicy] = useState(false);
+  const [tlsIssuerKind, setTlsIssuerKind] = useState('ClusterIssuer');
+  const [tlsIssuerName, setTlsIssuerName] = useState('letsencrypt-prod');
 
   // Show the corresponding target setting only when any selected service
   // has a Logging / Anonymous Access / IP Check policy enabled.
@@ -87,6 +90,9 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
         anonymousTarget,
         includeMigratedFromLabel,
         ipCheckMode,
+        includeTlsPolicy: includeTlsPolicy || undefined,
+        tlsIssuerKind: includeTlsPolicy ? tlsIssuerKind : undefined,
+        tlsIssuerName: includeTlsPolicy ? tlsIssuerName : undefined,
       });
       setProgress(100);
       const convResults: ConversionResultItem[] = resp.data.results;
@@ -227,6 +233,60 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                         onChange={(_e, checked) => setIncludeMigratedFromLabel(checked)}
                       />
                     </FormGroup>
+                    <FormGroup>
+                      <Checkbox
+                        id="include-tls-policy"
+                        label={t('conversion.includeTlsPolicy', 'Generate TLSPolicy (cert-manager)')}
+                        isChecked={includeTlsPolicy}
+                        onChange={(_e, checked) => {
+                          setIncludeTlsPolicy(checked);
+                          if (checked) {
+                            setTlsIssuerKind((prev) => prev || 'ClusterIssuer');
+                            setTlsIssuerName((prev) => prev || 'letsencrypt-prod');
+                          }
+                        }}
+                        description={t(
+                          'conversion.includeTlsPolicyDesc',
+                          'Opt-in Kuadrant TLSPolicy targeting the Gateway. Requires a ClusterIssuer (default: letsencrypt-prod). Secret {name}-tls is issued by cert-manager — no Certificate CR is generated.',
+                        )}
+                      />
+                    </FormGroup>
+                    {includeTlsPolicy && (
+                      <>
+                        <FormGroup
+                          label={t('conversion.tlsIssuerKind', 'TLS issuer kind')}
+                          fieldId="tls-issuer-kind"
+                        >
+                          <TextInput
+                            id="tls-issuer-kind"
+                            value={tlsIssuerKind}
+                            onChange={(_e, val) => setTlsIssuerKind(val)}
+                            aria-label={t('conversion.tlsIssuerKind', 'TLS issuer kind')}
+                          />
+                        </FormGroup>
+                        <FormGroup
+                          label={t('conversion.tlsIssuerName', 'TLS issuer name')}
+                          fieldId="tls-issuer-name"
+                        >
+                          <TextInput
+                            id="tls-issuer-name"
+                            value={tlsIssuerName}
+                            onChange={(_e, val) => setTlsIssuerName(val)}
+                            aria-label={t('conversion.tlsIssuerName', 'TLS issuer name')}
+                          />
+                          <FormHelperText>
+                            <HelperText>
+                              <HelperTextItem>
+                                {t(
+                                  'conversion.tlsIssuerHelp',
+                                  'Prefills ClusterIssuer / letsencrypt-prod when TLSPolicy is enabled. Edit if your cluster uses a different issuer.',
+                                )}
+                              </HelperTextItem>
+                            </HelperText>
+                          </FormHelperText>
+                        </FormGroup>
+                      </>
+                    )}
                   </Form>
                 </div>
 

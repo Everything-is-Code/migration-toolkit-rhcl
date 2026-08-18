@@ -1416,6 +1416,64 @@ class ConversionServiceTest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    // ── TLSPolicy (issue #21 / PR1) ───────────────────────────────────────────
+
+    @Test
+    void convert_tlsPolicyOffByDefault_noTlsPolicyFile() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        Map<String, String> files = service.convert(svc, "ns", null, new ConversionOptions());
+        assertFalse(files.containsKey("tlspolicy.yaml"));
+        assertFalse(files.values().stream().anyMatch(y -> y.contains("kind: TLSPolicy")));
+        assertFalse(files.values().stream().anyMatch(y -> y.contains("kind: Certificate")));
+    }
+
+    @Test
+    void convert_tlsPolicyOn_emitsTlsPolicyWithIssuerRef() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        ConversionOptions opts = new ConversionOptions();
+        opts.includeTlsPolicy = true;
+        opts.tlsIssuerKind = "ClusterIssuer";
+        opts.tlsIssuerName = "letsencrypt-prod";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertTrue(files.containsKey("tlspolicy.yaml"));
+        String tls = files.get("tlspolicy.yaml");
+        assertTrue(tls.contains("apiVersion: kuadrant.io/v1"));
+        assertTrue(tls.contains("kind: TLSPolicy"));
+        assertTrue(tls.contains("name: my-api-tls-policy"));
+        assertTrue(tls.contains("name: my-api-gateway"));
+        assertTrue(tls.contains("kind: Gateway"));
+        assertTrue(tls.contains("group: gateway.networking.k8s.io"));
+        assertTrue(tls.contains("group: cert-manager.io"));
+        assertTrue(tls.contains("kind: ClusterIssuer"));
+        assertTrue(tls.contains("name: letsencrypt-prod"));
+        assertFalse(files.values().stream().anyMatch(y -> y.contains("kind: Certificate")));
+
+        String gw = files.get("gateway.yaml");
+        assertTrue(gw.contains("name: my-api-tls"),
+                "Gateway https listener must keep certificateRefs Secret {name}-tls");
+    }
+
+    @Test
+    void convert_tlsPolicyOn_destinationRuleUnchanged() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        String backend = "https://api.external.example.com";
+
+        Map<String, String> off = service.convert(svc, "ns", backend, new ConversionOptions());
+        ConversionOptions onOpts = new ConversionOptions();
+        onOpts.includeTlsPolicy = true;
+        onOpts.tlsIssuerKind = "ClusterIssuer";
+        onOpts.tlsIssuerName = "letsencrypt-prod";
+        Map<String, String> on = service.convert(svc, "ns", backend, onOpts);
+
+        assertEquals(off.get("destinationrule.yaml"), on.get("destinationrule.yaml"));
+        assertTrue(on.containsKey("tlspolicy.yaml"));
+        assertFalse(off.containsKey("tlspolicy.yaml"));
+    }
+
     private ApiService basicService(String name, String systemName) {
         ApiService svc = new ApiService();
         svc.id = "svc-1";

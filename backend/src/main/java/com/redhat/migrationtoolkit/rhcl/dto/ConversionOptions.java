@@ -26,4 +26,16 @@ public class ConversionOptions {
      * Access-Control-* headers plus OPTIONS matches.
      */
     public boolean corsNative = false;
+
+    /**
+     * When true, emit Kuadrant TLSPolicy targeting the generated Gateway.
+     * Default OFF — packages unchanged until the user opts in.
+     */
+    public boolean includeTlsPolicy = false;
+
+    /** cert-manager Issuer/ClusterIssuer kind for TLSPolicy issuerRef (e.g. ClusterIssuer). */
+    public String tlsIssuerKind;
+
+    /** cert-manager Issuer/ClusterIssuer name for TLSPolicy issuerRef (e.g. letsencrypt-prod). */
+    public String tlsIssuerName;
 }

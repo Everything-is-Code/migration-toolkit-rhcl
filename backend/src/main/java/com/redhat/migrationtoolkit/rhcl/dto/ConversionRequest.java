@@ -30,4 +30,13 @@ public class ConversionRequest {
      * Convert-time preference — same pattern as anonymousTarget.
      */
     public String ipCheckMode;
+
+    /** When true, emit Kuadrant TLSPolicy (default: false). */
+    public Boolean includeTlsPolicy;
+
+    /** cert-manager Issuer kind for TLSPolicy issuerRef. */
+    public String tlsIssuerKind;
+
+    /** cert-manager Issuer name for TLSPolicy issuerRef. */
+    public String tlsIssuerName;
 }
