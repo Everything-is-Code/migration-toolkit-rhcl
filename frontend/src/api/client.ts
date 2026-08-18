@@ -74,6 +74,12 @@ export const conversionApi = {
     anonymousTarget?: 'httproute' | 'gateway';
     includeMigratedFromLabel?: boolean;
     ipCheckMode?: 'authorizationPolicy' | 'authPolicyOpa';
+    includeTlsPolicy?: boolean;
+    tlsIssuerKind?: string;
+    tlsIssuerName?: string;
+    includeDnsPolicy?: boolean;
+    dnsHostname?: string;
+    dnsProviderSecretName?: string;
   }) => api.post('/api/convert', data),
 };
 

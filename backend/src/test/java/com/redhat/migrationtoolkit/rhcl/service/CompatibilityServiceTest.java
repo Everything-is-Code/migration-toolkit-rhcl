@@ -498,6 +498,36 @@ class CompatibilityServiceTest {
         assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)));
     }
 
+    @Test
+    void check_multipleBackends_emitsWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Backend a = backend("https://a.example.com");
+        a.name = "A";
+        Backend b = backend("https://b.example.com");
+        b.name = "B";
+        svc.backends = List.of(a, b);
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
+        assertTrue(result.items.stream().anyMatch(i ->
+                "WARNING".equals(i.status)
+                        && i.name != null
+                        && i.name.toLowerCase().contains("multiple")
+                        && i.name.toLowerCase().contains("backend")));
+    }
+
+    @Test
+    void check_singleBackend_noMultipleBackendsWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(backend("https://only.example.com"));
+        CompatibilityResult result = service.check(svc, DEFAULT_POLICIES);
+        assertTrue(result.items.stream().noneMatch(i ->
+                "WARNING".equals(i.status)
+                        && i.name != null
+                        && i.name.toLowerCase().contains("multiple")
+                        && i.name.toLowerCase().contains("backend")));
+    }
+
     // ── Score and level calculation ───────────────────────────────────────────
 
     @Test
