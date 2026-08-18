@@ -24,6 +24,10 @@ export interface Backend {
   name: string;
   systemName?: string;
   privateEndpoint?: string;
+  /** Mount path from backend_usage; blank/null treated as "/". */
+  path?: string;
+  /** Optional weight when co-located backendRefs collide. */
+  weight?: number;
 }
 
 export interface MappingRule {
