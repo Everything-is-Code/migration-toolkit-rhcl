@@ -101,7 +101,8 @@ public class ConversionService {
 
         files.put("gateway.yaml", generateGateway(name, namespace,
                 opts.includeDnsPolicy ? opts.dnsHostname : null));
-        files.put("httproute.yaml", generateHttpRoute(name, namespace, service, resolved, opts.corsNative));
+        files.put("httproute.yaml", generateHttpRoute(
+                name, namespace, service, resolved, opts.corsNative, opts.retriesSupported));
         files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
         files.put("configmap.yaml",  generateConfigMap(name, namespace, service, resolved, overrideIgnored));
@@ -155,6 +156,14 @@ public class ConversionService {
             if (requestBytes != null && requestBytes > 0) {
                 files.put("envoyfilter-content-limits.yaml",
                         generateContentLimitsEnvoyFilter(name, namespace, requestBytes));
+            }
+        }
+
+        if (!opts.retriesSupported) {
+            Integer retries = resolveRetryAttempts(findRetryPolicy(service));
+            if (retries != null && retries > 0) {
+                files.put("envoyfilter-retry.yaml",
+                        generateRetryEnvoyFilter(name, namespace, retries));
             }
         }
 
@@ -482,7 +491,8 @@ spec:
     // ─────────────────────────────────────────────
 
     private String generateHttpRoute(String name, String namespace, ApiService service,
-                                     List<ResolvedBackend> backends, boolean corsNative) {
+                                     List<ResolvedBackend> backends, boolean corsNative,
+                                     boolean retriesSupported) {
         String annotations = buildHttpRouteAnnotations(service);
         StringBuilder sb = new StringBuilder();
         sb.append("""
@@ -503,6 +513,7 @@ metadata:
 """.formatted(name, namespace, name, annotations, name, namespace));
 
         String timeoutsBlock = buildTimeoutsBlock(service);
+        String retryBlock = retriesSupported ? buildRetryBlock(service) : "";
         boolean hasCors = findCorsPolicy(service) != null;
         LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
         String sharedFilters = buildHeaderModificationFilters(service) + buildCorsFilters(service, corsNative);
@@ -532,8 +543,8 @@ metadata:
             type: PathPrefix
             value: "%s"
           method: %s
-%s%s      backendRefs:
-%s""".formatted(path, method, filtersBlock, timeoutsBlock, formatBackendRefs(selected)));
+%s%s%s      backendRefs:
+%s""".formatted(path, method, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
             }
         } else {
             pathsForOptions.add("/");
@@ -544,8 +555,8 @@ metadata:
         - path:
             type: PathPrefix
             value: "/"
-%s%s      backendRefs:
-%s""".formatted(filtersBlock, timeoutsBlock, formatBackendRefs(selected)));
+%s%s%s      backendRefs:
+%s""".formatted(filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
         }
 
         // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
@@ -570,8 +581,8 @@ metadata:
             type: PathPrefix
             value: "%s"
           method: OPTIONS
-%s%s      backendRefs:
-%s""".formatted(path, filtersBlock, timeoutsBlock, formatBackendRefs(selected)));
+%s%s%s      backendRefs:
+%s""".formatted(path, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
             }
         }
         return sb.toString();
@@ -980,6 +991,85 @@ metadata:
             return block.toString();
         }
         return "";
+    }
+
+    private Policy findRetryPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "retry".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Map 3scale {@code retry.configuration.retries} → HTTPRoute {@code retry.attempts}.
+     * Ignores {@code retry_on} and {@code per_try_timeout} (no portable GAPI mapping).
+     */
+    private String buildRetryBlock(ApiService service) {
+        Integer attempts = resolveRetryAttempts(findRetryPolicy(service));
+        if (attempts == null || attempts <= 0) {
+            return "";
+        }
+        return """
+      retry:
+        attempts: %d
+""".formatted(attempts);
+    }
+
+    private Integer resolveRetryAttempts(Policy retryPolicy) {
+        if (retryPolicy == null || retryPolicy.configuration == null) {
+            return null;
+        }
+        Object raw = retryPolicy.configuration.get("retries");
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(raw.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Envoy route retry_policy fallback when Gateway API HTTPRoute retry is unavailable.
+     */
+    private String generateRetryEnvoyFilter(String name, String namespace, int numRetries) {
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-retry
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: retry
+    3scale-migration/note: "HTTPRoute retry unsupported on this cluster — Envoy route retry_policy fallback"
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: %s-gateway
+  configPatches:
+    - applyTo: HTTP_ROUTE
+      match:
+        context: GATEWAY
+      patch:
+        operation: MERGE
+        value:
+          route:
+            retry_policy:
+              retry_on: "5xx,reset,connect-failure,refused-stream"
+              num_retries: %d
+""".formatted(name, namespace, name, name, numRetries);
     }
 
     /**

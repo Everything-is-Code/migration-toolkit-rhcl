@@ -75,6 +75,7 @@ export interface ClusterCapabilities {
   ossmPresent: boolean;
   ossmMatchesOcp: boolean;
   timeoutsSupported: boolean;
+  retriesSupported: boolean;
 }
 
 /** Profile override for cluster version resolution. */
