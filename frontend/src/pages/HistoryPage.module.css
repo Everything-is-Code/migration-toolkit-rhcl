@@ -1,0 +1,133 @@
+.toast {
+  position: fixed;
+  top: var(--pf-v5-global--spacer--md);
+  right: var(--pf-v5-global--spacer--md);
+  z-index: 9999;
+  background: var(--pf-v5-global--BackgroundColor--dark-100);
+  color: var(--pf-v5-global--Color--light-100);
+  padding: 10px 18px;
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+  font-size: var(--pf-v5-global--FontSize--sm);
+  box-shadow: var(--pf-v5-global--BoxShadow--md);
+}
+
+.pageSubtitle {
+  margin: 4px 0 0;
+  color: var(--pf-v5-global--Color--200);
+  font-size: var(--pf-v5-global--FontSize--sm);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pf-v5-global--spacer--sm) var(--pf-v5-global--spacer--md);
+  border-bottom: 1px solid var(--pf-v5-global--BorderColor--100);
+  background: var(--pf-v5-global--BackgroundColor--200);
+}
+
+.toolbarHint {
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--200);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--pf-v5-global--FontSize--sm);
+}
+
+.th {
+  text-align: left;
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--100);
+  white-space: nowrap;
+  background: var(--pf-v5-global--BackgroundColor--200);
+}
+
+.td {
+  padding: 10px 12px;
+  vertical-align: middle;
+}
+
+.headerRow {
+  border-bottom: 2px solid var(--pf-v5-global--BorderColor--100);
+}
+
+.row {
+  border-bottom: 1px solid var(--pf-v5-global--BorderColor--100);
+  background: var(--pf-v5-global--BackgroundColor--100);
+}
+
+.row.odd {
+  background: var(--pf-v5-global--BackgroundColor--200);
+}
+
+.row.isSelected {
+  background: var(--pf-v5-global--palette--blue-50);
+}
+
+.row.isExpanded {
+  border-bottom: none;
+}
+
+.dash {
+  color: var(--pf-v5-global--Color--400);
+}
+
+.successCount {
+  color: var(--pf-v5-global--success-color--100);
+  font-weight: 600;
+}
+
+.mutedSep {
+  color: var(--pf-v5-global--Color--200);
+  margin: 0 4px;
+}
+
+.failCount {
+  color: var(--pf-v5-global--Color--200);
+}
+
+.failCount.hasFailures {
+  color: var(--pf-v5-global--danger-color--100);
+  font-weight: 600;
+}
+
+.totalHint {
+  color: var(--pf-v5-global--Color--400);
+  font-size: var(--pf-v5-global--FontSize--xs);
+  margin-left: 4px;
+}
+
+.failureDetailRow {
+  border-bottom: 1px solid var(--pf-v5-global--BorderColor--100);
+}
+
+.failureDetailCell {
+  padding: 0 0 12px 72px;
+  background: var(--pf-v5-global--palette--red-50);
+}
+
+.failureCaption {
+  text-align: left;
+  padding: 8px 0 4px;
+  font-weight: 600;
+  color: var(--pf-v5-global--danger-color--100);
+}
+
+.failureHeader {
+  color: var(--pf-v5-global--Color--200);
+}
+
+.failureItemRow {
+  border-top: 1px solid var(--pf-v5-global--palette--red-200);
+}
+
+.failureError {
+  padding: 4px 12px;
+  color: var(--pf-v5-global--danger-color--100);
+  word-break: break-all;
+}

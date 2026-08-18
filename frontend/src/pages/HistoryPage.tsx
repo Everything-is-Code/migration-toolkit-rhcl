@@ -31,6 +31,9 @@ import { useTranslation } from 'react-i18next';
 import { historyApi } from '../api/client';
 import { ConversionHistory, FailureDetail } from '../api/types';
 import { getTimezone } from '../utils/timezone';
+import { PF_COLOR_MUTED } from '../styles/pfTokens';
+import shared from '../styles/shared.module.css';
+import styles from './HistoryPage.module.css';
 
 const formatDate = (iso: string): string => {
   try {
@@ -156,11 +159,7 @@ const HistoryPage: React.FC = () => {
     <>
       {/* Toast notification */}
       {toast && (
-        <div style={{
-          position: 'fixed', top: 16, right: 16, zIndex: 9999,
-          background: '#151515', color: '#fff', padding: '10px 18px',
-          borderRadius: 6, fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-        }}>
+        <div className={styles.toast}>
           {toast}
         </div>
       )}
@@ -168,10 +167,10 @@ const HistoryPage: React.FC = () => {
       <PageSection variant={PageSectionVariants.light}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <HistoryIcon style={{ fontSize: '1.8rem', color: '#6a6e73' }} />
+            <HistoryIcon style={{ fontSize: '1.8rem', color: PF_COLOR_MUTED }} />
             <div>
               <Title headingLevel="h1" size="2xl">{t('history.titlePage')}</Title>
-              <p style={{ margin: '4px 0 0', color: '#6a6e73', fontSize: '14px' }}>
+              <p className={styles.pageSubtitle}>
                 {t('history.descriptionPage')}
               </p>
             </div>
@@ -202,7 +201,7 @@ const HistoryPage: React.FC = () => {
         <Card>
           <CardBody style={{ padding: 0 }}>
             {loading ? (
-              <div style={{ textAlign: 'center', padding: '60px' }}><Spinner size="xl" /></div>
+              <div className={shared.centeredBlock} style={{ padding: '60px' }}><Spinner size="xl" /></div>
             ) : history.length === 0 ? (
               <EmptyState style={{ padding: '60px 24px' }}>
                 <EmptyStateIcon icon={CubesIcon} />
@@ -212,10 +211,7 @@ const HistoryPage: React.FC = () => {
             ) : (
               <>
                 {/* Toolbar */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 16px', borderBottom: '1px solid #d2d2d2', background: '#f5f5f5',
-                }}>
+                <div className={styles.toolbar}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <Checkbox
                       id="select-all"
@@ -224,7 +220,7 @@ const HistoryPage: React.FC = () => {
                       aria-label={t('history.ariaSelectAll')}
                       style={{ marginRight: 4 }}
                     />
-                    <span style={{ fontSize: 13, color: '#6a6e73' }}>
+                    <span className={styles.toolbarHint}>
                       {someChecked || allChecked
                         ? t('history.selectedCount2', { count: selected.size })
                         : t('history.selectAll')}
@@ -235,21 +231,21 @@ const HistoryPage: React.FC = () => {
 
                 {/* Table */}
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                  <table className={styles.table}>
                     <caption style={{ textAlign: 'left', padding: '0 0 8px', fontWeight: 600 }}>
                       {t('history.titlePage')}
                     </caption>
                     <thead>
-                      <tr style={{ borderBottom: '2px solid #d2d2d2' }}>
-                        <th scope="col" style={{ ...thS, width: 40 }}></th>
-                        <th scope="col" style={{ ...thS, width: 32 }}></th>
-                        <th scope="col" style={thS}>{t('history.colDateTime')}</th>
-                        <th scope="col" style={thS}>{t('history.colType')}</th>
-                        <th scope="col" style={thS}>{t('history.colPackageName')}</th>
-                        <th scope="col" style={thS}>{t('history.colNamespace')}</th>
-                        <th scope="col" style={{ ...thS, textAlign: 'center' }}>{t('history.colStatus')}</th>
-                        <th scope="col" style={{ ...thS, textAlign: 'center' }}>{t('history.colSuccessFail')}</th>
-                        <th scope="col" style={{ ...thS, textAlign: 'center', width: 120 }}>{t('history.colOps')}</th>
+                      <tr className={styles.headerRow}>
+                        <th scope="col" className={styles.th} style={{ width: 40 }}></th>
+                        <th scope="col" className={styles.th} style={{ width: 32 }}></th>
+                        <th scope="col" className={styles.th}>{t('history.colDateTime')}</th>
+                        <th scope="col" className={styles.th}>{t('history.colType')}</th>
+                        <th scope="col" className={styles.th}>{t('history.colPackageName')}</th>
+                        <th scope="col" className={styles.th}>{t('history.colNamespace')}</th>
+                        <th scope="col" className={styles.th} style={{ textAlign: 'center' }}>{t('history.colStatus')}</th>
+                        <th scope="col" className={styles.th} style={{ textAlign: 'center' }}>{t('history.colSuccessFail')}</th>
+                        <th scope="col" className={styles.th} style={{ textAlign: 'center', width: 120 }}>{t('history.colOps')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -262,14 +258,15 @@ const HistoryPage: React.FC = () => {
                         return (
                           <React.Fragment key={entry.id}>
                             <tr
-                              style={{
-                                borderBottom: isExpanded ? 'none' : '1px solid #f0f0f0',
-                                background: isSelected ? '#e8f1fb'
-                                  : idx % 2 === 0 ? '#ffffff' : '#fafafa',
-                              }}
+                              className={[
+                                styles.row,
+                                idx % 2 === 1 ? styles.odd : '',
+                                isSelected ? styles.isSelected : '',
+                                isExpanded ? styles.isExpanded : '',
+                              ].filter(Boolean).join(' ')}
                             >
                               {/* Checkbox */}
-                              <td style={{ ...tdS, textAlign: 'center' }}>
+                              <td className={styles.td} style={{ textAlign: 'center' }}>
                                 <Checkbox
                                   id={`chk-${entry.id}`}
                                   isChecked={isSelected}
@@ -279,7 +276,7 @@ const HistoryPage: React.FC = () => {
                               </td>
 
                               {/* Expand button (only when there are failures) */}
-                              <td style={{ ...tdS, textAlign: 'center' }}>
+                              <td className={styles.td} style={{ textAlign: 'center' }}>
                                 {hasFailures && (
                                   <Button variant="plain" size="sm"
                                     onClick={() => toggleExpand(entry.id)}
@@ -290,34 +287,34 @@ const HistoryPage: React.FC = () => {
                               </td>
 
                               {/* Execution date/time */}
-                              <td style={tdS}>
+                              <td className={styles.td}>
                                 <span style={{ fontSize: 13, whiteSpace: 'nowrap' }}>
                                   {formatDate(entry.createdAt)}
                                 </span>
                               </td>
 
                               {/* Type */}
-                              <td style={tdS}>{sourceLabel(entry.source, t)}</td>
+                              <td className={styles.td}>{sourceLabel(entry.source, t)}</td>
 
                               {/* Service/Package name */}
-                              <td style={tdS}>
+                              <td className={styles.td}>
                                 {(() => {
                                   const name = entry.source === 'IMPORT'
                                     ? entry.packageName
                                     : entry.serviceName;
                                   return name
                                     ? <code style={{ fontSize: 13 }}>{name}</code>
-                                    : <span style={{ color: '#8a8d90' }}>—</span>;
+                                    : <span className={styles.dash}>—</span>;
                                 })()}
                               </td>
 
                               {/* Namespace */}
-                              <td style={tdS}>
+                              <td className={styles.td}>
                                 <code style={{ fontSize: 12 }}>{entry.namespace ?? '—'}</code>
                               </td>
 
                               {/* Status */}
-                              <td style={{ ...tdS, textAlign: 'center' }}>
+                              <td className={styles.td} style={{ textAlign: 'center' }}>
                                 <Label color={statusColor(entry.status)}>
                                   {entry.status === 'COMPLETED' ? t('history.statusSuccess')
                                     : entry.status === 'FAILED' ? t('history.statusFailed')
@@ -327,19 +324,19 @@ const HistoryPage: React.FC = () => {
                               </td>
 
                               {/* Success/Failure count */}
-                              <td style={{ ...tdS, textAlign: 'center' }}>
+                              <td className={styles.td} style={{ textAlign: 'center' }}>
                                 {entry.totalCount != null ? (
                                   <span style={{ fontSize: 13 }}>
-                                    <span style={{ color: '#3e8635', fontWeight: 600 }}>
+                                    <span className={styles.successCount}>
                                       <CheckCircleIcon style={{ marginRight: 3, fontSize: 12 }} />
                                       {entry.successCount ?? 0}
                                     </span>
-                                    <span style={{ color: '#6a6e73', margin: '0 4px' }}>/</span>
-                                    <span style={{ color: (entry.failureCount ?? 0) > 0 ? '#c9190b' : '#6a6e73', fontWeight: (entry.failureCount ?? 0) > 0 ? 600 : 400 }}>
+                                    <span className={styles.mutedSep}>/</span>
+                                    <span className={`${styles.failCount}${(entry.failureCount ?? 0) > 0 ? ` ${styles.hasFailures}` : ''}`}>
                                       <ExclamationCircleIcon style={{ marginRight: 3, fontSize: 12 }} />
                                       {entry.failureCount ?? 0}
                                     </span>
-                                    <span style={{ color: '#8a8d90', fontSize: 11, marginLeft: 4 }}>
+                                    <span className={styles.totalHint}>
                                       {t('history.totalOf', { count: entry.totalCount })}
                                     </span>
                                   </span>
@@ -347,7 +344,7 @@ const HistoryPage: React.FC = () => {
                               </td>
 
                               {/* Download */}
-                              <td style={{ ...tdS, textAlign: 'center' }}>
+                              <td className={styles.td} style={{ textAlign: 'center' }}>
                                 <Button
                                   variant="secondary"
                                   icon={<DownloadIcon />}
@@ -362,29 +359,29 @@ const HistoryPage: React.FC = () => {
 
                             {/* Expanded: failure details */}
                             {isExpanded && hasFailures && (
-                              <tr style={{ borderBottom: '1px solid #f0f0f0' }}>
-                                <td colSpan={9} style={{ padding: '0 0 12px 72px', background: '#fff8f7' }}>
-                                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                                    <caption style={{ textAlign: 'left', padding: '8px 0 4px', fontWeight: 600, color: '#c9190b' }}>
+                              <tr className={styles.failureDetailRow}>
+                                <td colSpan={9} className={styles.failureDetailCell}>
+                                  <table className={styles.table} style={{ fontSize: 12 }}>
+                                    <caption className={styles.failureCaption}>
                                       {t('history.failedResources', { count: failures.length })}
                                     </caption>
                                     <thead>
-                                      <tr style={{ color: '#6a6e73' }}>
-                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colFile')}</th>
-                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>Kind</th>
-                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colName')}</th>
-                                        <th scope="col" style={{ ...thS, fontWeight: 600, padding: '4px 12px' }}>{t('history.colError')}</th>
+                                      <tr className={styles.failureHeader}>
+                                        <th scope="col" className={styles.th} style={{ padding: '4px 12px' }}>{t('history.colFile')}</th>
+                                        <th scope="col" className={styles.th} style={{ padding: '4px 12px' }}>Kind</th>
+                                        <th scope="col" className={styles.th} style={{ padding: '4px 12px' }}>{t('history.colName')}</th>
+                                        <th scope="col" className={styles.th} style={{ padding: '4px 12px' }}>{t('history.colError')}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {failures.map((f, i) => (
-                                        <tr key={i} style={{ borderTop: '1px solid #f5c6c6' }}>
+                                        <tr key={i} className={styles.failureItemRow}>
                                           <td style={{ padding: '4px 12px', fontFamily: 'monospace' }}>{f.fileName}</td>
                                           <td style={{ padding: '4px 12px' }}>
                                             <Label isCompact color="red">{f.kind}</Label>
                                           </td>
                                           <td style={{ padding: '4px 12px', fontFamily: 'monospace' }}>{f.name}</td>
-                                          <td style={{ padding: '4px 12px', color: '#c9190b', wordBreak: 'break-all' }}>
+                                          <td className={styles.failureError}>
                                             {f.error}
                                           </td>
                                         </tr>
@@ -428,19 +425,5 @@ const HistoryPage: React.FC = () => {
   );
 };
 
-const thS: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '10px 12px',
-  fontWeight: 600,
-  fontSize: 13,
-  color: '#3c3f42',
-  whiteSpace: 'nowrap',
-  background: '#f5f5f5',
-};
-
-const tdS: React.CSSProperties = {
-  padding: '10px 12px',
-  verticalAlign: 'middle',
-};
 
 export default HistoryPage;
