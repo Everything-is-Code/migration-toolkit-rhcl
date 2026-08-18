@@ -1414,6 +1414,86 @@ class ConversionServiceTest {
                 "authorizationPolicy mode must not put OPA ip-check in AuthPolicy");
     }
 
+    // ── content_limits → EnvoyFilter request + response honesty (#22 PR-A) ────
+
+    @Test
+    void convert_contentLimits_requestShortKey_emitsEnvoyFilterMaxBytes() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("request", 1024)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("envoyfilter-content-limits.yaml"),
+                "Must emit envoyfilter-content-limits.yaml for request limit");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertTrue(ef.contains("max_request_bytes: 1024")
+                        || ef.contains("maxRequestBytes: 1024"),
+                "EnvoyFilter must enforce request body limit 1024");
+        assertTrue(ef.contains("3scale-migration/source: content_limits")
+                        || ef.contains("content_limits"),
+                "Must annotate source as content_limits");
+    }
+
+    @Test
+    void convert_contentLimits_requestContentLimitAlias_emitsEnvoyFilter() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("request_content_limit", 2048)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertNotNull(ef, "Alias request_content_limit must emit EnvoyFilter");
+        assertTrue(ef.contains("2048"), "Request limit must use alias value 2048");
+    }
+
+    @Test
+    void convert_contentLimits_responseOnly_warnsWithoutHardResponseFilter() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("response", 4096)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertTrue(ef == null || !ef.contains("max_response") && !ef.contains("response_bytes"),
+                "Must NOT emit hard response body Envoy enforcement");
+        String route = files.get("httproute.yaml");
+        assertNotNull(route);
+        assertTrue(route.contains("3scale-migration/response-content-limit")
+                        && route.contains("4096"),
+                "HTTPRoute must annotate response-content-limit");
+        String readme = files.get("README.md");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && readme.toLowerCase().contains("response"),
+                "README must WARNING about response content limit gap");
+    }
+
+    @Test
+    void convert_contentLimits_responseContentLimitAlias_annotatesAndWarns() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("response_content_limit", 8192)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String route = files.get("httproute.yaml");
+        assertTrue(route != null && route.contains("8192")
+                        && route.contains("response-content-limit"),
+                "Alias response_content_limit must annotate HTTPRoute");
+        String readme = files.get("README.md");
+        assertTrue(readme != null && readme.contains("WARNING"));
+    }
+
+    @Test
+    void convert_contentLimits_requestAndResponse_emitsFilterAndAnnotation() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of(
+                "request", 512,
+                "response_content_limit", 1024)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertNotNull(ef);
+        assertTrue(ef.contains("512"));
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("response-content-limit") && route.contains("1024"));
+        assertTrue(files.get("README.md").contains("WARNING"));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService(String name, String systemName) {
@@ -1470,6 +1550,14 @@ class ConversionServiceTest {
         cfg.put("error_msg", "IP not allowed");
         cfg.put("client_ip_sources", List.of("X-Forwarded-For", "X-Real-IP"));
         p.configuration = cfg;
+        return p;
+    }
+
+    private Policy contentLimitsPolicy(Map<String, Object> configuration) {
+        Policy p = new Policy();
+        p.name = "content_limits";
+        p.enabled = true;
+        p.configuration = new HashMap<>(configuration);
         return p;
     }
 

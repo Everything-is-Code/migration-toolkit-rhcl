@@ -293,6 +293,35 @@ class CompatibilityServiceTest {
                 && "JWT Claim Check".equals(i.name)));
     }
 
+    /**
+     * After content_limits converter lands (PR-A), DEFAULT_SUPPORTED includes
+     * Response/Request Content Limits.
+     */
+    @Test
+    void check_contentLimits_defaultSupported() {
+        Set<String> defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection",
+                "JWT Claim Check",
+                "Response/Request Content Limits");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("content_limits"));
+        CompatibilityResult result = service.check(svc, defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Response/Request Content Limits".equals(i.name)));
+    }
+
     @Test
     void check_customSupportedListWithoutCors_stillWarns() {
         // User override / saved custom list without CORS must keep WARNING until reset.
