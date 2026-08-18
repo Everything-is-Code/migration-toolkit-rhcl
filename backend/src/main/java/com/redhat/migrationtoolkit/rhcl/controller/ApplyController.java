@@ -50,9 +50,6 @@ public class ApplyController {
 
     private static final Logger LOG = Logger.getLogger(ApplyController.class);
 
-    /** Authorino operator ServiceAccount name (stable across installs). */
-    private static final String AUTHORINO_SERVICE_ACCOUNT = "authorino-authorino";
-
     @Inject
     KubernetesClient client;
 
@@ -67,6 +64,10 @@ public class ApplyController {
 
     @ConfigProperty(name = "kuadrant.authorino.deployment")
     String authorinoDeployment;
+
+    /** Authorino operator ServiceAccount name. Override via {@code AUTHORINO_SERVICE_ACCOUNT} for non-default installs. */
+    @ConfigProperty(name = "kuadrant.authorino.service-account")
+    String authorinoServiceAccount;
 
     @Context
     HttpHeaders httpHeaders;
@@ -346,7 +347,7 @@ public class ApplyController {
                 .endRoleRef()
                 .addNewSubject()
                     .withKind("ServiceAccount")
-                    .withName(AUTHORINO_SERVICE_ACCOUNT)
+                    .withName(authorinoServiceAccount)
                     .withNamespace(kuadrantNamespace)
                 .endSubject()
                 .build();

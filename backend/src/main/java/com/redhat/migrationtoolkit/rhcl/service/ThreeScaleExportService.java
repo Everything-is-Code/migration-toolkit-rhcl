@@ -52,6 +52,14 @@ public class ThreeScaleExportService {
     @ConfigProperty(name = "threescale.detect-timeout")
     int detectTimeoutSeconds;
 
+    /**
+     * Runtime-overridable page size for Admin API list requests. Defaults to
+     * {@link #LIST_PAGE_SIZE} so plain construction (e.g. unit tests without CDI)
+     * keeps the same behavior. Override via {@code THREESCALE_PAGE_SIZE} when CDI-managed.
+     */
+    @ConfigProperty(name = "threescale.page-size", defaultValue = ConversionConstants.LIST_PAGE_SIZE_DEFAULT)
+    int pageSize = LIST_PAGE_SIZE;
+
     public boolean testConnection(ConnectionRequest req) {
         try {
             ThreeScaleClient client = buildClient(req.url);
@@ -246,10 +254,10 @@ public class ThreeScaleExportService {
         List<Map<String, Object>> all = new ArrayList<>();
         int page = 1;
         while (true) {
-            Map<String, Object> response = client.getServices(accessToken, page, LIST_PAGE_SIZE);
+            Map<String, Object> response = client.getServices(accessToken, page, pageSize);
             List<Map<String, Object>> pageItems = extractList(response, "services");
             all.addAll(pageItems);
-            if (pageItems.size() < LIST_PAGE_SIZE) {
+            if (pageItems.size() < pageSize) {
                 break;
             }
             page++;
@@ -263,7 +271,7 @@ public class ThreeScaleExportService {
         try {
             int page = 1;
             while (true) {
-                Map<String, Object> response = client.getBackends(accessToken, page, LIST_PAGE_SIZE);
+                Map<String, Object> response = client.getBackends(accessToken, page, pageSize);
                 List<Map<String, Object>> pageItems = extractList(response, "backend_apis");
                 if (pageItems.isEmpty()) {
                     pageItems = extractList(response, "backends");
@@ -284,7 +292,7 @@ public class ThreeScaleExportService {
                         catalog.put(backend.id, backend);
                     }
                 }
-                if (pageItems.size() < LIST_PAGE_SIZE) {
+                if (pageItems.size() < pageSize) {
                     break;
                 }
                 page++;
