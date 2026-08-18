@@ -149,6 +149,15 @@ public class ConversionService {
             }
         }
 
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits != null) {
+            Integer requestBytes = resolveContentLimitBytes(contentLimits, true);
+            if (requestBytes != null && requestBytes > 0) {
+                files.put("envoyfilter-content-limits.yaml",
+                        generateContentLimitsEnvoyFilter(name, namespace, requestBytes));
+            }
+        }
+
         Policy ipCheck = findIpCheckPolicy(service);
         if (ipCheck != null && "authorizationPolicy".equals(ipCheckMode)) {
             files.put("authorizationpolicy.yaml",
@@ -474,7 +483,7 @@ spec:
 
     private String generateHttpRoute(String name, String namespace, ApiService service,
                                      List<ResolvedBackend> backends, boolean corsNative) {
-        String annotations = buildUpstreamAnnotations(service);
+        String annotations = buildHttpRouteAnnotations(service);
         StringBuilder sb = new StringBuilder();
         sb.append("""
 apiVersion: gateway.networking.k8s.io/v1
@@ -995,11 +1004,33 @@ metadata:
                 return "";
             }
             return """
-  annotations:
     3scale-migration/upstream-send-timeout: "%ss"
 """.formatted(sendRaw);
         }
         return "";
+    }
+
+    /**
+     * Combine HTTPRoute metadata annotations (upstream send_timeout + content_limits response gap).
+     */
+    private String buildHttpRouteAnnotations(ApiService service) {
+        StringBuilder body = new StringBuilder();
+        String upstream = buildUpstreamAnnotations(service);
+        if (!upstream.isBlank()) {
+            body.append(upstream);
+        }
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits != null) {
+            Integer responseBytes = resolveContentLimitBytes(contentLimits, false);
+            if (responseBytes != null && responseBytes > 0) {
+                body.append(String.format(
+                        "    3scale-migration/response-content-limit: \"%d\"%n", responseBytes));
+            }
+        }
+        if (body.length() == 0) {
+            return "";
+        }
+        return "  annotations:\n" + body;
     }
 
     // ─────────────────────────────────────────────
@@ -1871,6 +1902,87 @@ spec:
                 .orElse(null);
     }
 
+    private Policy findContentLimitsPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "content_limits".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Resolve request or response byte limit from content_limits configuration.
+     * Accepts short keys ({@code request}/{@code response}) and aliases
+     * ({@code request_content_limit}/{@code response_content_limit}).
+     */
+    private Integer resolveContentLimitBytes(Policy policy, boolean request) {
+        if (policy == null || policy.configuration == null) {
+            return null;
+        }
+        Map<String, Object> cfg = policy.configuration;
+        Object raw = request
+                ? firstNonNull(cfg.get("request"), cfg.get("request_content_limit"))
+                : firstNonNull(cfg.get("response"), cfg.get("response_content_limit"));
+        if (raw == null) {
+            return null;
+        }
+        if (raw instanceof Number n) {
+            return n.intValue();
+        }
+        try {
+            return Integer.parseInt(raw.toString().trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static Object firstNonNull(Object a, Object b) {
+        return a != null ? a : b;
+    }
+
+    /**
+     * Envoy buffer filter for request body byte limit (response limits are honesty-only).
+     */
+    private String generateContentLimitsEnvoyFilter(String name, String namespace, int maxRequestBytes) {
+        return """
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: %s-content-limits
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+  annotations:
+    3scale-migration/source: content_limits
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: %s-gateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: "envoy.filters.network.http_connection_manager"
+              subFilter:
+                name: "envoy.filters.http.router"
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.buffer
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+            max_request_bytes: %d
+""".formatted(name, namespace, name, name, maxRequestBytes);
+    }
+
     // ─────────────────────────────────────────────
     // URL Rewriting (path) → EnvoyFilter (Lua)
     // ─────────────────────────────────────────────
@@ -1881,9 +1993,9 @@ spec:
      * so an Istio EnvoyFilter is used to inject an envoy.filters.http.lua filter
      * that rewrites the request path.
      *
-     * 3scale regex/replace uses PCRE + ngx.re.sub syntax (\d, capture references $1).
+     * 3scale regex/replace uses PCRE + ngx.re.sub syntax (\\d, capture references $1).
      * The Envoy Lua filter can only use Lua's standard string.gsub (Lua patterns), so
-     * commonly used notations are converted on a best-effort basis (\d → %d, \w → %w, $1/\1 → %1, etc.).
+     * commonly used notations are converted on a best-effort basis (\\d → %d, \\w → %w, $1/\\1 → %1, etc.).
      * Complex PCRE constructs (lookahead, etc.) cannot be converted, so the generated
      * Lua patterns must be manually verified.
      */
@@ -2530,8 +2642,15 @@ target the single HTTPRoute `%s-route`.
                 ? "| envoyfilter-url-rewriting.yaml | Reproduces the 3scale URL Rewriting policy via Lua filter (PCRE→Lua pattern conversion is best-effort — verify before use) |\n"
                 : "";
 
+        Policy contentLimits = findContentLimitsPolicy(service);
+        Integer requestLimit = contentLimits != null ? resolveContentLimitBytes(contentLimits, true) : null;
+        String contentLimitsFile = (requestLimit != null && requestLimit > 0)
+                ? "| envoyfilter-content-limits.yaml | Envoy buffer filter enforcing request body byte limit from 3scale content_limits |\n"
+                : "";
+
         String fileList = loggingFile
                 + urlRewritingFile
+                + contentLimitsFile
                 + (backendType == BackendType.EXTERNAL
                     ? "| serviceentry.yaml | Istio ServiceEntry + ExternalName Service for external backend |\n"
                     + "| destinationrule.yaml | TLS origination to external host |"
@@ -2568,6 +2687,7 @@ Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before a
 
         String rateLimitNotes = buildRateLimitApproximationNotes(service);
         String jwtClaimCheckNotes = buildJwtClaimCheckReadmeNotes(service);
+        String contentLimitsNotes = buildContentLimitsReadmeNotes(service);
 
         return """
 # %s - Connectivity Link Migration
@@ -2589,7 +2709,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 | secret.yaml | Credentials (replace values before applying) |
 | configmap.yaml | Configuration data |
 %s
-%s%s%s
+%s%s%s%s
 ## Prerequisites
 - OpenShift with Connectivity Link (Kuadrant) operator
 - Gateway API CRDs
@@ -2621,6 +2741,7 @@ kubectl get httproute %s-route -n %s
             tokenIntrospectionNotes,
             rateLimitNotes,
             jwtClaimCheckNotes,
+            contentLimitsNotes,
             namespace, name, namespace, name, namespace, name
         );
     }
@@ -2706,6 +2827,35 @@ Review the following limitations before apply:
 Liquid claim/value templates, `combine_op=or`, and path/method-gated deny semantics are not fully
 reproduced — verify authorization behavior against the original APIcast policy.
 """.formatted(bullets);
+    }
+
+    private String buildContentLimitsReadmeNotes(ApiService service) {
+        Policy contentLimits = findContentLimitsPolicy(service);
+        if (contentLimits == null) {
+            return "";
+        }
+        Integer responseBytes = resolveContentLimitBytes(contentLimits, false);
+        if (responseBytes == null || responseBytes <= 0) {
+            Integer requestBytes = resolveContentLimitBytes(contentLimits, true);
+            if (requestBytes != null && requestBytes > 0) {
+                return """
+
+## Response/Request Content Limits
+
+`envoyfilter-content-limits.yaml` enforces the request body byte limit via Envoy buffer filter.
+""";
+            }
+            return "";
+        }
+        return """
+
+## WARNING: Response content limit not enforced
+
+3scale `content_limits` response / `response_content_limit` (%d bytes) is recorded on the HTTPRoute
+annotation `3scale-migration/response-content-limit` but is **not** hard-enforced in Envoy.
+Gateway API / Istio has no portable response-body size filter in this converter — verify manually
+if response size must be capped.
+""".formatted(responseBytes);
     }
 
     // ─────────────────────────────────────────────
