@@ -241,6 +241,13 @@ public class CompatibilityService {
             items.add(new CompatibilityItem("Backend", "WARNING", "No backend configured"));
             return;
         }
+        if (service.backends.size() > 1) {
+            items.add(new CompatibilityItem(
+                    "Multiple backends",
+                    "WARNING",
+                    "Product has " + service.backends.size()
+                            + " backends; conversion uses path-based routing across all backends"));
+        }
         for (Backend backend : service.backends) {
             if (backend.privateEndpoint != null && backend.privateEndpoint.startsWith("https://")) {
                 items.add(new CompatibilityItem(

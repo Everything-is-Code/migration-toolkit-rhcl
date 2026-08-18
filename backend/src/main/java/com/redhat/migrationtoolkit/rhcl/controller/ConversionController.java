@@ -88,6 +88,12 @@ public class ConversionController {
                 opts.ipCheckMode = "authPolicyOpa".equals(request.ipCheckMode)
                         ? "authPolicyOpa" : "authorizationPolicy";
                 opts.corsNative = caps != null && caps.corsNative;
+                opts.includeTlsPolicy = Boolean.TRUE.equals(request.includeTlsPolicy);
+                opts.tlsIssuerKind = request.tlsIssuerKind;
+                opts.tlsIssuerName = request.tlsIssuerName;
+                opts.includeDnsPolicy = Boolean.TRUE.equals(request.includeDnsPolicy);
+                opts.dnsHostname = request.dnsHostname;
+                opts.dnsProviderSecretName = request.dnsProviderSecretName;
                 Map<String, String> yamlFiles = conversionService.convert(
                         service, namespace, request.externalBackendUrl, opts);
 

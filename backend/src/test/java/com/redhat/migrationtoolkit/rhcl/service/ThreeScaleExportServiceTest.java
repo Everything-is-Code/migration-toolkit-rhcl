@@ -5,6 +5,7 @@ import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
+import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -454,5 +455,91 @@ class ThreeScaleExportServiceTest {
 
         Map<String, ?> catalog = service.fetchBackendCatalog(client, "tok");
         assertTrue(catalog.isEmpty());
+    }
+
+    // ── Multi-backend path/weight capture (#28) ───────────────────────────────
+
+    @Test
+    void resolveBackendsFromUsages_capturesPathAndWeightOnClone_doesNotMutateCatalog() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        Backend catalogEntry = new Backend();
+        catalogEntry.id = "10";
+        catalogEntry.name = "Orders";
+        catalogEntry.systemName = "orders";
+        catalogEntry.privateEndpoint = "https://orders.example.com";
+        Map<String, Backend> catalog = new HashMap<>();
+        catalog.put("10", catalogEntry);
+
+        Map<String, Object> usageA = new HashMap<>();
+        usageA.put("backend_id", 10);
+        usageA.put("path", "/orders");
+        usageA.put("weight", 2);
+        Map<String, Object> usageB = new HashMap<>();
+        usageB.put("backend_id", 10);
+        usageB.put("path", "/legacy");
+        usageB.put("weight", 1);
+        org.mockito.Mockito.when(client.getBackendUsages(anyString(), anyString()))
+                .thenReturn(List.of(
+                        Map.of("backend_usage", usageA),
+                        Map.of("backend_usage", usageB)));
+
+        List<Backend> resolved = service.resolveBackendsFromUsages(client, "svc-1", "tok", catalog);
+
+        assertEquals(2, resolved.size());
+        assertEquals("/orders", resolved.get(0).path);
+        assertEquals(2, resolved.get(0).weight);
+        assertEquals("/legacy", resolved.get(1).path);
+        assertEquals(1, resolved.get(1).weight);
+        assertNull(catalogEntry.path, "Catalog entry must not receive usage path");
+        assertNull(catalogEntry.weight, "Catalog entry must not receive usage weight");
+        assertNotSame(catalogEntry, resolved.get(0));
+        assertNotSame(catalogEntry, resolved.get(1));
+    }
+
+    @Test
+    void resolveBackendsFromUsages_blankPath_normalizesToRoot() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        Backend catalogEntry = new Backend();
+        catalogEntry.id = "5";
+        catalogEntry.name = "Root";
+        catalogEntry.systemName = "root";
+        Map<String, Backend> catalog = Map.of("5", catalogEntry);
+
+        Map<String, Object> usage = new HashMap<>();
+        usage.put("backend_id", 5);
+        usage.put("path", "  ");
+        org.mockito.Mockito.when(client.getBackendUsages(anyString(), anyString()))
+                .thenReturn(List.of(Map.of("backend_usage", usage)));
+
+        List<Backend> resolved = service.resolveBackendsFromUsages(client, "svc-1", "tok", catalog);
+        assertEquals(1, resolved.size());
+        assertEquals("/", resolved.get(0).path);
+        assertNull(catalogEntry.path);
+    }
+
+    @Test
+    void resolveBackendsFromUsages_fallbackGet_attachesUsagePathWithoutCatalogMutation() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        org.mockito.Mockito.when(client.getBackendUsages(anyString(), anyString()))
+                .thenReturn(List.of(Map.of("backend_usage", Map.of(
+                        "backend_id", 7, "path", "/payments", "weight", 3))));
+        org.mockito.Mockito.when(client.getBackend(eq("7"), anyString()))
+                .thenReturn(Map.of("backend_api", Map.of(
+                        "id", 7, "name", "Pay", "system_name", "pay",
+                        "private_endpoint", "https://pay.example.com")));
+
+        List<Backend> resolved = service.resolveBackendsFromUsages(
+                client, "svc-1", "tok", Map.of());
+
+        assertEquals(1, resolved.size());
+        assertEquals("/payments", resolved.get(0).path);
+        assertEquals(3, resolved.get(0).weight);
+        assertEquals("Pay", resolved.get(0).name);
     }
 }

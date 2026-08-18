@@ -1,4 +1,26 @@
 {{- if .Values.postgresql.enabled }}
+{{- $_ := include "migration-toolkit-rhcl.requireDbCredentials" . -}}
+{{- if .Values.postgresql.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "migration-toolkit-rhcl.postgresql" . }}-data
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "migration-toolkit-rhcl.postgresql" . }}
+    app.kubernetes.io/component: database
+    {{- include "migration-toolkit-rhcl.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.postgresql.persistence.size | quote }}
+  {{- if .Values.postgresql.persistence.storageClassName }}
+  storageClassName: {{ .Values.postgresql.persistence.storageClassName | quote }}
+  {{- end }}
+---
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -27,22 +49,39 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.postgresql.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: postgresql
-          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          image: {{ include "migration-toolkit-rhcl.postgresqlImage" . | quote }}
           imagePullPolicy: {{ .Values.postgresql.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 5432
           env:
             - name: POSTGRESQL_USER
-              value: {{ .Values.postgresql.username | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "migration-toolkit-rhcl.dbSecretName" . }}
+                  key: DB_USER
             - name: POSTGRESQL_PASSWORD
-              value: {{ .Values.postgresql.password | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "migration-toolkit-rhcl.dbSecretName" . }}
+                  key: DB_PASSWORD
             - name: POSTGRESQL_DATABASE
-              value: {{ .Values.postgresql.database | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "migration-toolkit-rhcl.dbSecretName" . }}
+                  key: DB_NAME
           volumeMounts:
             - name: pgdata
               mountPath: /var/lib/pgsql/data
+          {{- with .Values.postgresql.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
           readinessProbe:
@@ -57,7 +96,12 @@ spec:
             periodSeconds: 20
       volumes:
         - name: pgdata
+          {{- if .Values.postgresql.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "migration-toolkit-rhcl.postgresql" . }}-data
+          {{- else }}
           emptyDir: {}
+          {{- end }}
 ---
 apiVersion: v1
 kind: Service
