@@ -10,7 +10,9 @@ import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Metric;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.RestClientBuilder;
 import org.jboss.logging.Logger;
 
@@ -38,11 +40,25 @@ public class ThreeScaleExportService {
 
     private static final Logger LOG = Logger.getLogger(ThreeScaleExportService.class);
 
-    /** Page size for Admin API list endpoints. */
-    static final int LIST_PAGE_SIZE = 500;
+    /** Page size for Admin API list endpoints (shared with {@link ThreeScaleClient} @DefaultValue). */
+    static final int LIST_PAGE_SIZE = ConversionConstants.LIST_PAGE_SIZE;
 
     /** Max wait for list-enrich virtual-thread pool shutdown. */
     static final long LIST_ENRICH_TERMINATION_SECONDS = 60;
+
+    @ConfigProperty(name = "threescale.connect-timeout")
+    int connectTimeoutSeconds;
+
+    @ConfigProperty(name = "threescale.detect-timeout")
+    int detectTimeoutSeconds;
+
+    /**
+     * Runtime-overridable page size for Admin API list requests. Defaults to
+     * {@link #LIST_PAGE_SIZE} so plain construction (e.g. unit tests without CDI)
+     * keeps the same behavior. Override via {@code THREESCALE_PAGE_SIZE} when CDI-managed.
+     */
+    @ConfigProperty(name = "threescale.page-size", defaultValue = ConversionConstants.LIST_PAGE_SIZE_DEFAULT)
+    int pageSize = LIST_PAGE_SIZE;
 
     public boolean testConnection(ConnectionRequest req) {
         try {
@@ -63,12 +79,12 @@ public class ThreeScaleExportService {
         try {
             String accountUrl = url.replaceAll("/+$", "") + "/admin/api/account.json?access_token=" + accessToken;
             HttpClient httpClient = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(5))
+                    .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
                     .followRedirects(HttpClient.Redirect.NORMAL)
                     .build();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(new URI(accountUrl))
-                    .timeout(Duration.ofSeconds(5))
+                    .timeout(Duration.ofSeconds(connectTimeoutSeconds))
                     .GET()
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -95,7 +111,7 @@ public class ThreeScaleExportService {
             String dashboardUrl = url.replaceAll("/+$", "") + "/p/admin/dashboard";
             HttpRequest dashRequest = HttpRequest.newBuilder()
                     .uri(new URI(dashboardUrl + "?access_token=" + accessToken))
-                    .timeout(Duration.ofSeconds(8))
+                    .timeout(Duration.ofSeconds(detectTimeoutSeconds))
                     .GET()
                     .build();
             HttpResponse<String> dashResponse = httpClient.send(dashRequest, HttpResponse.BodyHandlers.ofString());
@@ -238,10 +254,10 @@ public class ThreeScaleExportService {
         List<Map<String, Object>> all = new ArrayList<>();
         int page = 1;
         while (true) {
-            Map<String, Object> response = client.getServices(accessToken, page, LIST_PAGE_SIZE);
+            Map<String, Object> response = client.getServices(accessToken, page, pageSize);
             List<Map<String, Object>> pageItems = extractList(response, "services");
             all.addAll(pageItems);
-            if (pageItems.size() < LIST_PAGE_SIZE) {
+            if (pageItems.size() < pageSize) {
                 break;
             }
             page++;
@@ -255,7 +271,7 @@ public class ThreeScaleExportService {
         try {
             int page = 1;
             while (true) {
-                Map<String, Object> response = client.getBackends(accessToken, page, LIST_PAGE_SIZE);
+                Map<String, Object> response = client.getBackends(accessToken, page, pageSize);
                 List<Map<String, Object>> pageItems = extractList(response, "backend_apis");
                 if (pageItems.isEmpty()) {
                     pageItems = extractList(response, "backends");
@@ -276,7 +292,7 @@ public class ThreeScaleExportService {
                         catalog.put(backend.id, backend);
                     }
                 }
-                if (pageItems.size() < LIST_PAGE_SIZE) {
+                if (pageItems.size() < pageSize) {
                     break;
                 }
                 page++;

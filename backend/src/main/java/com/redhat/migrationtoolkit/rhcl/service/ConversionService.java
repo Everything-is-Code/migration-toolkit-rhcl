@@ -6,6 +6,7 @@ import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
@@ -94,14 +95,17 @@ public class ConversionService {
         String externalHost = backendType == BackendType.EXTERNAL ? extractHostname(effectiveBackendUrl) : null;
         String internalService = backendType == BackendType.INTERNAL
                 ? extractInternalService(effectiveBackendUrl, name) : null;
-        int internalPort = backendType == BackendType.INTERNAL ? extractPort(effectiveBackendUrl, 8080) : 8080;
+        int internalPort = backendType == BackendType.INTERNAL
+                ? extractPort(effectiveBackendUrl, ConversionConstants.DEFAULT_INTERNAL_PORT)
+                : ConversionConstants.DEFAULT_INTERNAL_PORT;
         // The external backend port is determined from the URL scheme (http→80 / https→443)
         // or an explicitly specified port. Hardcoding 443 would prevent connections to
         // backends that only listen on HTTP (e.g., OpenShift Routes without TLS).
         int externalDefaultPort = effectiveBackendUrl != null && effectiveBackendUrl.trim().startsWith("http://")
-                ? 80 : 443;
+                ? ConversionConstants.DEFAULT_HTTP_PORT : ConversionConstants.DEFAULT_HTTPS_PORT;
         int externalPort = backendType == BackendType.EXTERNAL
-                ? extractPort(effectiveBackendUrl, externalDefaultPort) : 443;
+                ? extractPort(effectiveBackendUrl, externalDefaultPort)
+                : ConversionConstants.DEFAULT_HTTPS_PORT;
 
         files.put("gateway.yaml", generateGateway(name, namespace));
         files.put("httproute.yaml",  generateHttpRoute(
@@ -118,7 +122,7 @@ public class ConversionService {
         }
 
         if (backendType == BackendType.EXTERNAL) {
-            boolean externalUsesTls = externalPort == 443;
+            boolean externalUsesTls = externalPort == ConversionConstants.DEFAULT_HTTPS_PORT;
             files.put("serviceentry.yaml",
                     generateServiceEntry(name, namespace, externalHost, externalPort, externalUsesTls));
             files.put("destinationrule.yaml",
@@ -271,13 +275,13 @@ spec:
   listeners:
     - name: http
       protocol: HTTP
-      port: 80
+      port: %d
       allowedRoutes:
         namespaces:
           from: Same
     - name: https
       protocol: HTTPS
-      port: 443
+      port: %d
       tls:
         mode: Terminate
         certificateRefs:
@@ -285,7 +289,10 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
-""".formatted(name, namespace, name, name);
+""".formatted(name, namespace, name,
+                ConversionConstants.DEFAULT_HTTP_PORT,
+                ConversionConstants.DEFAULT_HTTPS_PORT,
+                name);
     }
 
     // ─────────────────────────────────────────────
@@ -882,7 +889,7 @@ spec:
         if ("jwt".equals(authType)) {
             String issuer = service.authentication.oidcIssuerEndpoint != null
                     ? service.authentication.oidcIssuerEndpoint
-                    : "https://your-oidc-provider/realms/your-realm";
+                    : ConversionConstants.DEFAULT_OIDC_ISSUER_URL;
             String yaml = """
 apiVersion: kuadrant.io/v1
 kind: AuthPolicy
@@ -1888,12 +1895,12 @@ spec:
         // Build response headers using plain.value (secretKeyRef is not in AuthPolicy schema)
         StringBuilder responseHeaders = new StringBuilder();
         if ("user_key".equals(authType)) {
-            String userKey = String.valueOf(cfg.getOrDefault("user_key", "REPLACE_ME"));
+            String userKey = String.valueOf(cfg.getOrDefault("user_key", ConversionConstants.CREDENTIAL_PLACEHOLDER));
             responseHeaders.append(String.format(
                 "          x-user-key:%n            plain:%n              value: \"%s\"%n", userKey));
         } else if ("app_id_and_app_key".equals(authType) || "app_id".equals(authType)) {
-            String appId  = String.valueOf(cfg.getOrDefault("app_id",  "REPLACE_ME"));
-            String appKey = String.valueOf(cfg.getOrDefault("app_key", "REPLACE_ME"));
+            String appId  = String.valueOf(cfg.getOrDefault("app_id",  ConversionConstants.CREDENTIAL_PLACEHOLDER));
+            String appKey = String.valueOf(cfg.getOrDefault("app_key", ConversionConstants.CREDENTIAL_PLACEHOLDER));
             responseHeaders.append(String.format(
                 "          x-app-id:%n            plain:%n              value: \"%s\"%n", appId));
             responseHeaders.append(String.format(
@@ -1957,11 +1964,11 @@ spec:
             String polAuthType = String.valueOf(cfg.getOrDefault("auth_type", "user_key"));
             StringBuilder stringData = new StringBuilder();
             if ("user_key".equals(polAuthType)) {
-                String userKey = String.valueOf(cfg.getOrDefault("user_key", "REPLACE_ME"));
+                String userKey = String.valueOf(cfg.getOrDefault("user_key", ConversionConstants.CREDENTIAL_PLACEHOLDER));
                 stringData.append(String.format("  user_key: \"%s\"%n", userKey));
             } else {
-                String appId  = String.valueOf(cfg.getOrDefault("app_id",  "REPLACE_ME"));
-                String appKey = String.valueOf(cfg.getOrDefault("app_key", "REPLACE_ME"));
+                String appId  = String.valueOf(cfg.getOrDefault("app_id",  ConversionConstants.CREDENTIAL_PLACEHOLDER));
+                String appKey = String.valueOf(cfg.getOrDefault("app_key", ConversionConstants.CREDENTIAL_PLACEHOLDER));
                 stringData.append(String.format("  app_id: \"%s\"%n", appId));
                 stringData.append(String.format("  app_key: \"%s\"%n", appKey));
             }
@@ -2026,9 +2033,11 @@ metadata:
     migrated-from: 3scale
 type: Opaque
 stringData:
-  client-id: "REPLACE_ME"
-  client-secret: "REPLACE_ME"
-""".formatted(name, namespace, name);
+  client-id: "%s"
+  client-secret: "%s"
+""".formatted(name, namespace, name,
+                ConversionConstants.CREDENTIAL_PLACEHOLDER,
+                ConversionConstants.CREDENTIAL_PLACEHOLDER);
     }
 
     /**
@@ -2047,8 +2056,8 @@ stringData:
                     + "fill clientID/clientSecret before apply\n";
         }
 
-        String idValue = clientId != null ? clientId : "REPLACE_ME";
-        String secretValue = clientSecret != null ? clientSecret : "REPLACE_ME";
+        String idValue = clientId != null ? clientId : ConversionConstants.CREDENTIAL_PLACEHOLDER;
+        String secretValue = clientSecret != null ? clientSecret : ConversionConstants.CREDENTIAL_PLACEHOLDER;
 
         return """
 apiVersion: v1

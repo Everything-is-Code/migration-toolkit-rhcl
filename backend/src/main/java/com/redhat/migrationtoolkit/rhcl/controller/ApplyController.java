@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.controller;
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
 import com.redhat.migrationtoolkit.rhcl.util.Messages;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.api.model.rbac.ClusterRole;
 import io.fabric8.kubernetes.api.model.rbac.ClusterRoleBuilder;
@@ -57,6 +58,16 @@ public class ApplyController {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @ConfigProperty(name = "kuadrant.namespace")
+    String kuadrantNamespace;
+
+    @ConfigProperty(name = "kuadrant.authorino.deployment")
+    String authorinoDeployment;
+
+    /** Authorino operator ServiceAccount name. Override via {@code AUTHORINO_SERVICE_ACCOUNT} for non-default installs. */
+    @ConfigProperty(name = "kuadrant.authorino.service-account")
+    String authorinoServiceAccount;
 
     @Context
     HttpHeaders httpHeaders;
@@ -232,8 +243,8 @@ public class ApplyController {
 
     private void restartAuthorino() {
         try {
-            String authorinoNs = "kuadrant-system";
-            String deployName = "authorino";
+            String authorinoNs = kuadrantNamespace;
+            String deployName = authorinoDeployment;
             var deployment = client.apps().deployments().inNamespace(authorinoNs).withName(deployName).get();
             if (deployment == null) {
                 LOG.infof("Authorino deployment not found in %s, skipping restart", authorinoNs);
@@ -336,8 +347,8 @@ public class ApplyController {
                 .endRoleRef()
                 .addNewSubject()
                     .withKind("ServiceAccount")
-                    .withName("authorino-authorino")
-                    .withNamespace("kuadrant-system")
+                    .withName(authorinoServiceAccount)
+                    .withNamespace(kuadrantNamespace)
                 .endSubject()
                 .build();
 

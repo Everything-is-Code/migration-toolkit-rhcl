@@ -213,10 +213,6 @@ const Footer: React.FC = () => {
     gap: '16px',
   }}>
     <span>{t('app.copyright')}</span>
-    <span> | </span>
-    <a href="mailto:nmushino@redhat.com" style={{ color: '#73bcf7', textDecoration: 'none' }}>
-      Noriaki Mushino | nmushino@redhat.com
-    </a>
   </div>
   );
 };

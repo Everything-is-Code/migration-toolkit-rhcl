@@ -15,6 +15,7 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
@@ -31,6 +32,9 @@ public class SetupController {
 
     @Inject
     KubernetesClient client;
+
+    @ConfigProperty(name = "kuadrant.namespace")
+    String kuadrantNamespace;
 
     public record SetupRequest(String namespace) {}
     public record StepResult(String step, boolean success, String message) {}
@@ -116,7 +120,7 @@ public class SetupController {
                 if (gw.getMetadata().getAnnotations() == null) {
                     gw.getMetadata().setAnnotations(new HashMap<>());
                 }
-                gw.getMetadata().getAnnotations().put("kuadrant.io/namespace", "kuadrant-system");
+                gw.getMetadata().getAnnotations().put("kuadrant.io/namespace", kuadrantNamespace);
                 gw.getMetadata().getAnnotations().put("networking.istio.io/service-type", "ClusterIP");
                 client.genericKubernetesResources(rdc)
                         .inNamespace(namespace)

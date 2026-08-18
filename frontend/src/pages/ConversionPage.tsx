@@ -181,7 +181,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                             type="url"
                             value={externalBackendUrl}
                             onChange={(_e, val) => setExternalBackendUrl(val)}
-                            placeholder="https://your-service.ecs.us-east-2.on.aws"
+                            placeholder={t('conversion.externalBackendUrlPlaceholder')}
                           />
                           <FormHelperText>
                             <HelperText>
