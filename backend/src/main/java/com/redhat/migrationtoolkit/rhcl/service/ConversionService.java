@@ -4,6 +4,7 @@ import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
+import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
@@ -19,7 +20,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @ApplicationScoped
 public class ConversionService {
@@ -80,40 +83,29 @@ public class ConversionService {
         Map<String, String> files = new LinkedHashMap<>();
         String name = toKebabCase(service.systemName != null ? service.systemName : service.name);
 
-        // If the user did not explicitly specify a URL, auto-detect the type
-        // using the actual backend (privateEndpoint) registered in 3scale.
-        // By aligning with the configmap.yaml fallback, this prevents
-        // inconsistencies such as "the backend URL points to an ELB but the
-        // HTTPRoute points to a non-existent internal cluster Service".
-        String effectiveBackendUrl = backendUrl;
-        if ((effectiveBackendUrl == null || effectiveBackendUrl.isBlank())
-                && service.backends != null && !service.backends.isEmpty()) {
-            effectiveBackendUrl = service.backends.get(0).privateEndpoint;
+        int backendCount = service.backends != null ? service.backends.size() : 0;
+        boolean overrideIgnored = backendUrl != null && !backendUrl.isBlank() && backendCount > 1;
+        if (overrideIgnored) {
+            LOG.warnf("externalBackendUrl override ignored for service %s: %d backends present; keeping path-based multi-backend routing",
+                    name, backendCount);
         }
 
-        BackendType backendType = detectBackendType(effectiveBackendUrl);
-        String externalHost = backendType == BackendType.EXTERNAL ? extractHostname(effectiveBackendUrl) : null;
-        String internalService = backendType == BackendType.INTERNAL
-                ? extractInternalService(effectiveBackendUrl, name) : null;
-        int internalPort = backendType == BackendType.INTERNAL
-                ? extractPort(effectiveBackendUrl, ConversionConstants.DEFAULT_INTERNAL_PORT)
-                : ConversionConstants.DEFAULT_INTERNAL_PORT;
-        // The external backend port is determined from the URL scheme (http→80 / https→443)
-        // or an explicitly specified port. Hardcoding 443 would prevent connections to
-        // backends that only listen on HTTP (e.g., OpenShift Routes without TLS).
-        int externalDefaultPort = effectiveBackendUrl != null && effectiveBackendUrl.trim().startsWith("http://")
-                ? ConversionConstants.DEFAULT_HTTP_PORT : ConversionConstants.DEFAULT_HTTPS_PORT;
-        int externalPort = backendType == BackendType.EXTERNAL
-                ? extractPort(effectiveBackendUrl, externalDefaultPort)
-                : ConversionConstants.DEFAULT_HTTPS_PORT;
+        List<ResolvedBackend> resolved = resolveBackends(service, name, backendUrl, overrideIgnored);
+        BackendType primaryType = resolved.stream().anyMatch(b -> b.type == BackendType.EXTERNAL)
+                ? BackendType.EXTERNAL : BackendType.INTERNAL;
+        String primaryExternalHost = resolved.stream()
+                .filter(b -> b.type == BackendType.EXTERNAL && b.externalHost != null)
+                .map(b -> b.externalHost)
+                .findFirst()
+                .orElse(null);
 
-        files.put("gateway.yaml", generateGateway(name, namespace));
-        files.put("httproute.yaml",  generateHttpRoute(
-                name, namespace, service, backendType, externalHost, internalService,
-                internalPort, externalPort, opts.corsNative, opts.retriesSupported));
+        files.put("gateway.yaml", generateGateway(name, namespace,
+                opts.includeDnsPolicy ? opts.dnsHostname : null));
+        files.put("httproute.yaml", generateHttpRoute(
+                name, namespace, service, resolved, opts.corsNative, opts.retriesSupported));
         files.put("policy.yaml",     generateAuthPolicy(name, namespace, service, anonymousTarget, ipCheckMode));
         files.put("secret.yaml",     generateSecret(name, namespace, service));
-        files.put("configmap.yaml",  generateConfigMap(name, namespace, service, effectiveBackendUrl));
+        files.put("configmap.yaml",  generateConfigMap(name, namespace, service, resolved, overrideIgnored));
         files.put("apiproduct.yaml", generateApiProduct(name, namespace, service));
 
         String authType = service.authentication != null ? service.authentication.type : "none";
@@ -121,12 +113,17 @@ public class ConversionService {
             files.put("apikey.yaml", generateApiKey(name, namespace));
         }
 
-        if (backendType == BackendType.EXTERNAL) {
-            boolean externalUsesTls = externalPort == ConversionConstants.DEFAULT_HTTPS_PORT;
-            files.put("serviceentry.yaml",
-                    generateServiceEntry(name, namespace, externalHost, externalPort, externalUsesTls));
-            files.put("destinationrule.yaml",
-                    generateDestinationRule(name, namespace, externalHost, externalUsesTls));
+        List<ResolvedBackend> externals = resolved.stream()
+                .filter(b -> b.type == BackendType.EXTERNAL)
+                .toList();
+        if (!externals.isEmpty()) {
+            files.put("serviceentry.yaml", externals.stream()
+                    .map(b -> generateServiceEntry(b.seName, b.refName, namespace, name,
+                            b.externalHost, b.port, b.usesTls))
+                    .collect(Collectors.joining("---\n")));
+            files.put("destinationrule.yaml", externals.stream()
+                    .map(b -> generateDestinationRule(b.drName, namespace, name, b.externalHost, b.usesTls))
+                    .collect(Collectors.joining("---\n")));
         }
 
         Policy loggingPolicy = findLoggingPolicy(service);
@@ -181,12 +178,124 @@ public class ConversionService {
             files.put("ratelimitpolicy.yaml", rateLimitYaml);
         }
 
-        files.put("README.md", generateReadme(service, name, namespace, backendType, externalHost));
+        if (opts.includeTlsPolicy) {
+            files.put("tlspolicy.yaml",
+                    generateTlsPolicy(name, namespace, opts.tlsIssuerKind, opts.tlsIssuerName));
+        }
+
+        if (opts.includeDnsPolicy) {
+            files.put("dnspolicy.yaml",
+                    generateDnsPolicy(name, namespace, opts.dnsProviderSecretName));
+        }
+
+        files.put("README.md", generateReadme(service, name, namespace, primaryType, primaryExternalHost,
+                resolved, overrideIgnored));
 
         if (!includeMigratedFromLabel) {
             files.replaceAll((fileName, content) -> stripMigratedFromLabel(content));
         }
         return files;
+    }
+
+    /**
+     * Resolved conversion target for one product backend (or a synthetic override/default).
+     */
+    static final class ResolvedBackend {
+        final BackendType type;
+        final String refName;
+        final String seName;
+        final String drName;
+        final String externalHost;
+        final int port;
+        final boolean usesTls;
+        final String mountPath;
+        final Integer weight;
+        final String privateEndpoint;
+
+        ResolvedBackend(BackendType type, String refName, String seName, String drName,
+                        String externalHost, int port, boolean usesTls,
+                        String mountPath, Integer weight, String privateEndpoint) {
+            this.type = type;
+            this.refName = refName;
+            this.seName = seName;
+            this.drName = drName;
+            this.externalHost = externalHost;
+            this.port = port;
+            this.usesTls = usesTls;
+            this.mountPath = mountPath;
+            this.weight = weight;
+            this.privateEndpoint = privateEndpoint;
+        }
+    }
+
+    List<ResolvedBackend> resolveBackends(ApiService service, String productName,
+                                          String backendUrl, boolean overrideIgnored) {
+        List<Backend> backends = service.backends != null ? service.backends : List.of();
+        boolean applyOverride = backendUrl != null && !backendUrl.isBlank() && !overrideIgnored;
+
+        if (applyOverride) {
+            return List.of(resolveOne(productName, backendUrl.trim(), null, "/", null, false));
+        }
+        if (backends.isEmpty()) {
+            return List.of(resolveOne(productName, null, null, "/", null, false));
+        }
+        boolean multi = backends.size() > 1;
+        List<ResolvedBackend> resolved = new ArrayList<>(backends.size());
+        for (Backend backend : backends) {
+            String sys = backend.systemName != null && !backend.systemName.isBlank()
+                    ? toKebabCase(backend.systemName)
+                    : (backend.name != null ? toKebabCase(backend.name) : "backend");
+            resolved.add(resolveOne(
+                    productName,
+                    backend.privateEndpoint,
+                    sys,
+                    normalizeMountPath(backend.path),
+                    backend.weight,
+                    multi));
+        }
+        return resolved;
+    }
+
+    private ResolvedBackend resolveOne(String productName, String url, String backendSys,
+                                       String mountPath, Integer weight, boolean multi) {
+        BackendType type = detectBackendType(url);
+        String externalHost = type == BackendType.EXTERNAL ? extractHostname(url) : null;
+        String internalService = type == BackendType.INTERNAL
+                ? extractInternalService(url, productName) : null;
+        int defaultPort = type == BackendType.EXTERNAL
+                ? (url != null && url.trim().startsWith("http://")
+                    ? ConversionConstants.DEFAULT_HTTP_PORT
+                    : ConversionConstants.DEFAULT_HTTPS_PORT)
+                : ConversionConstants.DEFAULT_INTERNAL_PORT;
+        int port = extractPort(url, defaultPort);
+        boolean usesTls = type == BackendType.EXTERNAL
+                && port == ConversionConstants.DEFAULT_HTTPS_PORT;
+
+        String refName;
+        String seName;
+        String drName;
+        if (multi && backendSys != null) {
+            refName = productName + "-" + backendSys + "-backend";
+            seName = productName + "-" + backendSys + "-external";
+            drName = productName + "-" + backendSys + "-backend-tls";
+        } else if (type == BackendType.INTERNAL && internalService != null) {
+            refName = internalService;
+            seName = productName + "-external";
+            drName = productName + "-backend-tls";
+        } else {
+            refName = productName + "-backend";
+            seName = productName + "-external";
+            drName = productName + "-backend-tls";
+        }
+        return new ResolvedBackend(type, refName, seName, drName, externalHost, port, usesTls,
+                mountPath, weight, url);
+    }
+
+    static String normalizeMountPath(String path) {
+        if (path == null || path.isBlank()) {
+            return "/";
+        }
+        return path.trim();
     }
 
     /** Remove the "migrated-from: 3scale" label line from the generated YAML (when disabled via checkbox). */
@@ -278,6 +387,13 @@ public class ConversionService {
     // ─────────────────────────────────────────────
 
     private String generateGateway(String name, String namespace) {
+        return generateGateway(name, namespace, null);
+    }
+
+    private String generateGateway(String name, String namespace, String hostname) {
+        String hostnameLine = (hostname != null && !hostname.isBlank())
+                ? "\n      hostname: " + hostname.trim()
+                : "";
         return """
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -292,13 +408,13 @@ spec:
   listeners:
     - name: http
       protocol: HTTP
-      port: %d
+      port: %d%s
       allowedRoutes:
         namespaces:
           from: Same
     - name: https
       protocol: HTTPS
-      port: %d
+      port: %d%s
       tls:
         mode: Terminate
         certificateRefs:
@@ -307,9 +423,67 @@ spec:
         namespaces:
           from: Same
 """.formatted(name, namespace, name,
-                ConversionConstants.DEFAULT_HTTP_PORT,
-                ConversionConstants.DEFAULT_HTTPS_PORT,
+                ConversionConstants.DEFAULT_HTTP_PORT, hostnameLine,
+                ConversionConstants.DEFAULT_HTTPS_PORT, hostnameLine,
                 name);
+    }
+
+    // ─────────────────────────────────────────────
+    // TLSPolicy (Kuadrant + cert-manager)
+    // ─────────────────────────────────────────────
+
+    private String generateTlsPolicy(String name, String namespace,
+                                     String issuerKind, String issuerName) {
+        String kind = (issuerKind != null && !issuerKind.isBlank()) ? issuerKind : "ClusterIssuer";
+        String issuer = (issuerName != null && !issuerName.isBlank()) ? issuerName : "letsencrypt-prod";
+        return """
+apiVersion: kuadrant.io/v1
+kind: TLSPolicy
+metadata:
+  name: %s-tls-policy
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: %s-gateway
+  issuerRef:
+    group: cert-manager.io
+    kind: %s
+    name: %s
+""".formatted(name, namespace, name, name, kind, issuer);
+    }
+
+    // ─────────────────────────────────────────────
+    // DNSPolicy (Kuadrant)
+    // ─────────────────────────────────────────────
+
+    private String generateDnsPolicy(String name, String namespace, String providerSecretName) {
+        String providerBlock = "";
+        if (providerSecretName != null && !providerSecretName.isBlank()) {
+            providerBlock = """
+  providerRefs:
+    - name: %s
+""".formatted(providerSecretName.trim());
+        }
+        return """
+apiVersion: kuadrant.io/v1
+kind: DNSPolicy
+metadata:
+  name: %s-dns-policy
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: %s-gateway
+%s""".formatted(name, namespace, name, name, providerBlock);
     }
 
     // ─────────────────────────────────────────────
@@ -317,30 +491,8 @@ spec:
     // ─────────────────────────────────────────────
 
     private String generateHttpRoute(String name, String namespace, ApiService service,
-                                     BackendType backendType, String externalHost,
-                                     String internalService, int internalPort, int externalPort,
-                                     boolean corsNative, boolean retriesSupported) {
-        int backendPort   = backendType == BackendType.EXTERNAL ? externalPort : internalPort;
-        String backendSvc = backendType == BackendType.EXTERNAL
-                ? (name + "-backend")
-                : (internalService != null ? internalService : name + "-backend");
-
-        // Build the filters block (combining URLRewrite + Header Modification + CORS)
-        StringBuilder filterItems = new StringBuilder();
-        if (backendType == BackendType.EXTERNAL) {
-            filterItems.append("""
-        - type: URLRewrite
-          urlRewrite:
-            hostname: "%s"
-""".formatted(externalHost));
-        }
-        filterItems.append(buildHeaderModificationFilters(service));
-        filterItems.append(buildCorsFilters(service, corsNative));
-
-        String filtersBlock = filterItems.length() > 0
-                ? "      filters:\n" + filterItems
-                : "";
-
+                                     List<ResolvedBackend> backends, boolean corsNative,
+                                     boolean retriesSupported) {
         String annotations = buildHttpRouteAnnotations(service);
         StringBuilder sb = new StringBuilder();
         sb.append("""
@@ -364,6 +516,7 @@ metadata:
         String retryBlock = retriesSupported ? buildRetryBlock(service) : "";
         boolean hasCors = findCorsPolicy(service) != null;
         LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
+        String sharedFilters = buildHeaderModificationFilters(service) + buildCorsFilters(service, corsNative);
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             // For HTTP methods that already have a "/" (catch-all) Mapping Rule,
@@ -382,6 +535,8 @@ metadata:
                 }
                 pathsForOptions.add(path);
 
+                List<ResolvedBackend> selected = selectBackendsForPath(backends, path);
+                String filtersBlock = buildRuleFiltersBlock(selected, sharedFilters);
                 sb.append("""
     - matches:
         - path:
@@ -389,21 +544,19 @@ metadata:
             value: "%s"
           method: %s
 %s%s%s      backendRefs:
-        - name: %s
-          port: %d
-""".formatted(path, method, filtersBlock, timeoutsBlock, retryBlock, backendSvc, backendPort));
+%s""".formatted(path, method, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
             }
         } else {
             pathsForOptions.add("/");
+            List<ResolvedBackend> selected = selectBackendsForPath(backends, "/");
+            String filtersBlock = buildRuleFiltersBlock(selected, sharedFilters);
             sb.append("""
     - matches:
         - path:
             type: PathPrefix
             value: "/"
 %s%s%s      backendRefs:
-        - name: %s
-          port: %d
-""".formatted(filtersBlock, timeoutsBlock, retryBlock, backendSvc, backendPort));
+%s""".formatted(filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
         }
 
         // CORS preflight: OPTIONS on product path(s) when cors policy is enabled
@@ -420,6 +573,8 @@ metadata:
                 if (!emittedOptions.add(path)) {
                     continue;
                 }
+                List<ResolvedBackend> selected = selectBackendsForPath(backends, path);
+                String filtersBlock = buildRuleFiltersBlock(selected, sharedFilters);
                 sb.append("""
     - matches:
         - path:
@@ -427,9 +582,77 @@ metadata:
             value: "%s"
           method: OPTIONS
 %s%s%s      backendRefs:
-        - name: %s
-          port: %d
-""".formatted(path, filtersBlock, timeoutsBlock, retryBlock, backendSvc, backendPort));
+%s""".formatted(path, filtersBlock, timeoutsBlock, retryBlock, formatBackendRefs(selected)));
+            }
+        }
+        return sb.toString();
+    }
+
+    private String buildRuleFiltersBlock(List<ResolvedBackend> selected, String sharedFilters) {
+        StringBuilder filterItems = new StringBuilder();
+        String rewriteHost = uniqueExternalHost(selected);
+        if (rewriteHost != null) {
+            filterItems.append("""
+        - type: URLRewrite
+          urlRewrite:
+            hostname: "%s"
+""".formatted(rewriteHost));
+        }
+        filterItems.append(sharedFilters);
+        return filterItems.length() > 0
+                ? "      filters:\n" + filterItems
+                : "";
+    }
+
+    private static String uniqueExternalHost(List<ResolvedBackend> selected) {
+        Set<String> hosts = selected.stream()
+                .filter(b -> b.type == BackendType.EXTERNAL && b.externalHost != null)
+                .map(b -> b.externalHost)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        return hosts.size() == 1 ? hosts.iterator().next() : null;
+    }
+
+    List<ResolvedBackend> selectBackendsForPath(List<ResolvedBackend> backends, String rulePath) {
+        if (backends == null || backends.isEmpty()) {
+            return List.of();
+        }
+        String path = rulePath == null || rulePath.isBlank() ? "/" : rulePath;
+        List<ResolvedBackend> matches = new ArrayList<>();
+        int bestLen = -1;
+        for (ResolvedBackend backend : backends) {
+            if (!isMountPrefixOf(backend.mountPath, path)) {
+                continue;
+            }
+            int len = backend.mountPath.length();
+            if (len > bestLen) {
+                matches.clear();
+                matches.add(backend);
+                bestLen = len;
+            } else if (len == bestLen) {
+                matches.add(backend);
+            }
+        }
+        return matches.isEmpty() ? List.copyOf(backends) : matches;
+    }
+
+    static boolean isMountPrefixOf(String mountPath, String rulePath) {
+        String mount = normalizeMountPath(mountPath);
+        String path = rulePath == null || rulePath.isBlank() ? "/" : rulePath;
+        if ("/".equals(mount)) {
+            return true;
+        }
+        return path.equals(mount) || path.startsWith(mount.endsWith("/") ? mount : mount + "/");
+    }
+
+    private static String formatBackendRefs(List<ResolvedBackend> selected) {
+        boolean weighted = selected.size() > 1;
+        StringBuilder sb = new StringBuilder();
+        for (ResolvedBackend backend : selected) {
+            sb.append("        - name: ").append(backend.refName).append('\n');
+            sb.append("          port: ").append(backend.port).append('\n');
+            if (weighted) {
+                int weight = backend.weight != null ? backend.weight : 1;
+                sb.append("          weight: ").append(weight).append('\n');
             }
         }
         return sb.toString();
@@ -904,16 +1127,15 @@ spec:
     // ServiceEntry (generated only for external backends)
     // ─────────────────────────────────────────────
 
-    private String generateServiceEntry(String name, String namespace, String externalHost,
-                                        int externalPort, boolean useTls) {
-        String backendSvc = name + "-backend";
+    private String generateServiceEntry(String seName, String backendSvc, String namespace, String appLabel,
+                                        String externalHost, int externalPort, boolean useTls) {
         String portName = useTls ? "https" : "http";
         String protocol = useTls ? "HTTPS" : "HTTP";
         return """
 apiVersion: networking.istio.io/v1alpha3
 kind: ServiceEntry
 metadata:
-  name: %s-external
+  name: %s
   namespace: %s
   labels:
     app: %s
@@ -942,15 +1164,16 @@ spec:
   ports:
   - name: %s
     port: %d
-""".formatted(name, namespace, name, externalHost, externalPort, portName, protocol,
-              backendSvc, namespace, name, externalHost, portName, externalPort);
+""".formatted(seName, namespace, appLabel, externalHost, externalPort, portName, protocol,
+              backendSvc, namespace, appLabel, externalHost, portName, externalPort);
     }
 
     // ─────────────────────────────────────────────
     // DestinationRule (generated only for external backends)
     // ─────────────────────────────────────────────
 
-    private String generateDestinationRule(String name, String namespace, String externalHost, boolean useTls) {
+    private String generateDestinationRule(String drName, String namespace, String appLabel,
+                                           String externalHost, boolean useTls) {
         String trafficPolicy = useTls
                 ? """
   trafficPolicy:
@@ -967,14 +1190,14 @@ spec:
 apiVersion: networking.istio.io/v1alpha3
 kind: DestinationRule
 metadata:
-  name: %s-backend-tls
+  name: %s
   namespace: %s
   labels:
     app: %s
     migrated-from: 3scale
 spec:
   host: %s
-%s""".formatted(name, namespace, name, externalHost, trafficPolicy);
+%s""".formatted(drName, namespace, appLabel, externalHost, trafficPolicy);
     }
 
     // ─────────────────────────────────────────────
@@ -1471,7 +1694,8 @@ spec:
             package ipcheck
             import future.keywords
             cidrs := [%s]
-            client_ip := input.attributes.source.address
+            # WARNING: peer connection IP under Authorino; for end-client IP allowlists prefer AuthorizationPolicy (remoteIpBlocks).
+            client_ip := input.source.address
 %s""".formatted(cidrList, allowBody);
     }
 
@@ -2528,14 +2752,23 @@ spec:
 """.formatted(name, namespace, name, name, name);
     }
 
-    private String generateConfigMap(String name, String namespace, ApiService service, String backendUrl) {
-        String url = "";
-        if (backendUrl != null && !backendUrl.isBlank()) {
-            url = backendUrl.trim();
-        } else if (service.backends != null && !service.backends.isEmpty()) {
-            url = service.backends.get(0).privateEndpoint != null
-                    ? service.backends.get(0).privateEndpoint : "";
+    private String generateConfigMap(String name, String namespace, ApiService service,
+                                     List<ResolvedBackend> backends, boolean overrideIgnored) {
+        String primary = "";
+        if (backends != null && !backends.isEmpty()
+                && backends.get(0).privateEndpoint != null
+                && !backends.get(0).privateEndpoint.isBlank()) {
+            primary = backends.get(0).privateEndpoint.trim();
         }
+        String allUrls = backends == null ? "" : backends.stream()
+                .map(b -> b.privateEndpoint)
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.joining(", "));
+        String overrideNote = overrideIgnored
+                ? "ignored-multi-backend"
+                : "not-applicable";
         return """
 apiVersion: v1
 kind: ConfigMap
@@ -2547,9 +2780,11 @@ metadata:
     migrated-from: 3scale
 data:
   backend-url: "%s"
+  backend-urls: "%s"
+  external-backend-url-override: "%s"
   service-name: "%s"
   original-3scale-service-id: "%s"
-""".formatted(name, namespace, name, url, service.name, service.id);
+""".formatted(name, namespace, name, primary, allUrls, overrideNote, service.name, service.id);
     }
 
     // ─────────────────────────────────────────────
@@ -2557,7 +2792,8 @@ data:
     // ─────────────────────────────────────────────
 
     private String generateReadme(ApiService service, String name, String namespace,
-                                  BackendType backendType, String externalHost) {
+                                  BackendType backendType, String externalHost,
+                                  List<ResolvedBackend> backends, boolean overrideIgnored) {
         String backendSection = switch (backendType) {
             case EXTERNAL -> """
 
@@ -2572,7 +2808,7 @@ The backend is an HTTPS endpoint outside the cluster.
 | serviceentry.yaml | Register the external host with Istio (ServiceEntry + ExternalName Service) |
 | destinationrule.yaml | Apply TLS (SIMPLE) for connections to the external host |
 | httproute.yaml | Rewrite the Host header to the external hostname via `URLRewrite` |
-""".formatted(externalHost);
+""".formatted(externalHost != null ? externalHost : "");
             case INTERNAL -> """
 
 ## Internal Backend (Service within OpenShift)
@@ -2583,6 +2819,32 @@ ServiceEntry, DestinationRule, and URLRewrite filters are not needed and have no
 > Verify that `backendRefs.name` in `httproute.yaml` matches the actual Service name.
 """;
         };
+
+        boolean multiBackend = backends != null && backends.size() > 1;
+        String multiBackendNotes = "";
+        if (multiBackend) {
+            String mounts = backends.stream()
+                    .map(b -> "- `" + b.mountPath + "` → `" + b.refName + "`"
+                            + (b.privateEndpoint != null ? " (" + b.privateEndpoint + ")" : ""))
+                    .collect(Collectors.joining("\n"));
+            multiBackendNotes = """
+
+## Multiple backends (path-first)
+
+This product has %d backends. HTTPRoute rules select `backendRefs` by longest mount-path prefix match.
+Equal mounts (including blank/`/`) share weighted `backendRefs`. AuthPolicy and RateLimitPolicy still
+target the single HTTPRoute `%s-route`.
+
+%s
+""".formatted(backends.size(), name, mounts);
+            if (overrideIgnored) {
+                multiBackendNotes += """
+
+> **Note:** `externalBackendUrl` override was **ignored** because more than one backend is present.
+> Routing stays path-based across all backends.
+""";
+            }
+        }
 
         boolean hasLogging = findLoggingPolicy(service) != null;
         String loggingFile = hasLogging
@@ -2649,7 +2911,7 @@ Kubernetes/OpenShift resources generated by Migration Toolkit.
 **Original 3scale service:** %s (ID: %s)
 **Target Namespace:** %s
 **Backend type:** %s
-%s
+%s%s
 ## Files
 
 | File | Description |
@@ -2681,17 +2943,19 @@ kubectl get httproute %s-route -n %s
 ## Notes
 - Make sure to update the credentials in `secret.yaml` before applying
 - Verify that the backend service name in `httproute.yaml` matches the actual Service name
+- AuthPolicy / RateLimitPolicy target the single HTTPRoute (`%s-route`)
 - Test in a staging environment first
 """.formatted(
             service.name, service.name, service.id, namespace,
             backendType == BackendType.EXTERNAL ? "External HTTPS" : "Internal OpenShift Service",
             backendSection,
+            multiBackendNotes,
             fileList,
             tokenIntrospectionNotes,
             rateLimitNotes,
             jwtClaimCheckNotes,
             contentLimitsNotes,
-            namespace, name, namespace, name, namespace
+            namespace, name, namespace, name, namespace, name
         );
     }
 
