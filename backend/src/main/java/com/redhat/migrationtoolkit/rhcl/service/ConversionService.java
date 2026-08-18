@@ -229,7 +229,49 @@ public class ConversionService {
                     backend.weight,
                     multi));
         }
-        return resolved;
+        return disambiguateBackendNames(resolved);
+    }
+
+    /**
+     * Ensure multi-backend ref/SE/DR names stay unique when kebab(systemName/name) collides.
+     * Appends {@code -2}, {@code -3}, … to colliding names and logs a warning.
+     */
+    List<ResolvedBackend> disambiguateBackendNames(List<ResolvedBackend> resolved) {
+        if (resolved == null || resolved.size() < 2) {
+            return resolved == null ? List.of() : resolved;
+        }
+        Set<String> usedRef = new HashSet<>();
+        Set<String> usedSe = new HashSet<>();
+        Set<String> usedDr = new HashSet<>();
+        List<ResolvedBackend> out = new ArrayList<>(resolved.size());
+        for (ResolvedBackend b : resolved) {
+            String ref = uniqueResourceName(b.refName, usedRef);
+            String se = uniqueResourceName(b.seName, usedSe);
+            String dr = uniqueResourceName(b.drName, usedDr);
+            if (!ref.equals(b.refName) || !se.equals(b.seName) || !dr.equals(b.drName)) {
+                LOG.warnf(
+                        "Disambiguated colliding multi-backend resource names: ref/se/dr %s/%s/%s → %s/%s/%s",
+                        b.refName, b.seName, b.drName, ref, se, dr);
+                out.add(new ResolvedBackend(
+                        b.type, ref, se, dr, b.externalHost, b.port, b.usesTls,
+                        b.mountPath, b.weight, b.privateEndpoint));
+            } else {
+                out.add(b);
+            }
+        }
+        return out;
+    }
+
+    static String uniqueResourceName(String base, Set<String> used) {
+        String candidate = base != null && !base.isBlank() ? base : "backend";
+        if (used.add(candidate)) {
+            return candidate;
+        }
+        int n = 2;
+        while (!used.add(candidate + "-" + n)) {
+            n++;
+        }
+        return candidate + "-" + n;
     }
 
     private ResolvedBackend resolveOne(String productName, String url, String backendSys,
@@ -542,14 +584,30 @@ metadata:
                 : "";
     }
 
+    /**
+     * Host URLRewrite is rule-scoped in Gateway API: only emit when selected backends
+     * share exactly one external hostname. Multiple distinct hosts → skip rewrite + WARN.
+     */
     private static String uniqueExternalHost(List<ResolvedBackend> selected) {
         Set<String> hosts = selected.stream()
                 .filter(b -> b.type == BackendType.EXTERNAL && b.externalHost != null)
                 .map(b -> b.externalHost)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (hosts.size() > 1) {
+            LOG.warnf(
+                    "Skipping Host URLRewrite: %d distinct external hosts on one HTTPRoute rule (%s); "
+                            + "Gateway API Host rewrite is rule-scoped, not per-backendRef",
+                    hosts.size(), hosts);
+            return null;
+        }
         return hosts.size() == 1 ? hosts.iterator().next() : null;
     }
 
+    /**
+     * Select backends for an HTTPRoute path by longest mount-path prefix match.
+     * Equal mounts share the rule (weights). When nothing matches, falls back to
+     * <strong>all</strong> backends and logs a warning.
+     */
     List<ResolvedBackend> selectBackendsForPath(List<ResolvedBackend> backends, String rulePath) {
         if (backends == null || backends.isEmpty()) {
             return List.of();
@@ -570,7 +628,13 @@ metadata:
                 matches.add(backend);
             }
         }
-        return matches.isEmpty() ? List.copyOf(backends) : matches;
+        if (matches.isEmpty()) {
+            LOG.warnf(
+                    "No backend mount matched path %s; falling back to all %d backends",
+                    path, backends.size());
+            return List.copyOf(backends);
+        }
+        return matches;
     }
 
     static boolean isMountPrefixOf(String mountPath, String rulePath) {
@@ -2427,6 +2491,30 @@ data:
     private String generateReadme(ApiService service, String name, String namespace,
                                   BackendType backendType, String externalHost,
                                   List<ResolvedBackend> backends, boolean overrideIgnored) {
+        List<String> externalHosts = backends == null ? List.of() : backends.stream()
+                .filter(b -> b.type == BackendType.EXTERNAL && b.externalHost != null)
+                .map(b -> b.externalHost)
+                .distinct()
+                .toList();
+        String externalEndpointDisplay;
+        if (externalHosts.size() > 1) {
+            externalEndpointDisplay = externalHosts.stream()
+                    .map(h -> "`" + h + "`")
+                    .collect(Collectors.joining(", "))
+                    + " — first listed is the historical **primary (first)** host only";
+        } else if (externalHosts.size() == 1) {
+            externalEndpointDisplay = "`" + externalHosts.get(0) + "`";
+        } else {
+            externalEndpointDisplay = "`" + (externalHost != null ? externalHost : "") + "`";
+        }
+        String hostRewriteNote = externalHosts.size() > 1
+                ? """
+
+> **Note:** `URLRewrite` Host is emitted only when a rule's selected backends share **one** external
+> hostname. Rules that load-balance across distinct hosts omit Host rewrite (Gateway API is rule-scoped).
+"""
+                : "";
+
         String backendSection = switch (backendType) {
             case EXTERNAL -> """
 
@@ -2434,14 +2522,14 @@ data:
 
 The backend is an HTTPS endpoint outside the cluster.
 
-**External endpoint:** `%s`
-
+**External endpoint(s):** %s
+%s
 | File | Description |
 |------|-------------|
 | serviceentry.yaml | Register the external host with Istio (ServiceEntry + ExternalName Service) |
 | destinationrule.yaml | Apply TLS (SIMPLE) for connections to the external host |
-| httproute.yaml | Rewrite the Host header to the external hostname via `URLRewrite` |
-""".formatted(externalHost != null ? externalHost : "");
+| httproute.yaml | Rewrite the Host header to the external hostname via `URLRewrite` (when unique) |
+""".formatted(externalEndpointDisplay, hostRewriteNote);
             case INTERNAL -> """
 
 ## Internal Backend (Service within OpenShift)
@@ -2467,6 +2555,7 @@ ServiceEntry, DestinationRule, and URLRewrite filters are not needed and have no
 This product has %d backends. HTTPRoute rules select `backendRefs` by longest mount-path prefix match.
 Equal mounts (including blank/`/`) share weighted `backendRefs`. AuthPolicy and RateLimitPolicy still
 target the single HTTPRoute `%s-route`.
+If a mapping-rule path matches **no** mount, conversion falls back to **all** backends (logged as a warning).
 
 %s
 """.formatted(backends.size(), name, mounts);
