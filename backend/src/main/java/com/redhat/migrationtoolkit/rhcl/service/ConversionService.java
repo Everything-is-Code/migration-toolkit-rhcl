@@ -1229,7 +1229,8 @@ spec:
             package ipcheck
             import future.keywords
             cidrs := [%s]
-            client_ip := input.attributes.source.address
+            # WARNING: peer connection IP under Authorino; for end-client IP allowlists prefer AuthorizationPolicy (remoteIpBlocks).
+            client_ip := input.source.address
 %s""".formatted(cidrList, allowBody);
     }
 
