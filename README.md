@@ -336,6 +336,7 @@ Resources generated via the `from-3scale-to-connectivity-link` adapter:
   gateway.yaml         # Kuadrant Gateway
   httproute.yaml       # HTTPRoute
   policy.yaml          # AuthPolicy / RateLimitPolicy
+  tlspolicy.yaml       # Kuadrant TLSPolicy (opt-in; cert-manager issuerRef)
   secret.yaml          # Credentials (REPLACE_ME placeholders)
   configmap.yaml       # Configuration values
   destinationrule.yaml # Istio DestinationRule (TLS)
@@ -344,6 +345,12 @@ Resources generated via the `from-3scale-to-connectivity-link` adapter:
 ```
 
 > Replace `REPLACE_ME` placeholders in `secret.yaml` with actual values before applying.
+
+**TLSPolicy (opt-in)**: When "Generate TLSPolicy" is enabled on the Conversion page, the package
+includes `tlspolicy.yaml` targeting `{name}-gateway` with a cert-manager `issuerRef`
+(UI prefills `ClusterIssuer` / `letsencrypt-prod`). The Gateway https listener continues to
+reference Secret `{name}-tls`; cert-manager creates that Secret after apply. A raw Certificate
+CR is **not** generated. The ClusterIssuer must already exist on the cluster.
 
 **IP check (AuthPolicy OPA mode)**: When `ipCheckMode=authPolicyOpa`, generated Rego binds
 the peer connection IP via Authorino WellKnown `input.source.address` (see
@@ -1026,6 +1033,7 @@ Migration Score (0–100%) でトータルの移行難易度を数値化しま�
   gateway.yaml        # Kuadrant Gateway
   httproute.yaml      # HTTPRoute
   policy.yaml         # AuthPolicy / RateLimitPolicy
+  tlspolicy.yaml      # Kuadrant TLSPolicy（オプトイン; cert-manager issuerRef）
   secret.yaml         # 認証情報 (REPLACE_ME プレースホルダー)
   configmap.yaml      # 設定値
   destinationrule.yaml # Istio DestinationRule (TLS 設定)
@@ -1034,6 +1042,12 @@ Migration Score (0–100%) でトータルの移行難易度を数値化しま�
 ```
 
 > `secret.yaml` 内の `REPLACE_ME` は手動で実際の値に置き換えてください。
+
+**TLSPolicy（オプトイン）**: Conversion 画面で「TLSPolicy を生成」を有効にすると、
+`{name}-gateway` を対象とし cert-manager の `issuerRef`（UI 初期値: `ClusterIssuer` /
+`letsencrypt-prod`）を持つ `tlspolicy.yaml` がパッケージに含まれます。Gateway の https
+listener は引き続き Secret `{name}-tls` を参照し、適用後に cert-manager がその Secret を作成します。
+生の Certificate CR は生成しません。ClusterIssuer はクラスタ上に事前に存在する必要があります。
 
 **外部バックエンドの自動判定**: 「バックエンドは外部サービス」チェックボックスをオフのままでも、
 バックエンドタイプの判定はチェックボックスの値だけでなく、3scale に登録済みのバックエンド URL

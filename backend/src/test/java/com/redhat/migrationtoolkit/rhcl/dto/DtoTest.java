@@ -83,6 +83,9 @@ class DtoTest {
         assertTrue(opts.includeMigratedFromLabel);
         assertEquals("authorizationPolicy", opts.ipCheckMode,
                 "Binding default: ip_check emits AuthorizationPolicy when unset");
+        assertFalse(opts.includeTlsPolicy, "TLSPolicy opt-in must default OFF");
+        assertNull(opts.tlsIssuerKind);
+        assertNull(opts.tlsIssuerName);
     }
 
     // ── ValidationResult ─────────────────────────────────────────────────────

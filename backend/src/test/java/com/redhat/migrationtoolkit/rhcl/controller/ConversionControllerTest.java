@@ -366,6 +366,67 @@ class ConversionControllerTest {
     }
 
     @Test
+    void convert_tlsPolicyFields_passedToConversionOptions() {
+        ApiService svc = buildService("svc-1", "TLS API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok",
+                          "includeTlsPolicy": true,
+                          "tlsIssuerKind": "ClusterIssuer",
+                          "tlsIssuerName": "letsencrypt-prod"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals(true, optsCaptor.getValue().includeTlsPolicy);
+        assertEquals("ClusterIssuer", optsCaptor.getValue().tlsIssuerKind);
+        assertEquals("letsencrypt-prod", optsCaptor.getValue().tlsIssuerName);
+    }
+
+    @Test
+    void convert_tlsPolicy_defaultsOff() {
+        ApiService svc = buildService("svc-1", "TLS API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals(false, optsCaptor.getValue().includeTlsPolicy);
+    }
+
+    @Test
     void convert_threadsCorsNativeTrueFromClusterCapabilities() {
         ClusterVersionsResponse versions = new ClusterVersionsResponse();
         versions.capabilities = new ClusterCapabilities();

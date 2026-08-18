@@ -116,6 +116,9 @@ export interface ConversionRequest {
   anonymousTarget?: 'httproute' | 'gateway';
   includeMigratedFromLabel?: boolean;
   ipCheckMode?: 'authorizationPolicy' | 'authPolicyOpa';
+  includeTlsPolicy?: boolean;
+  tlsIssuerKind?: string;
+  tlsIssuerName?: string;
 }
 
 export interface ConversionResultItem {

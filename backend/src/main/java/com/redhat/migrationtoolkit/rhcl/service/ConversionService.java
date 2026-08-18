@@ -159,6 +159,11 @@ public class ConversionService {
             files.put("ratelimitpolicy.yaml", rateLimitYaml);
         }
 
+        if (opts.includeTlsPolicy) {
+            files.put("tlspolicy.yaml",
+                    generateTlsPolicy(name, namespace, opts.tlsIssuerKind, opts.tlsIssuerName));
+        }
+
         files.put("README.md", generateReadme(service, name, namespace, primaryType, primaryExternalHost,
                 resolved, overrideIgnored));
 
@@ -390,6 +395,35 @@ spec:
                 ConversionConstants.DEFAULT_HTTP_PORT,
                 ConversionConstants.DEFAULT_HTTPS_PORT,
                 name);
+    }
+
+    // ─────────────────────────────────────────────
+    // TLSPolicy (Kuadrant + cert-manager)
+    // ─────────────────────────────────────────────
+
+    private String generateTlsPolicy(String name, String namespace,
+                                     String issuerKind, String issuerName) {
+        String kind = (issuerKind != null && !issuerKind.isBlank()) ? issuerKind : "ClusterIssuer";
+        String issuer = (issuerName != null && !issuerName.isBlank()) ? issuerName : "letsencrypt-prod";
+        return """
+apiVersion: kuadrant.io/v1
+kind: TLSPolicy
+metadata:
+  name: %s-tls-policy
+  namespace: %s
+  labels:
+    app: %s
+    migrated-from: 3scale
+spec:
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: %s-gateway
+  issuerRef:
+    group: cert-manager.io
+    kind: %s
+    name: %s
+""".formatted(name, namespace, name, name, kind, issuer);
     }
 
     // ─────────────────────────────────────────────
