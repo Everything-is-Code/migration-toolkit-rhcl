@@ -1423,6 +1423,234 @@ class ConversionServiceTest {
                 "authorizationPolicy mode must not put OPA ip-check in AuthPolicy");
     }
 
+    // ── content_limits → EnvoyFilter request + response honesty (#22 PR-A) ────
+
+    @Test
+    void convert_contentLimits_requestShortKey_emitsEnvoyFilterMaxBytes() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("request", 1024)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("envoyfilter-content-limits.yaml"),
+                "Must emit envoyfilter-content-limits.yaml for request limit");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertTrue(ef.contains("max_request_bytes: 1024")
+                        || ef.contains("maxRequestBytes: 1024"),
+                "EnvoyFilter must enforce request body limit 1024");
+        assertTrue(ef.contains("3scale-migration/source: content_limits")
+                        || ef.contains("content_limits"),
+                "Must annotate source as content_limits");
+    }
+
+    @Test
+    void convert_contentLimits_requestContentLimitAlias_emitsEnvoyFilter() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("request_content_limit", 2048)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertNotNull(ef, "Alias request_content_limit must emit EnvoyFilter");
+        assertTrue(ef.contains("2048"), "Request limit must use alias value 2048");
+    }
+
+    @Test
+    void convert_contentLimits_responseOnly_warnsWithoutHardResponseFilter() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("response", 4096)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertTrue(ef == null || !ef.contains("max_response") && !ef.contains("response_bytes"),
+                "Must NOT emit hard response body Envoy enforcement");
+        String route = files.get("httproute.yaml");
+        assertNotNull(route);
+        assertTrue(route.contains("3scale-migration/response-content-limit")
+                        && route.contains("4096"),
+                "HTTPRoute must annotate response-content-limit");
+        String readme = files.get("README.md");
+        assertTrue(readme != null && readme.contains("WARNING")
+                        && readme.toLowerCase().contains("response"),
+                "README must WARNING about response content limit gap");
+    }
+
+    @Test
+    void convert_contentLimits_responseContentLimitAlias_annotatesAndWarns() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of("response_content_limit", 8192)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String route = files.get("httproute.yaml");
+        assertTrue(route != null && route.contains("8192")
+                        && route.contains("response-content-limit"),
+                "Alias response_content_limit must annotate HTTPRoute");
+        String readme = files.get("README.md");
+        assertTrue(readme != null && readme.contains("WARNING"));
+    }
+
+    @Test
+    void convert_contentLimits_requestAndResponse_emitsFilterAndAnnotation() {
+        ApiService svc = basicService("Limits API", "limits-api");
+        svc.policies = List.of(contentLimitsPolicy(Map.of(
+                "request", 512,
+                "response_content_limit", 1024)));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String ef = files.get("envoyfilter-content-limits.yaml");
+        assertNotNull(ef);
+        assertTrue(ef.contains("512"));
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("response-content-limit") && route.contains("1024"));
+        assertTrue(files.get("README.md").contains("WARNING"));
+    }
+
+    // ── retry → HTTPRoute attempts / EnvoyFilter fallback (#22 PR-B) ─────────
+
+    @Test
+    void convert_retry_whenSupported_emitsHttpRouteAttempts() {
+        ApiService svc = basicService("Retry API", "retry-api");
+        svc.policies = List.of(retryPolicy(3, "5xx", "10"));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.retriesSupported = true;
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String route = files.get("httproute.yaml");
+        assertNotNull(route);
+        assertTrue(route.contains("retry:"), "Must emit HTTPRoute retry block");
+        assertTrue(route.contains("attempts: 3"), "retries must map to attempts");
+        assertFalse(route.contains("retry_on") || route.contains("5xx"),
+                "retry_on must be ignored");
+        assertFalse(route.contains("per_try_timeout") || route.contains("perTryTimeout"),
+                "per_try_timeout must be ignored");
+        assertFalse(files.containsKey("envoyfilter-retry.yaml"),
+                "Must not emit Envoy fallback when retriesSupported");
+        assertFalse(files.values().stream().anyMatch(v -> v.contains("kind: VirtualService")),
+                "Must never emit VirtualService for retry");
+    }
+
+    @Test
+    void convert_retry_inventedFieldsIgnoredWhenSupported() {
+        ApiService svc = basicService("Retry API", "retry-api");
+        svc.policies = List.of(retryPolicy(2, "connect-failure,reset", "5s"));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.retriesSupported = true;
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("attempts: 2"));
+        assertFalse(route.contains("connect-failure"));
+        assertFalse(route.contains("5s"));
+    }
+
+    @Test
+    void convert_retry_whenUnsupported_emitsEnvoyFilterFallback() {
+        ApiService svc = basicService("Retry API", "retry-api");
+        svc.policies = List.of(retryPolicy(2, null, null));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.retriesSupported = false;
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertTrue(files.containsKey("envoyfilter-retry.yaml"),
+                "Must emit EnvoyFilter retry fallback when !retriesSupported");
+        String ef = files.get("envoyfilter-retry.yaml");
+        assertTrue(ef.contains("num_retries: 2") || ef.contains("numRetries: 2")
+                        || ef.contains("2"),
+                "EnvoyFilter must carry retry count");
+        String route = files.get("httproute.yaml");
+        assertFalse(route != null && route.contains("\n      retry:"),
+                "HTTPRoute must not use retry when unsupported");
+        assertFalse(files.values().stream().anyMatch(v -> v.contains("kind: VirtualService")));
+    }
+
+    // ── keycloak_role_check → AuthPolicy patternMatching (#22 PR-C) ──────────
+
+    @Test
+    void convert_keycloak_whitelistRealmRole_emitsPatternMatchingIncl() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(keycloakRoleCheckPolicy("whitelist",
+                List.of(Map.of("realm_roles", List.of(Map.of("name", "admin"))))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("keycloak-role-check"), "Must name keycloak-role-check rule");
+        assertTrue(policy.contains("patternMatching"));
+        assertTrue(policy.contains("auth.identity.realm_access.roles"));
+        assertTrue(policy.contains("operator: incl") || policy.contains("operator: eq"));
+        assertTrue(policy.contains("admin"));
+    }
+
+    @Test
+    void convert_keycloak_blacklistRole_emitsExcl() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(keycloakRoleCheckPolicy("blacklist",
+                List.of(Map.of("realm_roles", List.of(Map.of("name", "blocked"))))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("keycloak-role-check"));
+        assertTrue(policy.contains("operator: excl"), "blacklist must map via excl");
+        assertTrue(policy.contains("blocked"));
+    }
+
+    @Test
+    void convert_keycloak_resourceRole_usesResourceAccessSelector() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(keycloakRoleCheckPolicy("whitelist",
+                List.of(Map.of("client_roles", List.of(
+                        Map.of("name", "my-client",
+                                "roles", List.of(Map.of("name", "viewer"))))))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("auth.identity.resource_access.my-client.roles"),
+                "Resource roles must use resource_access.<client>.roles selector");
+        assertTrue(policy.contains("viewer"));
+    }
+
+    @Test
+    void convert_keycloak_nonJwt_warnsAndSkipsRule() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("apiKey");
+        svc.policies = List.of(keycloakRoleCheckPolicy("whitelist",
+                List.of(Map.of("realm_roles", List.of(Map.of("name", "admin"))))));
+
+        Map<String, String> files = assertDoesNotThrow(() -> service.convert(svc, "ns"));
+        String policy = files.get("policy.yaml");
+        assertFalse(policy != null && policy.contains("keycloak-role-check"),
+                "Non-JWT auth must skip keycloak AuthPolicy rule");
+        assertTrue(files.containsKey("httproute.yaml"), "Conversion must still succeed");
+    }
+
+    @Test
+    void convert_keycloak_mergesWithJwtClaimAndOpaIpCheck() {
+        ApiService svc = basicService("KC+Claim+IP", "kc-claim-ip");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(
+                jwtClaimCheckPolicy(List.of(jwtClaimOp("role", "==", "admin", "plain", "plain"))),
+                keycloakRoleCheckPolicy("whitelist",
+                        List.of(Map.of("realm_roles", List.of(Map.of("name", "realm-admin"))))),
+                ipCheckPolicy("whitelist", List.of("192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("jwt-claim-check"));
+        assertTrue(policy.contains("keycloak-role-check"));
+        assertTrue(policy.contains("ip-check") || policy.contains("opa"));
+        assertTrue(policy.contains("realm-admin"));
+        assertTrue(policy.contains("192.0.2.1"));
+    }
+
     // ── Multi-backend path-first conversion (#28) ─────────────────────────────
 
     @Test
@@ -1571,6 +1799,72 @@ class ConversionServiceTest {
         assertTrue(joined.contains("first.example.com"));
         assertTrue(joined.contains("second.example.com"));
         assertTrue(joined.contains("no-drop-second-backend"));
+    }
+
+    @Test
+    void convert_multiBackend_collidingKebabNames_areDisambiguated() {
+        ApiService svc = basicService("Collide", "collide");
+        svc.authentication = auth("jwt");
+        // Distinct display names, but kebab(systemName) collides after toKebabCase
+        svc.backends = List.of(
+                backend("Orders A", "Orders_API", "https://a.example.com", "/a"),
+                backend("Orders B", "orders-api", "https://b.example.com", "/b"));
+        svc.mappingRules = List.of(
+                mappingRule("GET", "/a"),
+                mappingRule("GET", "/b"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String se = files.get("serviceentry.yaml");
+        String route = files.get("httproute.yaml");
+        assertNotNull(se);
+        assertTrue(se.contains("---"));
+        // Both refs must appear; second gets -2 suffix on collision
+        assertTrue(route.contains("collide-orders-api-backend"));
+        assertTrue(route.contains("collide-orders-api-backend-2")
+                        || se.contains("collide-orders-api-external-2"),
+                "Colliding kebab names must be disambiguated: route=" + route + " se=" + se);
+        long seNames = se.lines().filter(l -> l.contains("name: collide-orders-api-external")).count();
+        assertTrue(seNames >= 2, "Two distinct SE names expected: " + se);
+    }
+
+    @Test
+    void convert_multiBackend_sharedMountDistinctHosts_skipsHostRewrite() {
+        ApiService svc = basicService("Shared Mount", "shared-mount");
+        svc.authentication = auth("jwt");
+        Backend a = backend("A", "a", "https://a.example.com", "/");
+        Backend b = backend("B", "b", "https://b.example.com", "/");
+        a.weight = 1;
+        b.weight = 1;
+        svc.backends = List.of(a, b);
+        svc.mappingRules = List.of(mappingRule("GET", "/api"));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("shared-mount-a-backend"));
+        assertTrue(route.contains("shared-mount-b-backend"));
+        assertFalse(route.contains("URLRewrite"),
+                "Distinct external hosts on one rule must skip Host URLRewrite: " + route);
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("a.example.com") && readme.contains("b.example.com"),
+                "README must list all external hosts: " + readme);
+        assertTrue(readme.toLowerCase().contains("urlrewrite")
+                        || readme.contains("Host rewrite")
+                        || readme.contains("primary (first)"),
+                "README must document Host rewrite / primary host caveat: " + readme);
+    }
+
+    @Test
+    void selectBackendsForPath_noMatch_fallsBackToAll() {
+        ApiService svc = basicService("Fallback", "fallback");
+        svc.authentication = auth("jwt");
+        svc.backends = List.of(
+                backend("A", "a", "https://a.example.com", "/a"),
+                backend("B", "b", "https://b.example.com", "/b"));
+        List<ConversionService.ResolvedBackend> resolved =
+                service.resolveBackends(svc, "fallback", null, false);
+        List<ConversionService.ResolvedBackend> selected =
+                service.selectBackendsForPath(resolved, "/unrelated");
+        assertEquals(2, selected.size());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -1815,6 +2109,41 @@ class ConversionServiceTest {
         cfg.put("ips", ips);
         cfg.put("error_msg", "IP not allowed");
         cfg.put("client_ip_sources", List.of("X-Forwarded-For", "X-Real-IP"));
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy contentLimitsPolicy(Map<String, Object> configuration) {
+        Policy p = new Policy();
+        p.name = "content_limits";
+        p.enabled = true;
+        p.configuration = new HashMap<>(configuration);
+        return p;
+    }
+
+    private Policy retryPolicy(int retries, String retryOn, String perTryTimeout) {
+        Policy p = new Policy();
+        p.name = "retry";
+        p.enabled = true;
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("retries", retries);
+        if (retryOn != null) {
+            cfg.put("retry_on", retryOn);
+        }
+        if (perTryTimeout != null) {
+            cfg.put("per_try_timeout", perTryTimeout);
+        }
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy keycloakRoleCheckPolicy(String type, List<Map<String, Object>> scopes) {
+        Policy p = new Policy();
+        p.name = "keycloak_role_check";
+        p.enabled = true;
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("type", type);
+        cfg.put("scopes", scopes);
         p.configuration = cfg;
         return p;
     }

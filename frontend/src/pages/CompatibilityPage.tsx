@@ -25,22 +25,14 @@ import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { loadSupportedPolicies } from './SupportedPoliciesPage';
 import {
-  PF_BG_DANGER,
-  PF_BG_DEFAULT,
-  PF_BG_WARNING,
-  PF_BORDER_RADIUS,
-  PF_COLOR_MUTED,
-  PF_COLOR_SUBTLE,
   PF_DANGER,
-  PF_FONT_SIZE_2XL,
-  PF_FONT_SIZE_SM,
-  PF_FONT_SIZE_XS,
   PF_SPACER_MD,
   PF_SPACER_SM,
-  PF_SPACER_XS,
   PF_SUCCESS,
   PF_WARNING,
 } from '../styles/pfTokens';
+import shared from '../styles/shared.module.css';
+import styles from './CompatibilityPage.module.css';
 
 interface Props {
   appState: AppState;
@@ -56,10 +48,10 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   }
 };
 
-const statusBackground = (status: string): string => {
-  if (status === 'SUPPORTED') return PF_BG_DEFAULT;
-  if (status === 'WARNING') return PF_BG_WARNING;
-  return PF_BG_DANGER;
+const statusClass = (status: string): string => {
+  if (status === 'SUPPORTED') return shared.statusOk;
+  if (status === 'WARNING') return shared.statusWarning;
+  return shared.statusError;
 };
 
 const ScoreColor = (score: number): ProgressVariant => {
@@ -116,7 +108,7 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
           <div>
             <Title headingLevel="h1" size="2xl">{t('compatibility.title')}</Title>
             {!noServices && (
-              <p style={{ marginTop: PF_SPACER_SM, color: PF_COLOR_MUTED }}>
+              <p className={shared.pageDescription}>
                 {t('compatibility.description', { count: appState.selectedServices.length })}
               </p>
             )}
@@ -140,7 +132,7 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
         {noServices ? (
           <Alert variant="warning" title={t('compatibility.warningTitle')} />
         ) : loading ? (
-          <div style={{ textAlign: 'center', padding: '60px' }}>
+          <div className={shared.centeredBlock} style={{ padding: '60px' }}>
             <Spinner size="xl" />
             <p style={{ marginTop: PF_SPACER_MD }}>{t('compatibility.loading')}</p>
           </div>
@@ -160,7 +152,7 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
                         >
                           {result.level}
                         </Label>
-                        <span style={{ fontSize: PF_FONT_SIZE_2XL, fontWeight: 'bold' }}>
+                        <span className={styles.scoreValue}>
                           Migration Score: {result.score}%
                         </span>
                       </div>
@@ -175,20 +167,13 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
                     <Grid hasGutter sm={12} md={6} lg={4}>
                       {result.items.map((item, i) => (
                         <GridItem key={i}>
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'flex-start',
-                            gap: PF_SPACER_SM,
-                            padding: PF_SPACER_SM,
-                            borderRadius: PF_BORDER_RADIUS,
-                            background: statusBackground(item.status),
-                          }}>
+                          <div className={`${styles.itemCard} ${statusClass(item.status)}`}>
                             <StatusIcon status={item.status} />
                             <div>
-                              <div style={{ fontWeight: 'bold', fontSize: PF_FONT_SIZE_SM }}>{item.name}</div>
-                              <div style={{ fontSize: PF_FONT_SIZE_SM, color: PF_COLOR_MUTED }}>{item.message}</div>
+                              <div className={styles.itemName}>{item.name}</div>
+                              <div className={styles.itemMessage}>{item.message}</div>
                               {(item.requiredVersion || item.capability) && (
-                                <div style={{ marginTop: PF_SPACER_XS, fontSize: PF_FONT_SIZE_XS, color: PF_COLOR_SUBTLE }}>
+                                <div className={styles.itemMeta}>
                                   {item.capability && (
                                     <span style={{ marginRight: PF_SPACER_SM }}>
                                       {t('compatibility.capability', { capability: item.capability })}

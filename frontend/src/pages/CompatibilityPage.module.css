@@ -1,0 +1,28 @@
+.itemCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--pf-v5-global--spacer--sm);
+  padding: var(--pf-v5-global--spacer--sm);
+  border-radius: var(--pf-v5-global--BorderRadius--sm);
+}
+
+.itemName {
+  font-weight: bold;
+  font-size: var(--pf-v5-global--FontSize--sm);
+}
+
+.itemMessage {
+  font-size: var(--pf-v5-global--FontSize--sm);
+  color: var(--pf-v5-global--Color--200);
+}
+
+.itemMeta {
+  margin-top: var(--pf-v5-global--spacer--xs);
+  font-size: var(--pf-v5-global--FontSize--xs);
+  color: var(--pf-v5-global--Color--400);
+}
+
+.scoreValue {
+  font-size: var(--pf-v5-global--FontSize--2xl);
+  font-weight: bold;
+}

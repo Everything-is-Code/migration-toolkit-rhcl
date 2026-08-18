@@ -72,6 +72,7 @@ public class CompatibilityService {
             "anonymous_access",
             "default_credentials",
             "jwt_claim_check",
+            "keycloak_role_check",
             "rate_limit_headers"
     );
 

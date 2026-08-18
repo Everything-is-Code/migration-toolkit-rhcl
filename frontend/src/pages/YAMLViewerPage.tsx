@@ -18,6 +18,7 @@ import { UndoIcon, PencilAltIcon, TimesIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import styles from './YAMLViewerPage.module.css';
 
 interface Props {
   appState: AppState;
@@ -148,12 +149,12 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
             return (
               <tr key={i}>
                 <td
+                  className={styles.lineMeta}
                   style={{
                     width: gutterWidth,
                     minWidth: gutterWidth,
                     padding: '0 12px 0 0',
                     textAlign: 'right',
-                    color: '#6a6e73',
                     userSelect: 'none',
                     verticalAlign: 'top',
                     whiteSpace: 'nowrap',
@@ -162,13 +163,13 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                   {i + 1}
                 </td>
                 <td
+                  className={isPolicy ? styles.policyHighlight : undefined}
                   style={{
                     padding: 0,
                     verticalAlign: 'top',
                     whiteSpace: 'pre',
                     overflowWrap: 'normal',
                     wordBreak: 'normal',
-                    color: isPolicy ? '#ffa657' : undefined,
                   }}
                 >
                   {line.length === 0 ? '\u00a0' : line}
@@ -200,7 +201,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
           <div>
             <Title headingLevel="h1" size="2xl">{t('yamlViewer.title')}</Title>
             {!noResults && (
-              <p style={{ marginTop: '8px', color: '#6a6e73', whiteSpace: 'pre-line' }}>
+              <p className={styles.pageDescription}>
                 {t('yamlViewer.description')}
               </p>
             )}
@@ -271,7 +272,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                       <TabTitleText>
                         {filename}
                         {isModified(filename) && (
-                          <span style={{ marginLeft: 6, color: '#f0ab00', fontSize: 10 }}>●</span>
+                          <span className={styles.modifiedDot}>●</span>
                         )}
                       </TabTitleText>
                     }
@@ -285,7 +286,7 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                                 variant="plain"
                                 onClick={() => handleReset(filename)}
                                 title={t('yamlViewer.btnReset')}
-                                style={{ fontSize: 12, color: '#6a6e73', padding: '2px 8px' }}
+                                className={styles.resetButton}
                               >
                                 <UndoIcon style={{ marginRight: 4 }} />
                                 {t('yamlViewer.btnReset')}
@@ -296,40 +297,15 @@ const YAMLViewerPage: React.FC<Props> = ({ appState, setAppState }) => {
                             value={currentEdits[filename] ?? originalFiles[i][1]}
                             onChange={e => handleEdit(filename, e.target.value)}
                             spellCheck={false}
-                            style={{
-                              width: '100%',
-                              minHeight: '500px',
-                              background: '#1b1d21',
-                              color: '#d4d4d4',
-                              padding: '16px',
-                              borderRadius: '4px',
-                              border: isModified(filename) ? '1px solid #f0ab00' : '1px solid #3c3f42',
-                              fontSize: '13px',
-                              fontFamily: 'monospace',
-                              lineHeight: 1.6,
-                              resize: 'vertical',
-                              boxSizing: 'border-box',
-                              outline: 'none',
-                            }}
+                            className={`${styles.editor}${isModified(filename) ? ` ${styles.isModified}` : ''}`}
+                            style={{ minHeight: '500px', lineHeight: 1.6, resize: 'vertical', boxSizing: 'border-box', outline: 'none' }}
                           />
                         </>
                       ) : (
-                        <pre style={{
-                          width: '100%',
-                          minHeight: '500px',
-                          background: '#1b1d21',
-                          color: '#d4d4d4',
-                          padding: '16px',
-                          borderRadius: '4px',
-                          border: isModified(filename) ? '1px solid #f0ab00' : '1px solid #3c3f42',
-                          fontSize: '13px',
-                          fontFamily: 'monospace',
-                          lineHeight: 1.6,
-                          boxSizing: 'border-box',
-                          overflowX: 'auto',
-                          whiteSpace: 'pre-wrap',
-                          margin: 0,
-                        }}>
+                        <pre
+                          className={`${styles.editor}${isModified(filename) ? ` ${styles.isModified}` : ''}`}
+                          style={{ minHeight: '500px', lineHeight: 1.6, boxSizing: 'border-box', overflowX: 'auto', whiteSpace: 'pre-wrap', margin: 0 }}
+                        >
                           {renderHighlightedYaml(currentEdits[filename] ?? originalFiles[i][1])}
                         </pre>
                       )}

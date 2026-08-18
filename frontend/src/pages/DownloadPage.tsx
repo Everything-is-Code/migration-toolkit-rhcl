@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { downloadApi } from '../api/client';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import styles from '../styles/shared.module.css';
 
 interface Props {
   appState: AppState;
@@ -73,7 +74,7 @@ const DownloadPage: React.FC<Props> = ({ appState }) => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('download.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+        <p className={styles.pageDescription}>
           {t('download.description')}
         </p>
       </PageSection>
@@ -105,7 +106,7 @@ const DownloadPage: React.FC<Props> = ({ appState }) => {
                               <div>
                                 <strong>{result.serviceName}</strong>
                                 <br />
-                                <code style={{ fontSize: '0.85rem', color: '#6a6e73' }}>
+                                <code className={styles.mutedText} style={{ fontSize: '0.85rem' }}>
                                   {result.packageName}.zip
                                 </code>
                               </div>

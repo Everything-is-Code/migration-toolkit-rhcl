@@ -28,6 +28,12 @@ public class ConversionOptions {
     public boolean corsNative = false;
 
     /**
+     * When true, emit HTTPRoute {@code rules[].retry.attempts} from 3scale retry policy.
+     * When false (default), emit EnvoyFilter retry fallback instead.
+     */
+    public boolean retriesSupported = false;
+
+    /**
      * When true, emit Kuadrant TLSPolicy targeting the generated Gateway.
      * Default OFF — packages unchanged until the user opts in.
      */
