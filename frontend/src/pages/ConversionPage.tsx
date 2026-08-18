@@ -34,6 +34,8 @@ import { clusterApi, conversionApi } from '../api/client';
 import { ConversionResultItem } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
+import { PF_DANGER, PF_SUCCESS } from '../styles/pfTokens';
+import styles from '../styles/shared.module.css';
 
 /** Match backend toKebabCase for hostname prefill: {kebab}.{clusterDomain}. */
 function toKebabName(raw: string): string {
@@ -136,7 +138,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('conversion.title')}</Title>
-        <p style={{ marginTop: '8px', color: '#6a6e73' }}>
+        <p className={styles.pageDescription}>
           {t('conversion.description', { count: appState.selectedServices.length })}
         </p>
       </PageSection>
@@ -179,8 +181,8 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   ))}
                 </DataList>
 
-                <div style={{ marginTop: '20px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '12px', color: '#004080' }}>
+                <div className={styles.bluePanel}>
+                  <div className={styles.bluePanelTitle}>
                     {t('conversion.backendType', 'Backend Settings')}
                   </div>
                   <Form>
@@ -214,15 +216,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                             </HelperText>
                           </FormHelperText>
                         </FormGroup>
-                        <div style={{
-                          marginTop: '12px',
-                          padding: '12px',
-                          background: '#fff8e1',
-                          border: '1px solid #f0ab00',
-                          borderRadius: '4px',
-                          fontSize: '13px',
-                          color: '#795600',
-                        }}>
+                        <div className={styles.warningCallout}>
                           <div style={{ fontWeight: 600, marginBottom: '6px' }}>
                             {t('conversion.externalNote', 'The following resources will be additionally generated for external services:')}
                           </div>
@@ -237,8 +231,8 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 </div>
 
                 {/* Output settings form */}
-                <div style={{ marginTop: '16px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '16px', color: '#004080' }}>
+                <div className={styles.bluePanel}>
+                  <div className={styles.bluePanelTitle}>
                     {t('conversion.outputSettings', 'Output Settings')}
                   </div>
                   <Form>
@@ -395,14 +389,14 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
 
                 {/* Policy settings form (shown only when Logging / Anonymous Access / IP Check policies are configured) */}
                 {(hasLoggingPolicy || hasAnonymousPolicy || hasIpCheckPolicy) && (
-                  <div style={{ marginTop: '16px', padding: '16px', background: '#f0f4f8', border: '1px solid #bee1f4', borderRadius: '6px' }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '16px', color: '#004080' }}>
+                  <div className={styles.bluePanel}>
+                    <div className={styles.bluePanelTitle}>
                       {t('conversion.policySettings', 'Policy Settings')}
                     </div>
 
                     {hasLoggingPolicy && (
                       <div style={{ marginBottom: (hasAnonymousPolicy || hasIpCheckPolicy) ? '16px' : 0 }}>
-                        <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
+                        <div className={styles.sectionHeading}>
                           {t('conversion.loggingTarget', 'Logging Policy Target')}
                         </div>
                         <div style={{ display: 'flex', gap: '24px' }}>
@@ -428,7 +422,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
 
                     {hasAnonymousPolicy && (
                       <div style={{ marginBottom: hasIpCheckPolicy ? '16px' : 0 }}>
-                        <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
+                        <div className={styles.sectionHeading}>
                           {t('conversion.anonymousTarget', 'Anonymous Access Policy Target')}
                         </div>
                         <div style={{ display: 'flex', gap: '24px' }}>
@@ -454,7 +448,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
 
                     {hasIpCheckPolicy && (
                       <div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, marginBottom: '8px', color: '#151515' }}>
+                        <div className={styles.sectionHeading}>
                           {t('conversion.ipCheckMode', 'IP Check target')}
                         </div>
                         <div style={{ display: 'flex', gap: '24px' }}>
@@ -491,7 +485,7 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   </div>
                 )}
 
-                <div style={{ marginTop: '24px', display: 'flex', gap: '8px' }}>
+                <div className={styles.actionRow} style={{ marginTop: '24px' }}>
                   <Button variant="secondary" onClick={() => navigate('/compatibility')}>{t('conversion.btnBack')}</Button>
                   <Button
                     variant="primary"
@@ -518,8 +512,8 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                             dataListCells={[
                               <DataListCell key="icon">
                                 {result.status === 'FAILED'
-                                  ? <TimesCircleIcon color="red" />
-                                  : <CheckCircleIcon color="green" />}
+                                  ? <TimesCircleIcon color={PF_DANGER} />
+                                  : <CheckCircleIcon color={PF_SUCCESS} />}
                               </DataListCell>,
                               <DataListCell key="name" width={2}>
                                 <strong>{result.serviceName}</strong>
@@ -546,15 +540,14 @@ const ConversionPage: React.FC<Props> = ({ appState, setAppState }) => {
                                       })}
                                     </div>
                                     {result.files.includes('envoyfilter.yaml') && (
-                                      <div style={{
+                                      <div className={styles.warningLabel} style={{
                                         marginTop: '6px',
                                         fontSize: '12px',
-                                        color: '#795600',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: '4px',
                                       }}>
-                                        <span style={{ color: '#f0ab00' }}>●</span>
+                                        <span className={styles.warningDot}>●</span>
                                         {t('conversion.externalFilesNote', 'Includes resources for external services (EnvoyFilter + Host rewrite)')}
                                       </div>
                                     )}
