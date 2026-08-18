@@ -1113,7 +1113,9 @@ spec:
     private String finalizeAuthPolicyAuthorization(String authPolicyYaml, ApiService service,
                                                     String ipCheckMode) {
         return appendIpCheckOpaIfNeeded(
-                appendJwtClaimCheckAuthorization(authPolicyYaml, service), service, ipCheckMode);
+                appendKeycloakRoleCheckAuthorization(
+                        appendJwtClaimCheckAuthorization(authPolicyYaml, service), service),
+                service, ipCheckMode);
     }
 
     /**
@@ -1267,6 +1269,127 @@ spec:
             return authPolicyYaml;
         }
         return mergeAuthorizationNamedRules(authPolicyYaml, namedRule);
+    }
+
+    private Policy findKeycloakRoleCheckPolicy(ApiService service) {
+        if (service.policies == null) {
+            return null;
+        }
+        return service.policies.stream()
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && "keycloak_role_check".equalsIgnoreCase(p.name))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private record KeycloakRolePattern(String selector, String operator, String value) {}
+
+    /**
+     * Append AuthPolicy {@code keycloak-role-check} patternMatching for realm/resource roles.
+     * Skips with WARN when authentication is not JWT.
+     */
+    private String appendKeycloakRoleCheckAuthorization(String authPolicyYaml, ApiService service) {
+        Policy keycloak = findKeycloakRoleCheckPolicy(service);
+        if (keycloak == null) {
+            return authPolicyYaml;
+        }
+        String authType = service.authentication != null ? service.authentication.type : "none";
+        if (!"jwt".equals(authType)) {
+            LOG.warnf("keycloak_role_check enabled but authentication is '%s' (not jwt) — skipping AuthPolicy role rule",
+                    authType);
+            return authPolicyYaml;
+        }
+        String namedRule = buildKeycloakRoleCheckNamedRule(keycloak);
+        if (namedRule.isEmpty()) {
+            return authPolicyYaml;
+        }
+        return mergeAuthorizationNamedRules(authPolicyYaml, namedRule);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String buildKeycloakRoleCheckNamedRule(Policy policy) {
+        if (policy == null || policy.configuration == null) {
+            return "";
+        }
+        Map<String, Object> cfg = policy.configuration;
+        String checkType = String.valueOf(cfg.getOrDefault("type", "whitelist")).trim().toLowerCase(Locale.ROOT);
+        boolean blacklist = "blacklist".equals(checkType);
+        String operator = blacklist ? "excl" : "incl";
+
+        List<KeycloakRolePattern> patterns = new ArrayList<>();
+        Object scopesRaw = cfg.get("scopes");
+        if (!(scopesRaw instanceof List<?> scopes)) {
+            return "";
+        }
+        for (Object scopeObj : scopes) {
+            if (!(scopeObj instanceof Map<?, ?> scopeMap)) {
+                continue;
+            }
+            Map<String, Object> scope = (Map<String, Object>) scopeMap;
+            Object realmRolesRaw = scope.get("realm_roles");
+            if (realmRolesRaw instanceof List<?> realmRoles) {
+                for (Object roleObj : realmRoles) {
+                    String roleName = extractKeycloakRoleName(roleObj);
+                    if (roleName != null) {
+                        patterns.add(new KeycloakRolePattern(
+                                "auth.identity.realm_access.roles", operator, roleName));
+                    }
+                }
+            }
+            Object clientRolesRaw = firstNonNull(scope.get("client_roles"), scope.get("resource_roles"));
+            if (clientRolesRaw instanceof List<?> clientRoles) {
+                for (Object clientObj : clientRoles) {
+                    if (!(clientObj instanceof Map<?, ?> clientMap)) {
+                        continue;
+                    }
+                    Map<String, Object> client = (Map<String, Object>) clientMap;
+                    Object clientNameRaw = client.get("name");
+                    if (clientNameRaw == null || clientNameRaw.toString().isBlank()) {
+                        continue;
+                    }
+                    String clientName = clientNameRaw.toString().trim();
+                    Object rolesRaw = client.get("roles");
+                    if (rolesRaw instanceof List<?> roles) {
+                        for (Object roleObj : roles) {
+                            String roleName = extractKeycloakRoleName(roleObj);
+                            if (roleName != null) {
+                                patterns.add(new KeycloakRolePattern(
+                                        "auth.identity.resource_access." + clientName + ".roles",
+                                        operator, roleName));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if (patterns.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("      keycloak-role-check:\n");
+        sb.append("        patternMatching:\n");
+        sb.append("          patterns:\n");
+        for (KeycloakRolePattern pattern : patterns) {
+            sb.append("            - selector: ").append(pattern.selector()).append('\n');
+            sb.append("              operator: ").append(pattern.operator()).append('\n');
+            sb.append("              value: ").append(yamlDoubleQuoted(pattern.value())).append('\n');
+        }
+        return sb.toString();
+    }
+
+    private static String extractKeycloakRoleName(Object roleObj) {
+        if (roleObj instanceof Map<?, ?> roleMap) {
+            Object name = roleMap.get("name");
+            if (name != null && !name.toString().isBlank()) {
+                return name.toString().trim();
+            }
+            return null;
+        }
+        if (roleObj != null && !roleObj.toString().isBlank()) {
+            return roleObj.toString().trim();
+        }
+        return null;
     }
 
     /**
