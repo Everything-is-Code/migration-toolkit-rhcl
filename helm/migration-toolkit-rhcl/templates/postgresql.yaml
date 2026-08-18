@@ -36,6 +36,9 @@ metadata:
     app.openshift.io/runtime: postgresql
 spec:
   replicas: 1
+  # RWO PVC cannot multi-attach; tear down old pod before creating the new one.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: {{ include "migration-toolkit-rhcl.postgresql" . }}
