@@ -1494,6 +1494,66 @@ class ConversionServiceTest {
         assertTrue(files.get("README.md").contains("WARNING"));
     }
 
+    // ── retry → HTTPRoute attempts / EnvoyFilter fallback (#22 PR-B) ─────────
+
+    @Test
+    void convert_retry_whenSupported_emitsHttpRouteAttempts() {
+        ApiService svc = basicService("Retry API", "retry-api");
+        svc.policies = List.of(retryPolicy(3, "5xx", "10"));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.retriesSupported = true;
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String route = files.get("httproute.yaml");
+        assertNotNull(route);
+        assertTrue(route.contains("retry:"), "Must emit HTTPRoute retry block");
+        assertTrue(route.contains("attempts: 3"), "retries must map to attempts");
+        assertFalse(route.contains("retry_on") || route.contains("5xx"),
+                "retry_on must be ignored");
+        assertFalse(route.contains("per_try_timeout") || route.contains("perTryTimeout"),
+                "per_try_timeout must be ignored");
+        assertFalse(files.containsKey("envoyfilter-retry.yaml"),
+                "Must not emit Envoy fallback when retriesSupported");
+        assertFalse(files.values().stream().anyMatch(v -> v.contains("kind: VirtualService")),
+                "Must never emit VirtualService for retry");
+    }
+
+    @Test
+    void convert_retry_inventedFieldsIgnoredWhenSupported() {
+        ApiService svc = basicService("Retry API", "retry-api");
+        svc.policies = List.of(retryPolicy(2, "connect-failure,reset", "5s"));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.retriesSupported = true;
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+        String route = files.get("httproute.yaml");
+        assertTrue(route.contains("attempts: 2"));
+        assertFalse(route.contains("connect-failure"));
+        assertFalse(route.contains("5s"));
+    }
+
+    @Test
+    void convert_retry_whenUnsupported_emitsEnvoyFilterFallback() {
+        ApiService svc = basicService("Retry API", "retry-api");
+        svc.policies = List.of(retryPolicy(2, null, null));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.retriesSupported = false;
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        assertTrue(files.containsKey("envoyfilter-retry.yaml"),
+                "Must emit EnvoyFilter retry fallback when !retriesSupported");
+        String ef = files.get("envoyfilter-retry.yaml");
+        assertTrue(ef.contains("num_retries: 2") || ef.contains("numRetries: 2")
+                        || ef.contains("2"),
+                "EnvoyFilter must carry retry count");
+        String route = files.get("httproute.yaml");
+        assertFalse(route != null && route.contains("\n      retry:"),
+                "HTTPRoute must not use retry when unsupported");
+        assertFalse(files.values().stream().anyMatch(v -> v.contains("kind: VirtualService")));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService(String name, String systemName) {
@@ -1558,6 +1618,22 @@ class ConversionServiceTest {
         p.name = "content_limits";
         p.enabled = true;
         p.configuration = new HashMap<>(configuration);
+        return p;
+    }
+
+    private Policy retryPolicy(int retries, String retryOn, String perTryTimeout) {
+        Policy p = new Policy();
+        p.name = "retry";
+        p.enabled = true;
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("retries", retries);
+        if (retryOn != null) {
+            cfg.put("retry_on", retryOn);
+        }
+        if (perTryTimeout != null) {
+            cfg.put("per_try_timeout", perTryTimeout);
+        }
+        p.configuration = cfg;
         return p;
     }
 

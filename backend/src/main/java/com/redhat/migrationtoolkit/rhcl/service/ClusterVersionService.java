@@ -483,6 +483,10 @@ public class ClusterVersionService {
         boolean gapiTimeouts = gatewayApi != null && compareVersions(stripLeadingV(gatewayApi), "1.1") >= 0;
         boolean ocpTimeouts = ocp != null && compareVersions(majorMinor(ocp), "4.18") >= 0;
         caps.timeoutsSupported = gapiTimeouts || ocpTimeouts;
+        // HTTPRouteRetry / rules[].retry landed with Gateway API 1.2 (OCP 4.19 line).
+        boolean gapiRetries = gatewayApi != null && compareVersions(stripLeadingV(gatewayApi), "1.2") >= 0;
+        boolean ocpRetries = ocp != null && compareVersions(majorMinor(ocp), "4.19") >= 0;
+        caps.retriesSupported = gapiRetries || ocpRetries;
         return caps;
     }
 

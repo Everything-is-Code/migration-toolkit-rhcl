@@ -322,6 +322,35 @@ class CompatibilityServiceTest {
                 && "Response/Request Content Limits".equals(i.name)));
     }
 
+    /**
+     * After retry converter lands (PR-B), DEFAULT_SUPPORTED includes Retry.
+     */
+    @Test
+    void check_retry_defaultSupported() {
+        Set<String> defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection",
+                "JWT Claim Check",
+                "Response/Request Content Limits",
+                "Retry");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("retry"));
+        CompatibilityResult result = service.check(svc, defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Retry".equals(i.name)));
+    }
+
     @Test
     void check_customSupportedListWithoutCors_stillWarns() {
         // User override / saved custom list without CORS must keep WARNING until reset.
