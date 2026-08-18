@@ -1563,6 +1563,94 @@ class ConversionServiceTest {
         assertFalse(files.values().stream().anyMatch(v -> v.contains("kind: VirtualService")));
     }
 
+    // ── keycloak_role_check → AuthPolicy patternMatching (#22 PR-C) ──────────
+
+    @Test
+    void convert_keycloak_whitelistRealmRole_emitsPatternMatchingIncl() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(keycloakRoleCheckPolicy("whitelist",
+                List.of(Map.of("realm_roles", List.of(Map.of("name", "admin"))))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("keycloak-role-check"), "Must name keycloak-role-check rule");
+        assertTrue(policy.contains("patternMatching"));
+        assertTrue(policy.contains("auth.identity.realm_access.roles"));
+        assertTrue(policy.contains("operator: incl") || policy.contains("operator: eq"));
+        assertTrue(policy.contains("admin"));
+    }
+
+    @Test
+    void convert_keycloak_blacklistRole_emitsExcl() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(keycloakRoleCheckPolicy("blacklist",
+                List.of(Map.of("realm_roles", List.of(Map.of("name", "blocked"))))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("keycloak-role-check"));
+        assertTrue(policy.contains("operator: excl"), "blacklist must map via excl");
+        assertTrue(policy.contains("blocked"));
+    }
+
+    @Test
+    void convert_keycloak_resourceRole_usesResourceAccessSelector() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(keycloakRoleCheckPolicy("whitelist",
+                List.of(Map.of("client_roles", List.of(
+                        Map.of("name", "my-client",
+                                "roles", List.of(Map.of("name", "viewer"))))))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("auth.identity.resource_access.my-client.roles"),
+                "Resource roles must use resource_access.<client>.roles selector");
+        assertTrue(policy.contains("viewer"));
+    }
+
+    @Test
+    void convert_keycloak_nonJwt_warnsAndSkipsRule() {
+        ApiService svc = basicService("KC API", "kc-api");
+        svc.authentication = auth("apiKey");
+        svc.policies = List.of(keycloakRoleCheckPolicy("whitelist",
+                List.of(Map.of("realm_roles", List.of(Map.of("name", "admin"))))));
+
+        Map<String, String> files = assertDoesNotThrow(() -> service.convert(svc, "ns"));
+        String policy = files.get("policy.yaml");
+        assertFalse(policy != null && policy.contains("keycloak-role-check"),
+                "Non-JWT auth must skip keycloak AuthPolicy rule");
+        assertTrue(files.containsKey("httproute.yaml"), "Conversion must still succeed");
+    }
+
+    @Test
+    void convert_keycloak_mergesWithJwtClaimAndOpaIpCheck() {
+        ApiService svc = basicService("KC+Claim+IP", "kc-claim-ip");
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(
+                jwtClaimCheckPolicy(List.of(jwtClaimOp("role", "==", "admin", "plain", "plain"))),
+                keycloakRoleCheckPolicy("whitelist",
+                        List.of(Map.of("realm_roles", List.of(Map.of("name", "realm-admin"))))),
+                ipCheckPolicy("whitelist", List.of("192.0.2.1/32")));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.ipCheckMode = "authPolicyOpa";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String policy = files.get("policy.yaml");
+        assertNotNull(policy);
+        assertTrue(policy.contains("jwt-claim-check"));
+        assertTrue(policy.contains("keycloak-role-check"));
+        assertTrue(policy.contains("ip-check") || policy.contains("opa"));
+        assertTrue(policy.contains("realm-admin"));
+        assertTrue(policy.contains("192.0.2.1"));
+    }
+
     // ── Multi-backend path-first conversion (#28) ─────────────────────────────
 
     @Test
@@ -1942,6 +2030,17 @@ class ConversionServiceTest {
         if (perTryTimeout != null) {
             cfg.put("per_try_timeout", perTryTimeout);
         }
+        p.configuration = cfg;
+        return p;
+    }
+
+    private Policy keycloakRoleCheckPolicy(String type, List<Map<String, Object>> scopes) {
+        Policy p = new Policy();
+        p.name = "keycloak_role_check";
+        p.enabled = true;
+        Map<String, Object> cfg = new HashMap<>();
+        cfg.put("type", type);
+        cfg.put("scopes", scopes);
         p.configuration = cfg;
         return p;
     }
