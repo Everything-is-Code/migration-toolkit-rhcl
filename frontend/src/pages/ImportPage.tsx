@@ -28,6 +28,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
 import { importApi, downloadApi, applyApi, gatewayApi } from '../api/client';
+import { PF_SUCCESS } from '../styles/pfTokens';
+import styles from './ImportPage.module.css';
 
 interface YamlFile { name: string; content: string; }
 type EditMap = Record<string, string>;
@@ -183,50 +185,50 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
 
   const infoRow = (label: string, value: React.ReactNode) => (
     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 8 }}>
-      <span style={{ minWidth: 140, fontSize: 13, color: '#6a6e73', flexShrink: 0 }}>{label}</span>
+      <span className={styles.mutedLabel}>{label}</span>
       <span style={{ fontSize: 13, wordBreak: 'break-all' }}>{value}</span>
     </div>
   );
 
   return (
-    <Card style={{ border: '1px solid #0066cc33', background: '#f0f7ff' }}>
+    <Card className={styles.testPanel}>
       <CardBody>
-        <Title headingLevel="h3" size="md" style={{ marginBottom: 16, color: '#0066cc' }}>
+        <Title headingLevel="h3" size="md" className={styles.testPanelTitle}>
           {t('import.testPanel.title')}
         </Title>
 
         {/* Gateway URL */}
-        <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff', borderRadius: 6, border: '1px solid #d2d2d2' }}>
+        <div className={styles.panelBlock}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{t('import.testPanel.gatewayUrl')}</div>
 
           {/* Phase-based status display */}
           {gwLoading && gwPhase === 'lb' && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#6a6e73', marginBottom: 8 }}>
+            <div className={styles.mutedText} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 8 }}>
               <Spinner size="sm" /> {t('import.testPanel.gwWaitingLb')}
             </div>
           )}
           {gwLoading && gwPhase === 'dns' && (
-            <div style={{ background: '#fff8e1', border: '1px solid #f0c000', borderRadius: 4, padding: '10px 14px', marginBottom: 8 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#795600', marginBottom: 4 }}>
+            <div className={styles.warningCallout}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 4 }}>
                 <Spinner size="sm" /> {t('import.testPanel.gwWaitingDns')}
               </div>
             </div>
           )}
 
-          {gwError && <div style={{ fontSize: 13, color: '#c9190b', marginBottom: 8 }}>{gwError}</div>}
+          {gwError && <div className={styles.dangerText} style={{ fontSize: 13, marginBottom: 8 }}>{gwError}</div>}
 
           {!gwLoading && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               {gatewayUrl ? (
                 <>
-                  <code style={{ fontSize: 13, background: '#f5f5f5', padding: '4px 8px', borderRadius: 4 }}>{gatewayUrl}</code>
+                  <code className={styles.codeChip}>{gatewayUrl}</code>
                   <Button variant="plain" aria-label={t('import.testPanel.ariaCopy')} style={{ padding: 4 }}
                     onClick={() => copyToClipboard(gatewayUrl, 'gwurl')}>
                     <CopyIcon /> {copied === 'gwurl' ? '✓' : ''}
                   </Button>
                 </>
               ) : (
-                <span style={{ fontSize: 13, color: '#6a6e73' }}>{gwError ? '' : '—'}</span>
+                <span className={styles.mutedText} style={{ fontSize: 13 }}>{gwError ? '' : '—'}</span>
               )}
               <Button variant="link" onClick={fetchGatewayUrl} isDisabled={gwLoading} style={{ fontSize: 12 }}>
                 {t('import.testPanel.refetch')}
@@ -238,14 +240,14 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
         </div>
 
         {/* Authentication info */}
-        <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fff', borderRadius: 6, border: '1px solid #d2d2d2' }}>
+        <div className={styles.panelBlock}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>{t('import.testPanel.authTitle')}</div>
           {testInfo.auth.type === 'apiKey' && (
             <>
               {infoRow(t('import.testPanel.type'), <Label isCompact color="blue">API Key</Label>)}
               {infoRow(t('import.testPanel.header'), <code style={{ fontSize: 12 }}>{testInfo.auth.headerName}: {testInfo.auth.prefix} &lt;key&gt;</code>)}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-                <span style={{ minWidth: 140, fontSize: 13, color: '#6a6e73', flexShrink: 0 }}>{t('import.testPanel.apiKeyValue')}</span>
+                <span className={styles.mutedLabel}>{t('import.testPanel.apiKeyValue')}</span>
                 <TextInput
                   value={apiKeyValue}
                   onChange={(_e, v) => setApiKeyValue(v)}
@@ -260,7 +262,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
               {infoRow(t('import.testPanel.type'), <Label isCompact color="purple">JWT (Bearer)</Label>)}
               {infoRow(t('import.testPanel.header'), <code style={{ fontSize: 12 }}>Authorization: Bearer &lt;token&gt;</code>)}
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-                <span style={{ minWidth: 140, fontSize: 13, color: '#6a6e73', flexShrink: 0 }}>{t('import.testPanel.jwtToken')}</span>
+                <span className={styles.mutedLabel}>{t('import.testPanel.jwtToken')}</span>
                 <TextInput
                   value={jwtValue}
                   onChange={(_e, v) => setJwtValue(v)}
@@ -274,10 +276,10 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
         </div>
 
         {/* curl command — shown only after DNS resolution */}
-        <div style={{ padding: '12px 16px', background: '#fff', borderRadius: 6, border: '1px solid #d2d2d2' }}>
+        <div className={styles.panelBlock}>
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{t('import.testPanel.curlTitle')}</div>
           {(gwLoading || !gatewayUrl) ? (
-            <div style={{ fontSize: 13, color: '#6a6e73', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className={styles.mutedText} style={{ fontSize: 13, display: 'flex', gap: 8, alignItems: 'center' }}>
               {gwLoading
                 ? <><Spinner size="sm" /> {gwPhase === 'dns' ? t('import.testPanel.gwWaitingDns') : t('import.testPanel.gwWaitingLb')}</>
                 : t('import.testPanel.gwNotReady')}
@@ -285,7 +287,7 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ minWidth: 140, fontSize: 13, color: '#6a6e73', flexShrink: 0 }}>{t('import.testPanel.customPath')}</span>
+                <span className={styles.mutedLabel}>{t('import.testPanel.customPath')}</span>
                 <TextInput
                   value={customPath}
                   onChange={(_e, v) => setCustomPath(v)}
@@ -300,15 +302,10 @@ const TestInfoPanel: React.FC<TestInfoPanelProps> = ({ testInfo, namespace }) =>
                   <div key={i} style={{ marginBottom: i < testInfo.routes.length - 1 ? 12 : 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                       <Label isCompact color="blue">{route.method}</Label>
-                      <code style={{ fontSize: 12, color: '#6a6e73' }}>{route.path}</code>
+                      <code className={styles.mutedText} style={{ fontSize: 12 }}>{route.path}</code>
                     </div>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <pre style={{
-                        flex: 1, margin: 0, padding: '8px 12px', fontSize: 12,
-                        background: '#1b1d21', color: '#d4d4d4', borderRadius: 4,
-                        fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                        overflowX: 'auto',
-                      }}>
+                      <pre className={styles.curlPre}>
                         {cmd}
                       </pre>
                       <Button variant="plain" aria-label={t('import.testPanel.ariaCopy')} style={{ padding: 6, flexShrink: 0, marginTop: 2 }}
@@ -336,11 +333,10 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     if (this.state.hasError) {
       return (
         <div style={{ padding: 32 }}>
-          <div style={{ background: '#fff1f1', border: '1px solid #c9190b', borderRadius: 6, padding: 20 }}>
-            <p style={{ margin: 0, fontWeight: 700, color: '#c9190b' }}>{i18next.t('import.errorTitle')}</p>
+          <div className={styles.errorBanner}>
+            <p className={styles.errorBannerTitle}>{i18next.t('import.errorTitle')}</p>
             <pre style={{ marginTop: 8, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.msg}</pre>
-            <button onClick={() => this.setState({ hasError: false, msg: '' })}
-              style={{ marginTop: 12, padding: '6px 16px', background: '#c9190b', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            <button onClick={() => this.setState({ hasError: false, msg: '' })} className={styles.errorRetry}>
               {i18next.t('import.btnRetry')}
             </button>
           </div>
@@ -415,7 +411,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
       <div
         role="tablist"
         aria-label={t('import.yamlEditorTitle')}
-        style={{ display: 'flex', flexWrap: 'wrap', gap: 2, borderBottom: '2px solid #d2d2d2', marginBottom: 12 }}
+        className={styles.tabList}
       >
         {files.map((f, i) => {
           const changed = edits[f.name] !== undefined && edits[f.name] !== f.content;
@@ -429,22 +425,11 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
               aria-controls={panelId}
               tabIndex={i === active ? 0 : -1}
               onClick={() => { setActive(i); setMode('view'); }}
-              style={{
-                padding: '8px 16px', fontSize: 13, cursor: 'pointer',
-                border: 'none', borderBottom: i === active ? '2px solid #0066cc' : 'none',
-                background: i === active ? '#f0f7ff' : 'transparent',
-                color: i === active ? '#0066cc' : '#333',
-                fontWeight: i === active ? 600 : 400,
-                marginBottom: -2,
-                position: 'relative',
-              }}
+              className={`${styles.tab}${i === active ? ` ${styles.isActive}` : ''}`}
             >
               {f.name}
               {changed && (
-                <span style={{
-                  marginLeft: 6, fontSize: 10, background: '#f0ab00', color: '#1b1d21',
-                  borderRadius: 8, padding: '1px 6px', fontWeight: 700,
-                }}>M</span>
+                <span className={styles.modifiedBadge}>M</span>
               )}
             </button>
           );
@@ -456,24 +441,14 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
         <button
           type="button"
           onClick={() => setMode('view')}
-          style={{
-            fontSize: 12, padding: '4px 12px', cursor: 'pointer',
-            border: '1px solid #8a8d90', borderRadius: 4,
-            background: mode === 'view' ? '#0066cc' : '#fff',
-            color: mode === 'view' ? '#fff' : '#333',
-          }}
+          className={`${styles.modeButton}${mode === 'view' ? ` ${styles.isActive}` : ''}`}
         >
           {t('import.viewMode')}
         </button>
         <button
           type="button"
           onClick={() => setMode('edit')}
-          style={{
-            fontSize: 12, padding: '4px 12px', cursor: 'pointer',
-            border: '1px solid #8a8d90', borderRadius: 4,
-            background: mode === 'edit' ? '#0066cc' : '#fff',
-            color: mode === 'edit' ? '#fff' : '#333',
-          }}
+          className={`${styles.modeButton}${mode === 'edit' ? ` ${styles.isActive}` : ''}`}
         >
           {t('import.editMode')}
         </button>
@@ -481,12 +456,7 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
           type="button"
           onClick={() => setMode('diff')}
           disabled={!isEdited}
-          style={{
-            fontSize: 12, padding: '4px 12px', cursor: isEdited ? 'pointer' : 'not-allowed',
-            border: '1px solid #8a8d90', borderRadius: 4,
-            background: mode === 'diff' ? '#3e8635' : '#fff',
-            color: mode === 'diff' ? '#fff' : isEdited ? '#333' : '#8a8d90',
-          }}
+          className={`${styles.modeButton}${mode === 'diff' ? ` ${styles.diffActive}` : ''}`}
         >
           {t('import.diffMode')}
         </button>
@@ -503,45 +473,26 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
             value={content}
             onChange={e => onEdit(current.name, e.target.value)}
             aria-label={t('import.editMode') + ': ' + current.name}
-            style={{
-              width: '100%', minHeight: 480, fontFamily: 'monospace', fontSize: 13,
-              background: '#1b1d21', color: '#d4d4d4', border: '1px solid #6a6e73',
-              borderRadius: 4, padding: 12, boxSizing: 'border-box', resize: 'vertical',
-            }}
+            className={styles.editorTextarea}
           />
         ) : mode === 'diff' ? (
-          <div style={{
-            background: '#1b1d21', padding: 16, borderRadius: 4,
-            overflow: 'auto', maxHeight: 480, fontSize: 13, fontFamily: 'monospace',
-          }}>
+          <div className={styles.diffPane}>
             {diffLines.map((line, idx) => (
-              <div key={idx} style={{
-                display: 'flex',
-                background: line.type === 'add' ? '#1a3a1a' : line.type === 'remove' ? '#3a1a1a' : 'transparent',
-                borderLeft: line.type === 'add' ? '3px solid #3e8635' : line.type === 'remove' ? '3px solid #c9190b' : '3px solid transparent',
-                paddingLeft: 8,
-              }}>
-                <span style={{
-                  color: line.type === 'add' ? '#6a9f5a' : line.type === 'remove' ? '#c9190b' : '#6a6e73',
-                  minWidth: 16, userSelect: 'none', marginRight: 8,
-                }}>
+              <div
+                key={idx}
+                className={`${styles.diffLine}${line.type === 'add' ? ` ${styles.diffAdd}` : line.type === 'remove' ? ` ${styles.diffRemove}` : ''}`}
+              >
+                <span className={styles.diffMarker}>
                   {line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}
                 </span>
-                <span style={{
-                  color: line.type === 'add' ? '#b5e4a8' : line.type === 'remove' ? '#f1948a' : '#d4d4d4',
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-                }}>
+                <span className={styles.diffText}>
                   {line.text}
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <pre style={{
-            background: '#1b1d21', color: '#d4d4d4', padding: 16, borderRadius: 4,
-            overflow: 'auto', maxHeight: 480, fontSize: 13, fontFamily: 'monospace',
-            margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          }}>
+          <pre className={styles.editorPre}>
             {content}
           </pre>
         )}
@@ -751,7 +702,7 @@ const ImportPageInner: React.FC = () => {
     <>
       <PageSection variant={PageSectionVariants.light}>
         <Title headingLevel="h1" size="2xl">{t('import.title')}</Title>
-        <p style={{ marginTop: 8, color: '#6a6e73' }}>{t('import.description')}</p>
+        <p className={styles.pageDescription}>{t('import.description')}</p>
       </PageSection>
 
       <PageSection>
@@ -774,22 +725,18 @@ const ImportPageInner: React.FC = () => {
                     onDragLeave={() => setDragOver(false)}
                     onDrop={handleDrop}
                     onClick={() => !loading && fileRef.current?.click()}
-                    style={{
-                      border: `2px dashed ${dragOver ? '#0066cc' : '#8a8d90'}`,
-                      borderRadius: 8, padding: '48px 24px', textAlign: 'center',
-                      cursor: loading ? 'default' : 'pointer',
-                      background: dragOver ? '#e7f1fa' : '#fafafa', transition: 'all 0.2s',
-                    }}
+                    className={`${styles.dropZone}${dragOver ? ` ${styles.isDragOver}` : ''}`}
+                    style={{ cursor: loading ? 'default' : 'pointer' }}
                   >
                     {loading ? (
                       <><Spinner size="lg" /><p style={{ marginTop: 16 }}>{t('import.analyzing')}</p></>
                     ) : (
                       <>
-                        <UploadIcon style={{ fontSize: '3rem', color: '#6a6e73' }} />
+                        <UploadIcon className={styles.mutedText} style={{ fontSize: '3rem' }} />
                         <p style={{ marginTop: 16, fontSize: '1.1rem', fontWeight: 500 }}>
                           {t('import.dropZone')}
                         </p>
-                        <p style={{ color: '#6a6e73', marginTop: 8 }}>{t('import.orClick')}</p>
+                        <p className={styles.mutedText} style={{ marginTop: 8 }}>{t('import.orClick')}</p>
                         <Button variant="primary" style={{ marginTop: 16 }}
                           onClick={e => { e.stopPropagation(); fileRef.current?.click(); }}>
                           {t('import.btnSelectFile')}
@@ -833,24 +780,21 @@ const ImportPageInner: React.FC = () => {
                       {t('import.namespaceSection')}
                     </Title>
                     <Form isHorizontal>
-                      <FormGroup label={<>{t('import.labelPackageName')}<span style={{ color: '#c9190b', marginLeft: 2 }}>*</span></>} fieldId="imp-pkg">
+                      <FormGroup label={<>{t('import.labelPackageName')}<span className={styles.requiredMark}>*</span></>} fieldId="imp-pkg">
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <TextInput
                             id="imp-pkg"
                             value={packageName}
                             onChange={(_e, v) => handlePackageNameChange(v)}
                             placeholder={t('import.pkgNamePlaceholder')}
-                            style={{
-                              width: 260,
-                              borderColor: pkgNameError ? '#c9190b' : undefined,
-                              outline: pkgNameError ? '1px solid #c9190b' : undefined,
-                            }}
+                            className={pkgNameError ? styles.inputError : undefined}
+                            style={{ width: 260 }}
                             aria-invalid={pkgNameError}
                           />
                           {pkgNameError ? (
-                            <span style={{ fontSize: 12, color: '#c9190b' }}>{t('import.pkgNameRequired')}</span>
+                            <span className={styles.fieldError}>{t('import.pkgNameRequired')}</span>
                           ) : (
-                            <span style={{ fontSize: 12, color: '#6a6e73' }}>{t('import.pkgNameHint')}</span>
+                            <span className={styles.fieldHint}>{t('import.pkgNameHint')}</span>
                           )}
                         </div>
                       </FormGroup>
@@ -870,16 +814,9 @@ const ImportPageInner: React.FC = () => {
                       </FormGroup>
                     </Form>
                     {portFixNotice && (
-                      <div style={{
-                        marginTop: 12, padding: '8px 12px', borderRadius: 4,
-                        background: portFixNotice === 'portFixed443' ? '#f0f7e6' : '#f0f7ff',
-                        border: `1px solid ${portFixNotice === 'portFixed443' ? '#3e8635' : '#0066cc'}`,
-                        fontSize: 13,
-                        color: portFixNotice === 'portFixed443' ? '#1e4f18' : '#004080',
-                        display: 'flex', alignItems: 'center', gap: 8,
-                      }}>
+                      <div className={`${styles.portNotice}${portFixNotice === 'portFixed443' ? ` ${styles.isSuccess}` : ''}`}>
                         {portFixNotice === 'portFixed443'
-                          ? <CheckCircleIcon color="#3e8635" />
+                          ? <CheckCircleIcon color={PF_SUCCESS} />
                           : <span style={{ fontWeight: 700 }}>ℹ</span>}
                         {t(`import.${portFixNotice}`)}
                       </div>
@@ -915,20 +852,20 @@ const ImportPageInner: React.FC = () => {
                       {errorCount > 0 && successCount > 0 && <Alert variant="warning" isInline style={{ marginBottom: 12 }}
                         title={t('import.partialAlert', { success: successCount, error: errorCount })} />}
                       <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <table className={styles.resultsTable}>
                           <caption style={{ textAlign: 'left', padding: '0 0 8px', fontWeight: 600 }}>
                             {t('import.resultTitle')}
                           </caption>
                           <thead>
-                            <tr style={{ background: '#f5f5f5' }}>
-                              <th scope="col" style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', textAlign: 'left' }}>{t('import.colFileName')}</th>
-                              <th scope="col" style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', width: 90, textAlign: 'left' }}>{t('import.colResult')}</th>
-                              <th scope="col" style={{ padding: '8px 12px', borderBottom: '2px solid #d2d2d2', textAlign: 'left' }}>{t('import.colMessage')}</th>
+                            <tr className={styles.resultsHeader}>
+                              <th scope="col" className={styles.resultsTh}>{t('import.colFileName')}</th>
+                              <th scope="col" className={styles.resultsTh} style={{ width: 90 }}>{t('import.colResult')}</th>
+                              <th scope="col" className={styles.resultsTh}>{t('import.colMessage')}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {applyResults.map(r => (
-                              <tr key={r.fileName} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                              <tr key={r.fileName} className={styles.resultsRow}>
                                 <td style={{ padding: '8px 12px', fontFamily: 'monospace' }}>{r.fileName}</td>
                                 <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
                                   {r.success
@@ -936,7 +873,7 @@ const ImportPageInner: React.FC = () => {
                                     : <TimesCircleIcon color="var(--pf-v5-global--danger-color--100)" />}
                                   {' '}{r.success ? t('import.resultSuccess') : t('import.resultFail')}
                                 </td>
-                                <td style={{ padding: '8px 12px', color: r.success ? '#3e8635' : '#c9190b', fontSize: 12, wordBreak: 'break-word', maxWidth: 500 }}>
+                                <td className={r.success ? styles.resultsOk : styles.resultsFail} style={{ padding: '8px 12px', fontSize: 12, wordBreak: 'break-word', maxWidth: 500 }}>
                                   {r.message}
                                 </td>
                               </tr>
