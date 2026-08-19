@@ -271,8 +271,48 @@ class ClusterVersionServiceTest {
         assertEquals("detected", response.source);
         assertEquals("1.4.0", response.kuadrant);
         assertEquals("2.6.5", response.ossm);
+        // One ResourceDefinitionContext for CSVs; namespaces are probed via inNamespace().
         verify(client, times(1)).genericKubernetesResources(argThat(
                 ctx -> ctx != null && "clusterserviceversions".equals(ctx.getPlural())));
+    }
+
+    @Test
+    void resolve_whenOnlyAuthPolicyCrd_marksKuadrantPresent() {
+        stubCluster("4.19.3", "1.2.1", List.of(), SmcpMode.EMPTY);
+        // Override CRD stub: AuthPolicy present without CSV.
+        var apiextensions = mock(io.fabric8.kubernetes.client.dsl.ApiextensionsAPIGroupDSL.class);
+        var v1 = mock(io.fabric8.kubernetes.client.V1ApiextensionAPIGroupDSL.class);
+        var crdOps = mock(NonNamespaceOperation.class);
+        when(client.apiextensions()).thenReturn(apiextensions);
+        when(apiextensions.v1()).thenReturn(v1);
+        when(v1.customResourceDefinitions()).thenReturn(crdOps);
+        when(crdOps.withName(anyString())).thenAnswer(inv -> {
+            String name = inv.getArgument(0);
+            Resource resource = mock(Resource.class);
+            if ("gatewayclasses.gateway.networking.k8s.io".equals(name)) {
+                CustomResourceDefinition gatewayCrd = new CustomResourceDefinition();
+                ObjectMeta meta = new ObjectMeta();
+                meta.setName(name);
+                meta.setAnnotations(Map.of("gateway.networking.k8s.io/bundle-version", "v1.2.1"));
+                gatewayCrd.setMetadata(meta);
+                when(resource.get()).thenReturn(gatewayCrd);
+            } else if ("authpolicies.kuadrant.io".equals(name)) {
+                CustomResourceDefinition auth = new CustomResourceDefinition();
+                ObjectMeta meta = new ObjectMeta();
+                meta.setName(name);
+                auth.setMetadata(meta);
+                when(resource.get()).thenReturn(auth);
+            } else {
+                when(resource.get()).thenReturn(null);
+            }
+            return resource;
+        });
+
+        ClusterVersionsResponse response = service.resolve("auto", true);
+
+        assertEquals("detected", response.source);
+        assertEquals(ClusterVersionService.KUADRANT_PRESENT_VIA_CRD, response.kuadrant);
+        assertTrue(response.capabilities.kuadrantPresent);
     }
 
     // ── I-7 unbounded CSV list residual ──────────────────────────────────────
@@ -504,6 +544,7 @@ class ClusterVersionServiceTest {
                         }
                         list.setItems(items);
                         when(op.inAnyNamespace()).thenReturn(n);
+                        when(op.inNamespace(anyString())).thenReturn(n);
                         when(n.list()).thenReturn(list);
                         return op;
                     }
@@ -533,19 +574,39 @@ class ClusterVersionServiceTest {
         var apiextensions = mock(io.fabric8.kubernetes.client.dsl.ApiextensionsAPIGroupDSL.class);
         var v1 = mock(io.fabric8.kubernetes.client.V1ApiextensionAPIGroupDSL.class);
         var crdOps = mock(NonNamespaceOperation.class);
-        var crdResource = mock(Resource.class);
-        CustomResourceDefinition crd = new CustomResourceDefinition();
-        ObjectMeta meta = new ObjectMeta();
-        meta.setName("gatewayclasses.gateway.networking.k8s.io");
-        meta.setAnnotations(Map.of(
+        CustomResourceDefinition gatewayCrd = new CustomResourceDefinition();
+        ObjectMeta gatewayMeta = new ObjectMeta();
+        gatewayMeta.setName("gatewayclasses.gateway.networking.k8s.io");
+        gatewayMeta.setAnnotations(Map.of(
                 "gateway.networking.k8s.io/bundle-version",
                 gatewayApiBundle.startsWith("v") ? gatewayApiBundle : "v" + gatewayApiBundle));
-        crd.setMetadata(meta);
+        gatewayCrd.setMetadata(gatewayMeta);
+
+        CustomResourceDefinition authPolicyCrd = new CustomResourceDefinition();
+        ObjectMeta authMeta = new ObjectMeta();
+        authMeta.setName("authpolicies.kuadrant.io");
+        authPolicyCrd.setMetadata(authMeta);
+
+        boolean hasKuadrant = csvSpecs != null && csvSpecs.stream().anyMatch(s -> {
+            String n = s.name().toLowerCase();
+            return n.contains("kuadrant") || n.contains("rhcl") || n.contains("rh-connectivity");
+        });
+
         when(client.apiextensions()).thenReturn(apiextensions);
         when(apiextensions.v1()).thenReturn(v1);
         when(v1.customResourceDefinitions()).thenReturn(crdOps);
-        when(crdOps.withName("gatewayclasses.gateway.networking.k8s.io")).thenReturn(crdResource);
-        when(crdResource.get()).thenReturn(crd);
+        when(crdOps.withName(anyString())).thenAnswer(inv -> {
+            String name = inv.getArgument(0);
+            Resource resource = mock(Resource.class);
+            if ("gatewayclasses.gateway.networking.k8s.io".equals(name)) {
+                when(resource.get()).thenReturn(gatewayCrd);
+            } else if ("authpolicies.kuadrant.io".equals(name)) {
+                when(resource.get()).thenReturn(hasKuadrant ? authPolicyCrd : null);
+            } else {
+                when(resource.get()).thenReturn(null);
+            }
+            return resource;
+        });
     }
 
     private static GenericKubernetesResource clusterVersion(String version) {

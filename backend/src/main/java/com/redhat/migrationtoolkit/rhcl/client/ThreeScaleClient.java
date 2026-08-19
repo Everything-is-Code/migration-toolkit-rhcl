@@ -28,7 +28,7 @@ public interface ThreeScaleClient {
                                     @QueryParam("access_token") String accessToken);
 
     @GET
-    @Path("/admin/api/backends.json")
+    @Path("/admin/api/backend_apis.json")
     Map<String, Object> getBackends(@QueryParam("access_token") String accessToken,
                                      @QueryParam("page") @DefaultValue("1") int page,
                                      @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
@@ -63,10 +63,13 @@ public interface ThreeScaleClient {
     Map<String, Object> getMetrics(@PathParam("serviceId") String serviceId,
                                     @QueryParam("access_token") String accessToken);
 
+    /**
+     * Tenant-wide application list. There is no stable {@code /services/{id}/applications}
+     * Admin API path — filter client-side by {@code service_id} on each application.
+     */
     @GET
-    @Path("/admin/api/services/{serviceId}/applications.json")
-    Map<String, Object> getApplications(@PathParam("serviceId") String serviceId,
-                                         @QueryParam("access_token") String accessToken,
+    @Path("/admin/api/applications.json")
+    Map<String, Object> getApplications(@QueryParam("access_token") String accessToken,
                                          @QueryParam("page") @DefaultValue("1") int page,
                                          @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 

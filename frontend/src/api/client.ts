@@ -58,6 +58,8 @@ export const servicesApi = {
     api.get(`/api/services/${id}/compatibility`, {
       params: { url, supportedPolicies: supportedPolicies.join('|') },
       headers: bearerHeaders(accessToken),
+      // Cluster detect soft-timeout is 15s; keep UI from spinning forever on bad kubeconfigs.
+      timeout: 60_000,
     }),
 };
 

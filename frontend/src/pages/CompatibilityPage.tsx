@@ -77,26 +77,32 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
     setLoading(true);
     setError(null);
     const all: CompatibilityResult[] = [];
-    for (const service of appState.selectedServices) {
-      try {
-        const policies = await loadSupportedPolicies();
-        const resp = await servicesApi.checkCompatibility(
-          service.id, appState.connection.url, appState.connection.accessToken,
-          policies
-        );
-        all.push(resp.data);
-      } catch {
-        all.push({
-          serviceId: service.id,
-          serviceName: service.name,
-          score: 0,
-          level: 'LOW',
-          items: [{ name: 'Error', status: 'UNSUPPORTED', message: t('compatibility.errorCheck') }],
-        });
+    try {
+      const policies = await loadSupportedPolicies();
+      for (const service of appState.selectedServices) {
+        try {
+          const resp = await servicesApi.checkCompatibility(
+            service.id, appState.connection.url, appState.connection.accessToken,
+            policies
+          );
+          all.push(resp.data);
+        } catch {
+          all.push({
+            serviceId: service.id,
+            serviceName: service.name,
+            score: 0,
+            level: 'LOW',
+            items: [{ name: 'Error', status: 'UNSUPPORTED', message: t('compatibility.errorCheck') }],
+          });
+        }
       }
+      setResults(all);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : t('compatibility.errorCheck');
+      setError(message);
+    } finally {
+      setLoading(false);
     }
-    setResults(all);
-    setLoading(false);
   };
 
   const noServices = appState.selectedServices.length === 0;

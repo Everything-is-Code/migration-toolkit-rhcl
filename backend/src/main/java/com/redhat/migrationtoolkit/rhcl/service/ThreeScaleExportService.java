@@ -25,12 +25,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,8 +41,13 @@ public class ThreeScaleExportService {
     /** Page size for Admin API list endpoints (shared with {@link ThreeScaleClient} @DefaultValue). */
     static final int LIST_PAGE_SIZE = ConversionConstants.LIST_PAGE_SIZE;
 
-    /** Max wait for list-enrich virtual-thread pool shutdown. */
-    static final long LIST_ENRICH_TERMINATION_SECONDS = 60;
+    /** Short TTL for in-memory export cache keyed by (url, serviceId). */
+    static final long EXPORT_CACHE_TTL_MS = 60_000L;
+
+    private final ConcurrentHashMap<String, CachedExport> exportCache = new ConcurrentHashMap<>();
+
+    private record CachedExport(ApiService service, long expiresAtMs) {
+    }
 
     @ConfigProperty(name = "threescale.connect-timeout")
     int connectTimeoutSeconds;
@@ -155,8 +158,9 @@ public class ThreeScaleExportService {
     }
 
     /**
-     * Lightweight list for the selection UI: metadata + policies + backends only.
-     * Skips mapping rules, metrics, applications, plans, and proxy (loaded on convert).
+     * List-lite for the selection UI: service metadata (+ auth) only.
+     * Skips per-service policies/backends enrichment and deep fetches
+     * (mapping rules, metrics, applications, plans, proxy) — loaded on export/convert.
      */
     public List<ApiService> listServices(String url, String accessToken) {
         ThreeScaleClient client = buildClient(url);
@@ -179,7 +183,6 @@ public class ThreeScaleExportService {
     List<ApiService> listServices(ThreeScaleClient client, String accessToken) {
         try {
             List<Map<String, Object>> serviceList = fetchAllServicePages(client, accessToken);
-            Map<String, Backend> backendCatalog = fetchBackendCatalog(client, accessToken);
 
             List<ApiService> services = new ArrayList<>();
             for (Map<String, Object> svcWrapper : serviceList) {
@@ -189,8 +192,7 @@ public class ThreeScaleExportService {
                 }
                 services.add(mapServiceSummary(svc));
             }
-
-            enrichListSummaries(client, accessToken, services, backendCatalog);
+            // P0 list lite: do not fan out policies/backends per service (export loads those).
             return services;
         } catch (RuntimeException e) {
             throw e;
@@ -210,44 +212,6 @@ public class ThreeScaleExportService {
         service.deploymentOption = (String) svc.get("deployment_option");
         service.authentication = extractAuthentication(svc);
         return service;
-    }
-
-    private void enrichListSummaries(ThreeScaleClient client, String accessToken,
-                                     List<ApiService> services, Map<String, Backend> backendCatalog) {
-        if (services.isEmpty()) {
-            return;
-        }
-        ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
-        try {
-            List<CompletableFuture<Void>> futures = new ArrayList<>(services.size());
-            for (ApiService service : services) {
-                futures.add(CompletableFuture.runAsync(() -> {
-                    service.policies = fetchPolicies(client, service.id, accessToken);
-                    service.backends = resolveBackendsFromUsages(
-                            client, service.id, accessToken, backendCatalog);
-                }, pool));
-            }
-            for (int i = 0; i < futures.size(); i++) {
-                try {
-                    futures.get(i).join();
-                } catch (CompletionException e) {
-                    ApiService failed = services.get(i);
-                    Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    LOG.warnf(cause, "Failed to enrich service %s during list: %s",
-                            failed != null ? failed.id : "?", cause.getMessage());
-                }
-            }
-        } finally {
-            pool.shutdown();
-            try {
-                if (!pool.awaitTermination(LIST_ENRICH_TERMINATION_SECONDS, TimeUnit.SECONDS)) {
-                    pool.shutdownNow();
-                }
-            } catch (InterruptedException ie) {
-                pool.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
     }
 
     private List<Map<String, Object>> fetchAllServicePages(ThreeScaleClient client, String accessToken) {
@@ -353,7 +317,43 @@ public class ThreeScaleExportService {
     }
 
     public ApiService exportService(String url, String accessToken, String serviceId) {
-        ThreeScaleClient client = buildClient(url);
+        return exportService(buildClient(url), url, accessToken, serviceId);
+    }
+
+    /**
+     * Package-visible for unit tests with a mocked {@link ThreeScaleClient}.
+     * Caches by normalized {@code (url, serviceId)} for {@link #EXPORT_CACHE_TTL_MS}.
+     */
+    ApiService exportService(ThreeScaleClient client, String url, String accessToken, String serviceId) {
+        String key = exportCacheKey(url, serviceId);
+        long now = exportNowMs();
+        CachedExport hit = exportCache.get(key);
+        if (hit != null && hit.expiresAtMs > now) {
+            return hit.service;
+        }
+        ApiService fetched = fetchExport(client, accessToken, serviceId);
+        exportCache.put(key, new CachedExport(fetched, now + EXPORT_CACHE_TTL_MS));
+        return fetched;
+    }
+
+    /** Clears the in-memory export cache (tests / forced refresh). */
+    void clearExportCache() {
+        exportCache.clear();
+    }
+
+    static String exportCacheKey(String url, String serviceId) {
+        String normalizedUrl = url == null ? "" : url.trim().replaceAll("/+$", "").toLowerCase(Locale.ROOT);
+        String id = serviceId == null ? "" : serviceId.trim();
+        return normalizedUrl + "|" + id;
+    }
+
+    /** Package-visible clock hook for TTL tests. */
+    long exportNowMs() {
+        return System.currentTimeMillis();
+    }
+
+    @SuppressWarnings("unchecked")
+    private ApiService fetchExport(ThreeScaleClient client, String accessToken, String serviceId) {
         Map<String, Object> response = client.getService(serviceId, accessToken);
         Map<String, Object> svc = (Map<String, Object>) response.get("service");
 
@@ -547,42 +547,58 @@ public class ThreeScaleExportService {
 
     /**
      * Fetch applications for a service and their application keys from the Admin API.
+     * Uses tenant-wide {@code /admin/api/applications.json} and filters by {@code service_id}
+     * (the legacy {@code /services/{id}/applications.json} path returns 404 on current 3scale).
      * Real credentials only — never invent keys.
      */
     @SuppressWarnings("unchecked")
     List<Application> fetchApplications(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
-            Map<String, Object> resp = client.getApplications(serviceId, accessToken, 1, 500);
-            List<Map<String, Object>> appList = extractList(resp, "applications");
-            if (appList.isEmpty()) {
-                // Some tenants wrap differently or return empty — also try top-level list patterns
-                Object raw = resp.get("applications");
-                if (raw == null && resp.containsKey("application")) {
+            List<Application> applications = new ArrayList<>();
+            int page = 1;
+            while (true) {
+                Map<String, Object> resp = client.getApplications(accessToken, page, pageSize);
+                List<Map<String, Object>> appList = extractList(resp, "applications");
+                if (appList.isEmpty() && page == 1 && resp.containsKey("application")) {
                     appList = List.of(resp);
                 }
-            }
-            List<Application> applications = new ArrayList<>();
-            for (Map<String, Object> wrapper : appList) {
-                Map<String, Object> appMap = wrapper;
-                if (wrapper.get("application") instanceof Map<?, ?> nested) {
-                    appMap = (Map<String, Object>) nested;
+                for (Map<String, Object> wrapper : appList) {
+                    Map<String, Object> appMap = wrapper;
+                    if (wrapper.get("application") instanceof Map<?, ?> nested) {
+                        appMap = (Map<String, Object>) nested;
+                    }
+                    if (!serviceIdMatches(appMap.get("service_id"), serviceId)) {
+                        continue;
+                    }
+                    Application app = new Application();
+                    app.id = String.valueOf(appMap.get("id"));
+                    app.name = (String) appMap.get("name");
+                    Object applicationId = appMap.get("application_id");
+                    if (applicationId == null) {
+                        applicationId = appMap.get("user_key");
+                    }
+                    app.appId = applicationId != null ? String.valueOf(applicationId) : null;
+                    app.keys = fetchApplicationKeys(client, app.id, accessToken);
+                    applications.add(app);
                 }
-                Application app = new Application();
-                app.id = String.valueOf(appMap.get("id"));
-                app.name = (String) appMap.get("name");
-                Object applicationId = appMap.get("application_id");
-                if (applicationId == null) {
-                    applicationId = appMap.get("user_key");
+                if (appList.size() < pageSize) {
+                    break;
                 }
-                app.appId = applicationId != null ? String.valueOf(applicationId) : null;
-                app.keys = fetchApplicationKeys(client, app.id, accessToken);
-                applications.add(app);
+                page++;
             }
             return applications;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch applications for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    /** Compare Admin API {@code service_id} (number or string) to the requested service id. */
+    static boolean serviceIdMatches(Object serviceIdField, String expectedServiceId) {
+        if (expectedServiceId == null || expectedServiceId.isBlank() || serviceIdField == null) {
+            return false;
+        }
+        return expectedServiceId.equals(String.valueOf(serviceIdField));
     }
 
     @SuppressWarnings("unchecked")
@@ -724,8 +740,12 @@ public class ThreeScaleExportService {
 
     ThreeScaleClient buildClient(String baseUrl) {
         try {
+            long connect = connectTimeoutSeconds;
+            long read = Math.max(connectTimeoutSeconds * 2L, 15L);
             return RestClientBuilder.newBuilder()
                     .baseUri(new URI(baseUrl))
+                    .connectTimeout(connect, TimeUnit.SECONDS)
+                    .readTimeout(read, TimeUnit.SECONDS)
                     .build(ThreeScaleClient.class);
         } catch (Exception e) {
             throw new RuntimeException("Invalid 3scale URL: " + baseUrl, e);
