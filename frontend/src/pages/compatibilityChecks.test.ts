@@ -79,6 +79,30 @@ describe('runCompatibilityChecks', () => {
     expect(results[1].items[0].message).toBe('check failed');
   });
 
+  it('retries loadSupportedPolicies once before failing', async () => {
+    const loadSupportedPolicies = vi.fn()
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValueOnce(['cors']);
+    const checkCompatibility = vi.fn(async (id: string) => ({
+      data: resultFor(id, `Service ${id}`),
+    }));
+
+    const { results, error } = await runCompatibilityChecks(
+      [{ id: '1', name: 'One' }],
+      { url: 'https://3scale.example', accessToken: 'tok' },
+      {
+        loadSupportedPolicies,
+        checkCompatibility,
+        errorMessage: 'check failed',
+      },
+    );
+
+    expect(error).toBeNull();
+    expect(results).toHaveLength(1);
+    expect(loadSupportedPolicies).toHaveBeenCalledTimes(2);
+    expect(checkCompatibility).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces loadSupportedPolicies failures as a top-level error', async () => {
     const loadSupportedPolicies = vi.fn().mockRejectedValue(new Error('policies down'));
     const checkCompatibility = vi.fn();
@@ -95,6 +119,7 @@ describe('runCompatibilityChecks', () => {
 
     expect(error).toBe('policies down');
     expect(results).toEqual([]);
+    expect(loadSupportedPolicies).toHaveBeenCalledTimes(2);
     expect(checkCompatibility).not.toHaveBeenCalled();
   });
 });

@@ -174,10 +174,12 @@ public class ClusterVersionService {
         }
 
         CompletableFuture<ClusterVersionsResponse> future = inFlight.compute(normalized, (key, existing) -> {
-            if (!refresh && existing != null && !existing.isDone()) {
+            // Always join an in-flight probe for this profile (including refresh=true) so
+            // concurrent Compatibility/Convert calls share one kube walk.
+            if (existing != null && !existing.isDone()) {
                 return existing;
             }
-            return CompletableFuture.supplyAsync(() -> doResolve(normalized), detectExecutor);
+            return CompletableFuture.supplyAsync(() -> runDetect(normalized), detectExecutor);
         });
 
         try {
@@ -196,6 +198,14 @@ public class ClusterVersionService {
      */
     long detectTimeoutSeconds() {
         return DETECT_TIMEOUT_SECONDS;
+    }
+
+    /**
+     * Package-visible detect body for unit tests (coalesce / executor coverage).
+     * Production path is {@link #doResolve}.
+     */
+    ClusterVersionsResponse runDetect(String profile) {
+        return doResolve(profile);
     }
 
     /**
@@ -463,14 +473,6 @@ public class ClusterVersionService {
     }
 
     /**
-     * Resolve an operator CSV version from a short allow-list of namespaces.
-     * Does not list CSVs cluster-wide (too slow / too large on multi-tenant labs).
-     */
-    String detectOperatorCsvVersion(java.util.function.Predicate<String> nameMatch) {
-        return findCsvVersion(listOperatorCsvsInPreferredNamespaces(), nameMatch);
-    }
-
-    /**
      * Lists CSVs only in {@link #OPERATOR_CSV_NAMESPACES} (deduped by name).
      */
     List<GenericKubernetesResource> listOperatorCsvsInPreferredNamespaces() {
@@ -505,8 +507,8 @@ public class ClusterVersionService {
     /**
      * Lists ClusterServiceVersions cluster-wide for Kuadrant/OSSM name matching.
      *
-     * <p><b>Deprecated for live detect:</b> Prefer {@link #detectOperatorCsvVersion} /
-     * {@link #detectKuadrantCrdPresent}. Kept for unit tests covering I-7 WARN on large lists.
+     * <p><b>Deprecated for live detect:</b> Prefer {@link #listOperatorCsvsInPreferredNamespaces}
+     * + {@link #detectKuadrantCrdPresent}. Kept for unit tests covering I-7 WARN on large lists.
      *
      * <p><b>I-7 residual risk:</b> This intentionally uses unbounded
      * {@code inAnyNamespace().list()} — no blind {@code withLimit} and no unproven

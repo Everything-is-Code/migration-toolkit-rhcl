@@ -27,6 +27,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -346,6 +350,55 @@ class ClusterVersionServiceTest {
                 "Soft-fail path must not wait the production DETECT_TIMEOUT_SECONDS ceiling");
         // orTimeout completes the same future exceptionally when the ceiling elapses.
         assertTrue(never.isCompletedExceptionally());
+    }
+
+    @Test
+    void resolve_concurrentCalls_coalesceIntoSingleDetect() throws Exception {
+        AtomicInteger detects = new AtomicInteger();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        ClusterVersionService coalescing = new ClusterVersionService(null) {
+            @Override
+            ClusterVersionsResponse runDetect(String profile) {
+                detects.incrementAndGet();
+                entered.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("release latch timed out");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                ClusterVersionsResponse r = new ClusterVersionsResponse();
+                r.source = "default";
+                r.profile = "auto";
+                r.ocp = DEFAULT_OCP;
+                r.gatewayApi = DEFAULT_GATEWAY_API;
+                r.capabilities = new ClusterCapabilities();
+                return r;
+            }
+        };
+        // Real async executor so the first resolve stays in-flight while the second joins.
+        coalescing.useDetectExecutor(Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "coalesce-test");
+            t.setDaemon(true);
+            return t;
+        }));
+
+        CompletableFuture<ClusterVersionsResponse> first =
+                CompletableFuture.supplyAsync(() -> coalescing.resolve("auto", true));
+        assertTrue(entered.await(5, TimeUnit.SECONDS), "detect must start");
+        CompletableFuture<ClusterVersionsResponse> second =
+                CompletableFuture.supplyAsync(() -> coalescing.resolve("auto", true));
+        // Give the second resolve a moment to hit inFlight.compute while first is blocked.
+        Thread.sleep(100);
+        release.countDown();
+
+        assertEquals("default", first.get(5, TimeUnit.SECONDS).source);
+        assertEquals("default", second.get(5, TimeUnit.SECONDS).source);
+        assertEquals(1, detects.get(), "Concurrent resolve must coalesce to one detect");
     }
 
     @Test

@@ -49,7 +49,7 @@ public class ThreeScaleExportService {
     /** Max wait for list-enrich virtual-thread pool shutdown. */
     static final long LIST_ENRICH_TERMINATION_SECONDS = 60;
 
-    /** Short TTL for in-memory export cache keyed by (url, serviceId). */
+    /** Short TTL for in-memory export/catalog/apps caches keyed by (url, token fingerprint, …). */
     static final long EXPORT_CACHE_TTL_MS = 60_000L;
 
     /** Default / max page sizes for the selection UI (maps to 3scale Admin API page/per_page). */
@@ -58,11 +58,15 @@ public class ThreeScaleExportService {
 
     private final ConcurrentHashMap<String, CachedExport> exportCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CachedCatalog> backendCatalogCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CachedApplications> applicationsCache = new ConcurrentHashMap<>();
 
     private record CachedExport(ApiService service, long expiresAtMs) {
     }
 
     private record CachedCatalog(Map<String, Backend> catalog, long expiresAtMs) {
+    }
+
+    private record CachedApplications(List<Map<String, Object>> apps, long expiresAtMs) {
     }
 
     @ConfigProperty(name = "threescale.connect-timeout")
@@ -244,9 +248,9 @@ public class ThreeScaleExportService {
         return listServicesPage(client, "test", accessToken, 1, DEFAULT_UI_PAGE_SIZE).items;
     }
 
-    private Map<String, Backend> cachedBackendCatalog(ThreeScaleClient client, String cacheKey,
+    private Map<String, Backend> cachedBackendCatalog(ThreeScaleClient client, String url,
                                                       String accessToken) {
-        String key = cacheKey == null ? "" : cacheKey;
+        String key = credentialCacheKey(url, accessToken);
         long now = System.currentTimeMillis();
         CachedCatalog hit = backendCatalogCache.get(key);
         if (hit != null && hit.expiresAtMs() > now) {
@@ -257,10 +261,11 @@ public class ThreeScaleExportService {
         return catalog;
     }
 
-    /** Clears export + backend-catalog caches (tests / refresh). */
+    /** Clears export + backend-catalog + applications caches (tests / refresh). */
     public void clearExportCache() {
         exportCache.clear();
         backendCatalogCache.clear();
+        applicationsCache.clear();
     }
 
     private ApiService mapServiceSummary(Map<String, Object> svc) {
@@ -407,24 +412,52 @@ public class ThreeScaleExportService {
 
     /**
      * Package-visible for unit tests with a mocked {@link ThreeScaleClient}.
-     * Caches by normalized {@code (url, serviceId)} for {@link #EXPORT_CACHE_TTL_MS}.
+     * Caches by normalized {@code (url, tokenFingerprint, serviceId)} for {@link #EXPORT_CACHE_TTL_MS}.
      */
     ApiService exportService(ThreeScaleClient client, String url, String accessToken, String serviceId) {
-        String key = exportCacheKey(url, serviceId);
+        String key = exportCacheKey(url, accessToken, serviceId);
         long now = exportNowMs();
         CachedExport hit = exportCache.get(key);
         if (hit != null && hit.expiresAtMs > now) {
             return hit.service;
         }
-        ApiService fetched = fetchExport(client, accessToken, serviceId);
+        ApiService fetched = fetchExport(client, url, accessToken, serviceId);
         exportCache.put(key, new CachedExport(fetched, now + EXPORT_CACHE_TTL_MS));
         return fetched;
     }
 
-    static String exportCacheKey(String url, String serviceId) {
-        String normalizedUrl = url == null ? "" : url.trim().replaceAll("/+$", "").toLowerCase(Locale.ROOT);
+    /**
+     * Cache key for per-service export payloads. Includes a SHA-256 fingerprint of the access
+     * token so concurrent sessions against the same URL cannot share cached data.
+     */
+    static String exportCacheKey(String url, String accessToken, String serviceId) {
         String id = serviceId == null ? "" : serviceId.trim();
-        return normalizedUrl + "|" + id;
+        return credentialCacheKey(url, accessToken) + "|" + id;
+    }
+
+    /** Cache key shared by backend catalog and tenant-wide applications list. */
+    static String credentialCacheKey(String url, String accessToken) {
+        String normalizedUrl = url == null ? "" : url.trim().replaceAll("/+$", "").toLowerCase(Locale.ROOT);
+        return normalizedUrl + "|" + tokenFingerprint(accessToken);
+    }
+
+    /** SHA-256 hex of the token (never store the raw token in cache keys / logs). */
+    static String tokenFingerprint(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) {
+            return "";
+        }
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(accessToken.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format(Locale.ROOT, "%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // Extremely unlikely on a standard JVM; fall back to length-only sentinel.
+            return "len:" + accessToken.length();
+        }
     }
 
     /** Package-visible clock hook for TTL tests. */
@@ -433,7 +466,7 @@ public class ThreeScaleExportService {
     }
 
     @SuppressWarnings("unchecked")
-    private ApiService fetchExport(ThreeScaleClient client, String accessToken, String serviceId) {
+    private ApiService fetchExport(ThreeScaleClient client, String url, String accessToken, String serviceId) {
         Map<String, Object> response = client.getService(serviceId, accessToken);
         Map<String, Object> svc = (Map<String, Object>) response.get("service");
 
@@ -449,7 +482,7 @@ public class ThreeScaleExportService {
         service.metrics = fetchMetrics(client, serviceId, accessToken);
         service.authentication = extractAuthentication(svc);
         service.backends = fetchBackendsForService(client, serviceId, accessToken);
-        service.applications = fetchApplications(client, serviceId, accessToken);
+        service.applications = fetchApplications(client, url, serviceId, accessToken);
         service.applicationPlans = fetchApplicationPlans(client, serviceId, accessToken);
 
         return service;
@@ -627,44 +660,39 @@ public class ThreeScaleExportService {
 
     /**
      * Fetch applications for a service and their application keys from the Admin API.
-     * Uses tenant-wide {@code /admin/api/applications.json} and filters by {@code service_id}
-     * (the legacy {@code /services/{id}/applications.json} path returns 404 on current 3scale).
-     * Real credentials only — never invent keys.
+     * Uses tenant-wide {@code /admin/api/applications.json} (cached briefly per url+token)
+     * and filters by {@code service_id}. Real credentials only — never invent keys.
      */
     @SuppressWarnings("unchecked")
-    List<Application> fetchApplications(ThreeScaleClient client, String serviceId, String accessToken) {
+    List<Application> fetchApplications(ThreeScaleClient client, String url,
+                                        String serviceId, String accessToken) {
         try {
+            List<Map<String, Object>> tenantApps = cachedTenantApplications(client, url, accessToken);
             List<Application> applications = new ArrayList<>();
-            int page = 1;
-            while (true) {
-                Map<String, Object> resp = client.getApplications(accessToken, page, pageSize);
-                List<Map<String, Object>> appList = extractList(resp, "applications");
-                if (appList.isEmpty() && page == 1 && resp.containsKey("application")) {
-                    appList = List.of(resp);
+            int matched = 0;
+            for (Map<String, Object> wrapper : tenantApps) {
+                Map<String, Object> appMap = wrapper;
+                if (wrapper.get("application") instanceof Map<?, ?> nested) {
+                    appMap = (Map<String, Object>) nested;
                 }
-                for (Map<String, Object> wrapper : appList) {
-                    Map<String, Object> appMap = wrapper;
-                    if (wrapper.get("application") instanceof Map<?, ?> nested) {
-                        appMap = (Map<String, Object>) nested;
-                    }
-                    if (!serviceIdMatches(appMap.get("service_id"), serviceId)) {
-                        continue;
-                    }
-                    Application app = new Application();
-                    app.id = String.valueOf(appMap.get("id"));
-                    app.name = (String) appMap.get("name");
-                    Object applicationId = appMap.get("application_id");
-                    if (applicationId == null) {
-                        applicationId = appMap.get("user_key");
-                    }
-                    app.appId = applicationId != null ? String.valueOf(applicationId) : null;
-                    app.keys = fetchApplicationKeys(client, app.id, accessToken);
-                    applications.add(app);
+                if (!serviceIdMatches(appMap.get("service_id"), serviceId)) {
+                    continue;
                 }
-                if (appList.size() < pageSize) {
-                    break;
+                matched++;
+                Application app = new Application();
+                app.id = String.valueOf(appMap.get("id"));
+                app.name = (String) appMap.get("name");
+                Object applicationId = appMap.get("application_id");
+                if (applicationId == null) {
+                    applicationId = appMap.get("user_key");
                 }
-                page++;
+                app.appId = applicationId != null ? String.valueOf(applicationId) : null;
+                app.keys = fetchApplicationKeys(client, app.id, accessToken);
+                applications.add(app);
+            }
+            if (!tenantApps.isEmpty() && matched == 0) {
+                LOG.debugf("No applications matched service_id=%s among %d tenant apps",
+                        serviceId, tenantApps.size());
             }
             return applications;
         } catch (Exception e) {
@@ -673,12 +701,61 @@ public class ThreeScaleExportService {
         }
     }
 
-    /** Compare Admin API {@code service_id} (number or string) to the requested service id. */
+    /**
+     * Tenant-wide applications list with short TTL, keyed by url + token fingerprint.
+     * Shared across {@link #fetchApplications} calls in a bulk export/convert.
+     */
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> cachedTenantApplications(ThreeScaleClient client, String url,
+                                                       String accessToken) {
+        String key = credentialCacheKey(url, accessToken);
+        long now = System.currentTimeMillis();
+        CachedApplications hit = applicationsCache.get(key);
+        if (hit != null && hit.expiresAtMs() > now) {
+            return hit.apps();
+        }
+        List<Map<String, Object>> all = fetchAllApplicationPages(client, accessToken);
+        applicationsCache.put(key, new CachedApplications(all, now + EXPORT_CACHE_TTL_MS));
+        return all;
+    }
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> fetchAllApplicationPages(ThreeScaleClient client, String accessToken) {
+        List<Map<String, Object>> all = new ArrayList<>();
+        int page = 1;
+        while (true) {
+            Map<String, Object> resp = client.getApplications(accessToken, page, pageSize);
+            List<Map<String, Object>> appList = extractList(resp, "applications");
+            if (appList.isEmpty() && page == 1 && resp.containsKey("application")) {
+                appList = List.of(resp);
+            }
+            all.addAll(appList);
+            if (appList.size() < pageSize) {
+                break;
+            }
+            page++;
+        }
+        return all;
+    }
+
+    /**
+     * Compare Admin API {@code service_id} (number or string) to the requested service id.
+     * Numeric values match even when string forms differ (e.g. {@code 7} vs {@code "07"}).
+     */
     static boolean serviceIdMatches(Object serviceIdField, String expectedServiceId) {
         if (expectedServiceId == null || expectedServiceId.isBlank() || serviceIdField == null) {
             return false;
         }
-        return expectedServiceId.equals(String.valueOf(serviceIdField));
+        String actual = String.valueOf(serviceIdField).trim();
+        String expected = expectedServiceId.trim();
+        if (expected.equals(actual)) {
+            return true;
+        }
+        try {
+            return new java.math.BigDecimal(actual).compareTo(new java.math.BigDecimal(expected)) == 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     @SuppressWarnings("unchecked")

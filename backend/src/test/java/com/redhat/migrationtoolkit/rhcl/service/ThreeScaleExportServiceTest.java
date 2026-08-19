@@ -131,7 +131,7 @@ class ThreeScaleExportServiceTest {
         org.mockito.Mockito.when(failing.getApplications(anyString(), anyInt(), anyInt()))
                 .thenThrow(new RuntimeException("boom"));
 
-        List<Application> apps = service.fetchApplications(failing, "svc-1", "tok");
+        List<Application> apps = service.fetchApplications(failing, "https://3scale.example", "svc-1", "tok");
         assertTrue(apps.isEmpty());
     }
 
@@ -151,7 +151,7 @@ class ThreeScaleExportServiceTest {
         org.mockito.Mockito.when(client.getApplicationKeys(anyString(), anyString()))
                 .thenReturn(Map.of("keys", List.of(Map.of("key", Map.of("value", "real-key")))));
 
-        List<Application> apps = service.fetchApplications(client, "svc-1", "tok");
+        List<Application> apps = service.fetchApplications(client, "https://3scale.example", "svc-1", "tok");
         assertEquals(1, apps.size());
         assertEquals("real-id", apps.get(0).appId);
         assertEquals(List.of("real-key"), apps.get(0).keys);
@@ -178,9 +178,60 @@ class ThreeScaleExportServiceTest {
         org.mockito.Mockito.when(client.getApplicationKeys(anyString(), anyString()))
                 .thenReturn(Map.of("keys", List.of()));
 
-        List<Application> apps = service.fetchApplications(client, "3", "tok");
+        List<Application> apps = service.fetchApplications(client, "https://3scale.example", "3", "tok");
         assertEquals(1, apps.size());
         assertEquals("Mine", apps.get(0).name);
+    }
+
+    @Test
+    void fetchApplications_paginatesTenantWideAndCachesAcrossServices() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        List<Map<String, Object>> page1 = new ArrayList<>();
+        for (int i = 0; i < ThreeScaleExportService.LIST_PAGE_SIZE; i++) {
+            Map<String, Object> body = new HashMap<>();
+            body.put("id", i + 1);
+            body.put("name", "App-" + (i + 1));
+            body.put("application_id", "a" + (i + 1));
+            // Fill page with another service so page 2 is required for a match
+            body.put("service_id", 99);
+            page1.add(Map.of("application", body));
+        }
+        Map<String, Object> match = new HashMap<>();
+        match.put("id", 900);
+        match.put("name", "Target");
+        match.put("application_id", "target-id");
+        match.put("service_id", 7);
+        List<Map<String, Object>> page2 = List.of(Map.of("application", match));
+
+        org.mockito.Mockito.when(client.getApplications(anyString(), eq(1), eq(ThreeScaleExportService.LIST_PAGE_SIZE)))
+                .thenReturn(Map.of("applications", page1));
+        org.mockito.Mockito.when(client.getApplications(anyString(), eq(2), eq(ThreeScaleExportService.LIST_PAGE_SIZE)))
+                .thenReturn(Map.of("applications", page2));
+        org.mockito.Mockito.when(client.getApplicationKeys(anyString(), anyString()))
+                .thenReturn(Map.of("keys", List.of()));
+
+        List<Application> first = service.fetchApplications(client, "https://3scale.example", "7", "tok");
+        List<Application> second = service.fetchApplications(client, "https://3scale.example", "7", "tok");
+
+        assertEquals(1, first.size());
+        assertEquals("Target", first.get(0).name);
+        assertEquals(1, second.size());
+        // Tenant-wide list fetched once (2 pages), then reused from cache for the second call
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.times(1))
+                .getApplications(anyString(), eq(1), eq(ThreeScaleExportService.LIST_PAGE_SIZE));
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.times(1))
+                .getApplications(anyString(), eq(2), eq(ThreeScaleExportService.LIST_PAGE_SIZE));
+    }
+
+    @Test
+    void serviceIdMatches_numericForms() {
+        assertTrue(ThreeScaleExportService.serviceIdMatches(7, "7"));
+        assertTrue(ThreeScaleExportService.serviceIdMatches("07", "7"));
+        assertTrue(ThreeScaleExportService.serviceIdMatches(7L, "7"));
+        assertFalse(ThreeScaleExportService.serviceIdMatches("abc", "7"));
+        assertFalse(ThreeScaleExportService.serviceIdMatches(null, "7"));
     }
 
     // ── fetchApplicationPlans() + limits (PR3) ────────────────────────────────
@@ -510,6 +561,32 @@ class ThreeScaleExportServiceTest {
         assertEquals("Two", two.name);
         org.mockito.Mockito.verify(client).getService(eq("1"), anyString());
         org.mockito.Mockito.verify(client).getService(eq("2"), anyString());
+    }
+
+    @Test
+    void exportService_differentTokens_doNotShareCache() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubMinimalExport(client, "7", "Cached");
+
+        ApiService first = service.exportService(client, "https://3scale.example", "tok-a", "7");
+        ApiService second = service.exportService(client, "https://3scale.example", "tok-b", "7");
+
+        assertEquals("Cached", first.name);
+        assertEquals("Cached", second.name);
+        assertNotSame(first, second, "Different tokens must not share the export cache");
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.times(2))
+                .getService(eq("7"), anyString());
+    }
+
+    @Test
+    void exportCacheKey_includesTokenFingerprint() {
+        String a = ThreeScaleExportService.exportCacheKey("https://X/", "secret-a", "1");
+        String b = ThreeScaleExportService.exportCacheKey("https://x", "secret-b", "1");
+        String aAgain = ThreeScaleExportService.exportCacheKey("https://x", "secret-a", "1");
+        assertNotEquals(a, b);
+        assertEquals(a, aAgain);
+        assertFalse(a.contains("secret-a"), "Raw token must not appear in cache key");
     }
 
     private static void stubMinimalExport(
