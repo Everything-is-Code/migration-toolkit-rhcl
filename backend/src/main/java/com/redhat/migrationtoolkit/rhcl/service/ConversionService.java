@@ -2146,7 +2146,10 @@ spec:
             return null;
         }
         return service.policies.stream()
-                .filter(p -> Boolean.TRUE.equals(p.enabled) && "3scale_auth_caching".equals(p.name))
+                .filter(p -> Boolean.TRUE.equals(p.enabled)
+                        && p.name != null
+                        && ("3scale_auth_caching".equalsIgnoreCase(p.name)
+                            || "caching".equalsIgnoreCase(p.name)))
                 .findFirst()
                 .orElse(null);
     }
@@ -2197,7 +2200,8 @@ spec:
         return service.policies.stream()
                 .filter(p -> Boolean.TRUE.equals(p.enabled)
                         && p.name != null
-                        && "content_limits".equalsIgnoreCase(p.name))
+                        && ("content_limits".equalsIgnoreCase(p.name)
+                            || "payload_limits".equalsIgnoreCase(p.name)))
                 .findFirst()
                 .orElse(null);
     }
