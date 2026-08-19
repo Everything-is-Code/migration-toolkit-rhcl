@@ -1,7 +1,9 @@
 # RHCL migration toolkit — 3scale lab seed catalog
-# One product + one backend + one focused policy (or auth mode) per conversion case.
+# One product + one focused policy (or auth / multi-backend pattern) per conversion case.
 # Consumed by: threescale-seed --fixtures <this-file>
 # Tool: https://github.com/Everything-is-Code/3scaleextract (threescale-seed)
+#
+# Do not seed until an operator runs ./scripts/seed-rhcl-cases.sh against a lab tenant.
 
 account:
   org_name: RHCL Migration Seed Org
@@ -14,6 +16,16 @@ backends:
     name: RHCL Seed Upstream
     private_endpoint: "https://httpbin.org:443"
     description: Shared dummy upstream for single-backend RHCL conversion cases
+
+  - system_name: rhcl_seed_orders
+    name: RHCL Seed Orders Upstream
+    private_endpoint: "https://orders.example.com:443"
+    description: Multi-backend demo upstream (orders)
+
+  - system_name: rhcl_seed_catalog_be
+    name: RHCL Seed Catalog Upstream
+    private_endpoint: "https://catalog.example.com:443"
+    description: Multi-backend demo upstream (catalog)
 
 products:
   # ── CORS → ResponseHeaderModifier / native type:CORS (capability-gated) ──
@@ -142,3 +154,239 @@ products:
     coverage:
       - "auth: app_id"
       - "conversion: Application Secrets from Admin API"
+
+  # ── logging → Telemetry / EnvoyFilter logging ──
+  - system_name: rhcl_seed_logging
+    name: RHCL Seed Logging
+    description: Single policy logging with json_object_config for Telemetry + EnvoyFilter
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [logging]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-logging-app
+        plan: basic
+    coverage:
+      - "policy: logging"
+      - "conversion: telemetry.yaml + envoyfilter-logging.yaml"
+
+  # ── default_credentials (Anonymous Access) → AuthPolicy anonymous ──
+  - system_name: rhcl_seed_anonymous
+    name: RHCL Seed Anonymous Access
+    description: Single policy default_credentials for Anonymous Access AuthPolicy
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [default_credentials]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-anonymous-app
+        plan: basic
+    coverage:
+      - "policy: default_credentials"
+      - "conversion: AuthPolicy anonymous + anonymous credentials Secret"
+
+  # ── url_rewriting → EnvoyFilter Lua ──
+  - system_name: rhcl_seed_url_rewriting
+    name: RHCL Seed URL Rewriting
+    description: Single policy url_rewriting (commands) for EnvoyFilter Lua path rewrite
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [url_rewriting]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-url-rewriting-app
+        plan: basic
+    coverage:
+      - "policy: url_rewriting"
+      - "conversion: envoyfilter-url-rewriting.yaml"
+
+  # ── caching (3scale Auth Caching) → AuthPolicy cache block ──
+  # APIcast system name is "caching"; RHCL also accepts alias "3scale_auth_caching".
+  - system_name: rhcl_seed_auth_caching
+    name: RHCL Seed Auth Caching
+    description: Single policy caching (3scale Auth Caching) with OIDC JWT for cache block
+    auth_mode: oidc
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [caching]
+    oidc:
+      realm_url: "https://sso.example.com/auth/realms/rhcl-seed"
+      zync_client_id: zync-admin
+      zync_client_secret: ZyncSecret123-for-rhsso
+      redirect_url: "https://rhcl-seed-auth-caching.example.com/callback"
+      standard_flow: true
+      service_accounts: true
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-auth-caching-app
+        plan: basic
+        redirect_url: "https://rhcl-seed-auth-caching.example.com/callback"
+    coverage:
+      - "policy: caching (3scale Auth Caching)"
+      - "auth: oidc"
+      - "conversion: AuthPolicy JWT + cache block"
+
+  # ── jwt_claim_check → AuthPolicy patternMatching ──
+  - system_name: rhcl_seed_jwt_claim_check
+    name: RHCL Seed JWT Claim Check
+    description: OIDC + jwt_claim_check for AuthPolicy claim patternMatching
+    auth_mode: oidc
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [jwt_claim_check]
+    oidc:
+      realm_url: "https://sso.example.com/auth/realms/rhcl-seed"
+      zync_client_id: zync-admin
+      zync_client_secret: ZyncSecret123-for-rhsso
+      redirect_url: "https://rhcl-seed-jwt-claim.example.com/callback"
+      standard_flow: true
+      service_accounts: true
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-jwt-claim-app
+        plan: basic
+        redirect_url: "https://rhcl-seed-jwt-claim.example.com/callback"
+    coverage:
+      - "policy: jwt_claim_check"
+      - "auth: oidc"
+      - "conversion: AuthPolicy JWT + claim patternMatching"
+
+  # ── upstream_connection → HTTPRoute timeouts ──
+  - system_name: rhcl_seed_upstream_connection
+    name: RHCL Seed Upstream Connection
+    description: Single policy upstream_connection for HTTPRoute timeouts / annotations
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [upstream_connection]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-upstream-conn-app
+        plan: basic
+    coverage:
+      - "policy: upstream_connection"
+      - "conversion: HTTPRoute timeouts (capability-gated)"
+
+  # ── payload_limits (Response/Request Content Limits) → EnvoyFilter buffer ──
+  # APIcast system name is "payload_limits"; RHCL also accepts alias "content_limits".
+  - system_name: rhcl_seed_content_limits
+    name: RHCL Seed Content Limits
+    description: Single policy payload_limits for request body EnvoyFilter + response annotation
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [payload_limits]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-content-limits-app
+        plan: basic
+    coverage:
+      - "policy: payload_limits (content_limits)"
+      - "conversion: envoyfilter-content-limits.yaml"
+
+  # ── retry → HTTPRoute retry or EnvoyFilter fallback ──
+  - system_name: rhcl_seed_retry
+    name: RHCL Seed Retry
+    description: Single policy retry for HTTPRoute retry.attempts or EnvoyFilter fallback
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [retry]
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-retry-app
+        plan: basic
+    coverage:
+      - "policy: retry"
+      - "conversion: HTTPRoute retry or envoyfilter-retry.yaml"
+
+  # ── keycloak_role_check → AuthPolicy role patternMatching ──
+  - system_name: rhcl_seed_keycloak_roles
+    name: RHCL Seed Keycloak Role Check
+    description: OIDC + keycloak_role_check for AuthPolicy realm/client role patterns
+    auth_mode: oidc
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [keycloak_role_check]
+    oidc:
+      realm_url: "https://sso.example.com/auth/realms/rhcl-seed"
+      zync_client_id: zync-admin
+      zync_client_secret: ZyncSecret123-for-rhsso
+      redirect_url: "https://rhcl-seed-keycloak.example.com/callback"
+      standard_flow: true
+      service_accounts: true
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-keycloak-roles-app
+        plan: basic
+        redirect_url: "https://rhcl-seed-keycloak.example.com/callback"
+    coverage:
+      - "policy: keycloak_role_check"
+      - "auth: oidc"
+      - "conversion: AuthPolicy keycloak-role-check patternMatching"
+
+  # ── OIDC / JWT baseline (no extra policy) ──
+  - system_name: rhcl_seed_oidc_jwt
+    name: RHCL Seed OIDC JWT Auth
+    description: OIDC auth only — AuthPolicy JWT issuerUrl without extra policies
+    auth_mode: oidc
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: []
+    oidc:
+      realm_url: "https://sso.example.com/auth/realms/rhcl-seed"
+      zync_client_id: zync-admin
+      zync_client_secret: ZyncSecret123-for-rhsso
+      redirect_url: "https://rhcl-seed-oidc.example.com/callback"
+      standard_flow: true
+      service_accounts: true
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-oidc-jwt-app
+        plan: basic
+        redirect_url: "https://rhcl-seed-oidc.example.com/callback"
+    coverage:
+      - "auth: oidc"
+      - "conversion: AuthPolicy JWT"
+
+  # ── multi-backend path-first routing ──
+  # Seeder assigns paths / , /backend-2 , /backend-3 by backend_refs order.
+  - system_name: rhcl_seed_multi_backend
+    name: RHCL Seed Multi Backend
+    description: Three backends for path-first multi-backend HTTPRoute conversion
+    auth_mode: api_key
+    backend_refs: [rhcl_seed_upstream, rhcl_seed_orders, rhcl_seed_catalog_be]
+    policy_names: []
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-multi-backend-app
+        plan: basic
+    coverage:
+      - "backends: 3 (path-first)"
+      - "conversion: multi-doc ServiceEntry/DestinationRule + path backendRefs"
