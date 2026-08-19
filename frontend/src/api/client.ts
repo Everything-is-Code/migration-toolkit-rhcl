@@ -49,6 +49,9 @@ const bearerHeaders = (accessToken: string) => ({
   Authorization: `Bearer ${accessToken}`,
 });
 
+/** Axios timeout for Compatibility Check requests (ms). */
+export const COMPATIBILITY_REQUEST_TIMEOUT_MS = 60_000;
+
 export const servicesApi = {
   list: (url: string, accessToken: string) =>
     api.get('/api/services', { params: { url }, headers: bearerHeaders(accessToken) }),
@@ -59,7 +62,7 @@ export const servicesApi = {
       params: { url, supportedPolicies: supportedPolicies.join('|') },
       headers: bearerHeaders(accessToken),
       // Cluster detect soft-timeout is 15s; keep UI from spinning forever on bad kubeconfigs.
-      timeout: 60_000,
+      timeout: COMPATIBILITY_REQUEST_TIMEOUT_MS,
     }),
 };
 

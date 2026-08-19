@@ -169,20 +169,30 @@ public class ClusterVersionService {
     }
 
     /**
+     * Soft timeout ceiling used by {@link #awaitDetect}. Overridable in unit tests so the
+     * TimeoutException path can be exercised without sleeping {@link #DETECT_TIMEOUT_SECONDS}.
+     */
+    long detectTimeoutSeconds() {
+        return DETECT_TIMEOUT_SECONDS;
+    }
+
+    /**
      * Wait for an in-flight detect with a hard ceiling so Compatibility Check cannot hang
      * when the local kubeconfig points at an unreachable API.
+     * Package-visible for timeout soft-fail unit tests.
      */
-    private ClusterVersionsResponse awaitDetect(
+    ClusterVersionsResponse awaitDetect(
             CompletableFuture<ClusterVersionsResponse> future, String profile) {
+        long timeoutSeconds = detectTimeoutSeconds();
         try {
-            return future.orTimeout(DETECT_TIMEOUT_SECONDS, TimeUnit.SECONDS).join();
+            return future.orTimeout(timeoutSeconds, TimeUnit.SECONDS).join();
         } catch (CompletionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof TimeoutException) {
                 LOG.warnf("Cluster version detect timed out after %ds; using soft-fail defaults",
-                        DETECT_TIMEOUT_SECONDS);
+                        timeoutSeconds);
                 return softFailDefault(profile, new ArrayList<>(),
-                        "Cluster detect timed out after " + DETECT_TIMEOUT_SECONDS + "s");
+                        "Cluster detect timed out after " + timeoutSeconds + "s");
             }
             LOG.warnf(cause, "Cluster version detect failed: %s", cause.getMessage());
             return softFailDefault(profile, new ArrayList<>(),

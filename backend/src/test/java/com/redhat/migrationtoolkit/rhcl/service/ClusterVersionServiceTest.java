@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -313,6 +314,47 @@ class ClusterVersionServiceTest {
         assertEquals("detected", response.source);
         assertEquals(ClusterVersionService.KUADRANT_PRESENT_VIA_CRD, response.kuadrant);
         assertTrue(response.capabilities.kuadrantPresent);
+    }
+
+    @Test
+    void awaitDetect_whenFutureExceedsTimeout_softFailsWithTimeoutError() {
+        ClusterVersionService fastTimeout = new ClusterVersionService(client) {
+            @Override
+            long detectTimeoutSeconds() {
+                return 1L;
+            }
+        };
+        CompletableFuture<ClusterVersionsResponse> never = new CompletableFuture<>();
+
+        long started = System.currentTimeMillis();
+        ClusterVersionsResponse response = fastTimeout.awaitDetect(never, "auto");
+        long elapsedMs = System.currentTimeMillis() - started;
+
+        assertEquals("default", response.source);
+        assertEquals(ClusterVersionService.DEFAULT_OCP, response.ocp);
+        assertEquals(ClusterVersionService.DEFAULT_GATEWAY_API, response.gatewayApi);
+        assertNull(response.kuadrant);
+        assertNull(response.ossm);
+        assertNotNull(response.errors);
+        assertTrue(response.errors.stream().anyMatch(e -> e.contains("timed out")),
+                "Timeout soft-fail must surface a timeout error note: " + response.errors);
+        assertTrue(elapsedMs < 5_000L,
+                "Soft-fail path must not wait the production DETECT_TIMEOUT_SECONDS ceiling");
+        // orTimeout completes the same future exceptionally when the ceiling elapses.
+        assertTrue(never.isCompletedExceptionally());
+    }
+
+    @Test
+    void awaitDetect_whenFutureFails_softFailsWithFailureError() {
+        CompletableFuture<ClusterVersionsResponse> failed = new CompletableFuture<>();
+        failed.completeExceptionally(new RuntimeException("boom-detect"));
+
+        ClusterVersionsResponse response = service.awaitDetect(failed, "auto");
+
+        assertEquals("default", response.source);
+        assertTrue(response.errors.stream().anyMatch(e -> e.contains("Cluster detect failed")),
+                "Non-timeout failures must soft-fail with a detect-failed note: " + response.errors);
+        assertFalse(response.errors.stream().anyMatch(e -> e.contains("timed out")));
     }
 
     // ── I-7 unbounded CSV list residual ──────────────────────────────────────
