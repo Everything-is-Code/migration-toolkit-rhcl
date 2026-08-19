@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service;
 
 import com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient;
 import com.redhat.migrationtoolkit.rhcl.dto.ConnectionRequest;
+import com.redhat.migrationtoolkit.rhcl.dto.ServiceListPage;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
@@ -25,10 +26,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +48,26 @@ public class ThreeScaleExportService {
 
     /** Max wait for list-enrich virtual-thread pool shutdown. */
     static final long LIST_ENRICH_TERMINATION_SECONDS = 60;
+
+    /** Short TTL for in-memory export/catalog/apps caches keyed by (url, token fingerprint, …). */
+    static final long EXPORT_CACHE_TTL_MS = 60_000L;
+
+    /** Default / max page sizes for the selection UI (maps to 3scale Admin API page/per_page). */
+    public static final int DEFAULT_UI_PAGE_SIZE = 20;
+    public static final int MAX_UI_PAGE_SIZE = 100;
+
+    private final ConcurrentHashMap<String, CachedExport> exportCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CachedCatalog> backendCatalogCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CachedApplications> applicationsCache = new ConcurrentHashMap<>();
+
+    private record CachedExport(ApiService service, long expiresAtMs) {
+    }
+
+    private record CachedCatalog(Map<String, Backend> catalog, long expiresAtMs) {
+    }
+
+    private record CachedApplications(List<Map<String, Object>> apps, long expiresAtMs) {
+    }
 
     @ConfigProperty(name = "threescale.connect-timeout")
     int connectTimeoutSeconds;
@@ -155,17 +178,25 @@ public class ThreeScaleExportService {
     }
 
     /**
-     * Lightweight list for the selection UI: metadata + policies + backends only.
-     * Skips mapping rules, metrics, applications, plans, and proxy (loaded on convert).
+     * Selection UI list: one Admin API page of services, enriched with policies + backends only.
+     * Cost scales with {@code perPage}, not with tenant size — suitable for 100+ products.
      */
-    public List<ApiService> listServices(String url, String accessToken) {
+    public ServiceListPage listServicesPage(String url, String accessToken, int page, int perPage) {
         ThreeScaleClient client = buildClient(url);
-        return listServices(client, accessToken);
+        return listServicesPage(client, url, accessToken, page, perPage);
     }
 
     /**
-     * @deprecated Prefer {@link #listServices(String, String)} for the API list.
-     * Kept as an alias so older call sites keep working.
+     * @deprecated Prefer {@link #listServicesPage(String, String, int, int)}.
+     * Loads only the first UI-sized page (not the full tenant).
+     */
+    @Deprecated
+    public List<ApiService> listServices(String url, String accessToken) {
+        return listServicesPage(url, accessToken, 1, DEFAULT_UI_PAGE_SIZE).items;
+    }
+
+    /**
+     * @deprecated Prefer {@link #listServicesPage(String, String, int, int)}.
      */
     @Deprecated
     public List<ApiService> exportServices(String url, String accessToken) {
@@ -176,13 +207,17 @@ public class ThreeScaleExportService {
      * Package-visible for unit tests with a mocked {@link ThreeScaleClient}.
      */
     @SuppressWarnings("unchecked")
-    List<ApiService> listServices(ThreeScaleClient client, String accessToken) {
+    ServiceListPage listServicesPage(ThreeScaleClient client, String catalogCacheKey,
+                                     String accessToken, int page, int perPage) {
+        int safePage = Math.max(1, page);
+        int safePerPage = Math.min(MAX_UI_PAGE_SIZE, Math.max(1, perPage));
         try {
-            List<Map<String, Object>> serviceList = fetchAllServicePages(client, accessToken);
-            Map<String, Backend> backendCatalog = fetchBackendCatalog(client, accessToken);
+            Map<String, Object> response = client.getServices(accessToken, safePage, safePerPage);
+            List<Map<String, Object>> pageItems = extractList(response, "services");
+            Map<String, Backend> backendCatalog = cachedBackendCatalog(client, catalogCacheKey, accessToken);
 
             List<ApiService> services = new ArrayList<>();
-            for (Map<String, Object> svcWrapper : serviceList) {
+            for (Map<String, Object> svcWrapper : pageItems) {
                 Map<String, Object> svc = (Map<String, Object>) svcWrapper.get("service");
                 if (svc == null) {
                     continue;
@@ -191,12 +226,46 @@ public class ThreeScaleExportService {
             }
 
             enrichListSummaries(client, accessToken, services, backendCatalog);
-            return services;
+
+            ServiceListPage out = new ServiceListPage();
+            out.items = services;
+            out.page = safePage;
+            out.perPage = safePerPage;
+            out.hasMore = pageItems.size() >= safePerPage;
+            if (!out.hasMore) {
+                out.total = (safePage - 1) * safePerPage + services.size();
+            }
+            return out;
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {
             throw new RuntimeException("Failed to list services from 3scale: " + e.getMessage(), e);
         }
+    }
+
+    /** Package-visible overload used by older unit tests (no catalog cache key). */
+    List<ApiService> listServices(ThreeScaleClient client, String accessToken) {
+        return listServicesPage(client, "test", accessToken, 1, DEFAULT_UI_PAGE_SIZE).items;
+    }
+
+    private Map<String, Backend> cachedBackendCatalog(ThreeScaleClient client, String url,
+                                                      String accessToken) {
+        String key = credentialCacheKey(url, accessToken);
+        long now = System.currentTimeMillis();
+        CachedCatalog hit = backendCatalogCache.get(key);
+        if (hit != null && hit.expiresAtMs() > now) {
+            return hit.catalog();
+        }
+        Map<String, Backend> catalog = fetchBackendCatalog(client, accessToken);
+        backendCatalogCache.put(key, new CachedCatalog(catalog, now + EXPORT_CACHE_TTL_MS));
+        return catalog;
+    }
+
+    /** Clears export + backend-catalog + applications caches (tests / refresh). */
+    public void clearExportCache() {
+        exportCache.clear();
+        backendCatalogCache.clear();
+        applicationsCache.clear();
     }
 
     private ApiService mapServiceSummary(Map<String, Object> svc) {
@@ -248,21 +317,6 @@ public class ThreeScaleExportService {
                 Thread.currentThread().interrupt();
             }
         }
-    }
-
-    private List<Map<String, Object>> fetchAllServicePages(ThreeScaleClient client, String accessToken) {
-        List<Map<String, Object>> all = new ArrayList<>();
-        int page = 1;
-        while (true) {
-            Map<String, Object> response = client.getServices(accessToken, page, pageSize);
-            List<Map<String, Object>> pageItems = extractList(response, "services");
-            all.addAll(pageItems);
-            if (pageItems.size() < pageSize) {
-                break;
-            }
-            page++;
-        }
-        return all;
     }
 
     @SuppressWarnings("unchecked")
@@ -353,7 +407,66 @@ public class ThreeScaleExportService {
     }
 
     public ApiService exportService(String url, String accessToken, String serviceId) {
-        ThreeScaleClient client = buildClient(url);
+        return exportService(buildClient(url), url, accessToken, serviceId);
+    }
+
+    /**
+     * Package-visible for unit tests with a mocked {@link ThreeScaleClient}.
+     * Caches by normalized {@code (url, tokenFingerprint, serviceId)} for {@link #EXPORT_CACHE_TTL_MS}.
+     */
+    ApiService exportService(ThreeScaleClient client, String url, String accessToken, String serviceId) {
+        String key = exportCacheKey(url, accessToken, serviceId);
+        long now = exportNowMs();
+        CachedExport hit = exportCache.get(key);
+        if (hit != null && hit.expiresAtMs > now) {
+            return hit.service;
+        }
+        ApiService fetched = fetchExport(client, url, accessToken, serviceId);
+        exportCache.put(key, new CachedExport(fetched, now + EXPORT_CACHE_TTL_MS));
+        return fetched;
+    }
+
+    /**
+     * Cache key for per-service export payloads. Includes a SHA-256 fingerprint of the access
+     * token so concurrent sessions against the same URL cannot share cached data.
+     */
+    static String exportCacheKey(String url, String accessToken, String serviceId) {
+        String id = serviceId == null ? "" : serviceId.trim();
+        return credentialCacheKey(url, accessToken) + "|" + id;
+    }
+
+    /** Cache key shared by backend catalog and tenant-wide applications list. */
+    static String credentialCacheKey(String url, String accessToken) {
+        String normalizedUrl = url == null ? "" : url.trim().replaceAll("/+$", "").toLowerCase(Locale.ROOT);
+        return normalizedUrl + "|" + tokenFingerprint(accessToken);
+    }
+
+    /** SHA-256 hex of the token (never store the raw token in cache keys / logs). */
+    static String tokenFingerprint(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) {
+            return "";
+        }
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(accessToken.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format(Locale.ROOT, "%02x", b));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            // Extremely unlikely on a standard JVM; fall back to length-only sentinel.
+            return "len:" + accessToken.length();
+        }
+    }
+
+    /** Package-visible clock hook for TTL tests. */
+    long exportNowMs() {
+        return System.currentTimeMillis();
+    }
+
+    @SuppressWarnings("unchecked")
+    private ApiService fetchExport(ThreeScaleClient client, String url, String accessToken, String serviceId) {
         Map<String, Object> response = client.getService(serviceId, accessToken);
         Map<String, Object> svc = (Map<String, Object>) response.get("service");
 
@@ -369,7 +482,7 @@ public class ThreeScaleExportService {
         service.metrics = fetchMetrics(client, serviceId, accessToken);
         service.authentication = extractAuthentication(svc);
         service.backends = fetchBackendsForService(client, serviceId, accessToken);
-        service.applications = fetchApplications(client, serviceId, accessToken);
+        service.applications = fetchApplications(client, url, serviceId, accessToken);
         service.applicationPlans = fetchApplicationPlans(client, serviceId, accessToken);
 
         return service;
@@ -547,26 +660,25 @@ public class ThreeScaleExportService {
 
     /**
      * Fetch applications for a service and their application keys from the Admin API.
-     * Real credentials only — never invent keys.
+     * Uses tenant-wide {@code /admin/api/applications.json} (cached briefly per url+token)
+     * and filters by {@code service_id}. Real credentials only — never invent keys.
      */
     @SuppressWarnings("unchecked")
-    List<Application> fetchApplications(ThreeScaleClient client, String serviceId, String accessToken) {
+    List<Application> fetchApplications(ThreeScaleClient client, String url,
+                                        String serviceId, String accessToken) {
         try {
-            Map<String, Object> resp = client.getApplications(serviceId, accessToken, 1, 500);
-            List<Map<String, Object>> appList = extractList(resp, "applications");
-            if (appList.isEmpty()) {
-                // Some tenants wrap differently or return empty — also try top-level list patterns
-                Object raw = resp.get("applications");
-                if (raw == null && resp.containsKey("application")) {
-                    appList = List.of(resp);
-                }
-            }
+            List<Map<String, Object>> tenantApps = cachedTenantApplications(client, url, accessToken);
             List<Application> applications = new ArrayList<>();
-            for (Map<String, Object> wrapper : appList) {
+            int matched = 0;
+            for (Map<String, Object> wrapper : tenantApps) {
                 Map<String, Object> appMap = wrapper;
                 if (wrapper.get("application") instanceof Map<?, ?> nested) {
                     appMap = (Map<String, Object>) nested;
                 }
+                if (!serviceIdMatches(appMap.get("service_id"), serviceId)) {
+                    continue;
+                }
+                matched++;
                 Application app = new Application();
                 app.id = String.valueOf(appMap.get("id"));
                 app.name = (String) appMap.get("name");
@@ -578,10 +690,71 @@ public class ThreeScaleExportService {
                 app.keys = fetchApplicationKeys(client, app.id, accessToken);
                 applications.add(app);
             }
+            if (!tenantApps.isEmpty() && matched == 0) {
+                LOG.debugf("No applications matched service_id=%s among %d tenant apps",
+                        serviceId, tenantApps.size());
+            }
             return applications;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch applications for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Tenant-wide applications list with short TTL, keyed by url + token fingerprint.
+     * Shared across {@link #fetchApplications} calls in a bulk export/convert.
+     */
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> cachedTenantApplications(ThreeScaleClient client, String url,
+                                                       String accessToken) {
+        String key = credentialCacheKey(url, accessToken);
+        long now = System.currentTimeMillis();
+        CachedApplications hit = applicationsCache.get(key);
+        if (hit != null && hit.expiresAtMs() > now) {
+            return hit.apps();
+        }
+        List<Map<String, Object>> all = fetchAllApplicationPages(client, accessToken);
+        applicationsCache.put(key, new CachedApplications(all, now + EXPORT_CACHE_TTL_MS));
+        return all;
+    }
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> fetchAllApplicationPages(ThreeScaleClient client, String accessToken) {
+        List<Map<String, Object>> all = new ArrayList<>();
+        int page = 1;
+        while (true) {
+            Map<String, Object> resp = client.getApplications(accessToken, page, pageSize);
+            List<Map<String, Object>> appList = extractList(resp, "applications");
+            if (appList.isEmpty() && page == 1 && resp.containsKey("application")) {
+                appList = List.of(resp);
+            }
+            all.addAll(appList);
+            if (appList.size() < pageSize) {
+                break;
+            }
+            page++;
+        }
+        return all;
+    }
+
+    /**
+     * Compare Admin API {@code service_id} (number or string) to the requested service id.
+     * Numeric values match even when string forms differ (e.g. {@code 7} vs {@code "07"}).
+     */
+    static boolean serviceIdMatches(Object serviceIdField, String expectedServiceId) {
+        if (expectedServiceId == null || expectedServiceId.isBlank() || serviceIdField == null) {
+            return false;
+        }
+        String actual = String.valueOf(serviceIdField).trim();
+        String expected = expectedServiceId.trim();
+        if (expected.equals(actual)) {
+            return true;
+        }
+        try {
+            return new java.math.BigDecimal(actual).compareTo(new java.math.BigDecimal(expected)) == 0;
+        } catch (NumberFormatException e) {
+            return false;
         }
     }
 
@@ -724,8 +897,12 @@ public class ThreeScaleExportService {
 
     ThreeScaleClient buildClient(String baseUrl) {
         try {
+            long connect = connectTimeoutSeconds;
+            long read = Math.max(connectTimeoutSeconds * 2L, 15L);
             return RestClientBuilder.newBuilder()
                     .baseUri(new URI(baseUrl))
+                    .connectTimeout(connect, TimeUnit.SECONDS)
+                    .readTimeout(read, TimeUnit.SECONDS)
                     .build(ThreeScaleClient.class);
         } catch (Exception e) {
             throw new RuntimeException("Invalid 3scale URL: " + baseUrl, e);

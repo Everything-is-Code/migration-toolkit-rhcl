@@ -24,6 +24,7 @@ import { CompatibilityResult } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { loadSupportedPolicies } from './SupportedPoliciesPage';
+import { runCompatibilityChecks } from './compatibilityChecks';
 import {
   PF_DANGER,
   PF_SPACER_MD,
@@ -76,26 +77,17 @@ const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppStat
   const checkAll = async () => {
     setLoading(true);
     setError(null);
-    const all: CompatibilityResult[] = [];
-    for (const service of appState.selectedServices) {
-      try {
-        const policies = await loadSupportedPolicies();
-        const resp = await servicesApi.checkCompatibility(
-          service.id, appState.connection.url, appState.connection.accessToken,
-          policies
-        );
-        all.push(resp.data);
-      } catch {
-        all.push({
-          serviceId: service.id,
-          serviceName: service.name,
-          score: 0,
-          level: 'LOW',
-          items: [{ name: 'Error', status: 'UNSUPPORTED', message: t('compatibility.errorCheck') }],
-        });
-      }
-    }
-    setResults(all);
+    const { results: nextResults, error: nextError } = await runCompatibilityChecks(
+      appState.selectedServices,
+      appState.connection,
+      {
+        loadSupportedPolicies,
+        checkCompatibility: servicesApi.checkCompatibility,
+        errorMessage: t('compatibility.errorCheck'),
+      },
+    );
+    setResults(nextResults);
+    setError(nextError);
     setLoading(false);
   };
 

@@ -26,6 +26,11 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -47,6 +52,8 @@ class ClusterVersionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ClusterVersionService(client);
+        // Same-thread executor: Mockito Fabric8 mocks are not safe across FJP classloaders.
+        service.useDetectExecutor(Runnable::run);
     }
 
     // ── 1.1 Soft-fail default (Fabric8 403/404) ──────────────────────────────
@@ -103,6 +110,7 @@ class ClusterVersionServiceTest {
     @Test
     void resolve_whenClientNull_usesDefaultProfile() {
         ClusterVersionService offline = new ClusterVersionService(null);
+        offline.useDetectExecutor(Runnable::run);
         ClusterVersionsResponse response = offline.resolve("auto", true);
 
         assertEquals("default", response.source);
@@ -115,6 +123,7 @@ class ClusterVersionServiceTest {
     @Test
     void softFailDefault_ossmNullAndNotPresent_whileExpectedKept() {
         ClusterVersionService offline = new ClusterVersionService(null);
+        offline.useDetectExecutor(Runnable::run);
         ClusterVersionsResponse response = offline.resolve("auto", true);
 
         assertEquals("default", response.source);
@@ -271,8 +280,138 @@ class ClusterVersionServiceTest {
         assertEquals("detected", response.source);
         assertEquals("1.4.0", response.kuadrant);
         assertEquals("2.6.5", response.ossm);
+        // One ResourceDefinitionContext for CSVs; namespaces are probed via inNamespace().
         verify(client, times(1)).genericKubernetesResources(argThat(
                 ctx -> ctx != null && "clusterserviceversions".equals(ctx.getPlural())));
+    }
+
+    @Test
+    void resolve_whenOnlyAuthPolicyCrd_marksKuadrantPresent() {
+        stubCluster("4.19.3", "1.2.1", List.of(), SmcpMode.EMPTY);
+        // Override CRD stub: AuthPolicy present without CSV.
+        var apiextensions = mock(io.fabric8.kubernetes.client.dsl.ApiextensionsAPIGroupDSL.class);
+        var v1 = mock(io.fabric8.kubernetes.client.V1ApiextensionAPIGroupDSL.class);
+        var crdOps = mock(NonNamespaceOperation.class);
+        when(client.apiextensions()).thenReturn(apiextensions);
+        when(apiextensions.v1()).thenReturn(v1);
+        when(v1.customResourceDefinitions()).thenReturn(crdOps);
+        when(crdOps.withName(anyString())).thenAnswer(inv -> {
+            String name = inv.getArgument(0);
+            Resource resource = mock(Resource.class);
+            if ("gatewayclasses.gateway.networking.k8s.io".equals(name)) {
+                CustomResourceDefinition gatewayCrd = new CustomResourceDefinition();
+                ObjectMeta meta = new ObjectMeta();
+                meta.setName(name);
+                meta.setAnnotations(Map.of("gateway.networking.k8s.io/bundle-version", "v1.2.1"));
+                gatewayCrd.setMetadata(meta);
+                when(resource.get()).thenReturn(gatewayCrd);
+            } else if ("authpolicies.kuadrant.io".equals(name)) {
+                CustomResourceDefinition auth = new CustomResourceDefinition();
+                ObjectMeta meta = new ObjectMeta();
+                meta.setName(name);
+                auth.setMetadata(meta);
+                when(resource.get()).thenReturn(auth);
+            } else {
+                when(resource.get()).thenReturn(null);
+            }
+            return resource;
+        });
+
+        ClusterVersionsResponse response = service.resolve("auto", true);
+
+        assertEquals("detected", response.source);
+        assertEquals(ClusterVersionService.KUADRANT_PRESENT_VIA_CRD, response.kuadrant);
+        assertTrue(response.capabilities.kuadrantPresent);
+    }
+
+    @Test
+    void awaitDetect_whenFutureExceedsTimeout_softFailsWithTimeoutError() {
+        ClusterVersionService fastTimeout = new ClusterVersionService(client) {
+            @Override
+            long detectTimeoutSeconds() {
+                return 1L;
+            }
+        };
+        CompletableFuture<ClusterVersionsResponse> never = new CompletableFuture<>();
+
+        long started = System.currentTimeMillis();
+        ClusterVersionsResponse response = fastTimeout.awaitDetect(never, "auto");
+        long elapsedMs = System.currentTimeMillis() - started;
+
+        assertEquals("default", response.source);
+        assertEquals(ClusterVersionService.DEFAULT_OCP, response.ocp);
+        assertEquals(ClusterVersionService.DEFAULT_GATEWAY_API, response.gatewayApi);
+        assertNull(response.kuadrant);
+        assertNull(response.ossm);
+        assertNotNull(response.errors);
+        assertTrue(response.errors.stream().anyMatch(e -> e.contains("timed out")),
+                "Timeout soft-fail must surface a timeout error note: " + response.errors);
+        assertTrue(elapsedMs < 5_000L,
+                "Soft-fail path must not wait the production DETECT_TIMEOUT_SECONDS ceiling");
+        // orTimeout completes the same future exceptionally when the ceiling elapses.
+        assertTrue(never.isCompletedExceptionally());
+    }
+
+    @Test
+    void resolve_concurrentCalls_coalesceIntoSingleDetect() throws Exception {
+        AtomicInteger detects = new AtomicInteger();
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+
+        ClusterVersionService coalescing = new ClusterVersionService(null) {
+            @Override
+            ClusterVersionsResponse runDetect(String profile) {
+                detects.incrementAndGet();
+                entered.countDown();
+                try {
+                    if (!release.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("release latch timed out");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                ClusterVersionsResponse r = new ClusterVersionsResponse();
+                r.source = "default";
+                r.profile = "auto";
+                r.ocp = DEFAULT_OCP;
+                r.gatewayApi = DEFAULT_GATEWAY_API;
+                r.capabilities = new ClusterCapabilities();
+                return r;
+            }
+        };
+        // Real async executor so the first resolve stays in-flight while the second joins.
+        coalescing.useDetectExecutor(Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "coalesce-test");
+            t.setDaemon(true);
+            return t;
+        }));
+
+        CompletableFuture<ClusterVersionsResponse> first =
+                CompletableFuture.supplyAsync(() -> coalescing.resolve("auto", true));
+        assertTrue(entered.await(5, TimeUnit.SECONDS), "detect must start");
+        CompletableFuture<ClusterVersionsResponse> second =
+                CompletableFuture.supplyAsync(() -> coalescing.resolve("auto", true));
+        // Give the second resolve a moment to hit inFlight.compute while first is blocked.
+        Thread.sleep(100);
+        release.countDown();
+
+        assertEquals("default", first.get(5, TimeUnit.SECONDS).source);
+        assertEquals("default", second.get(5, TimeUnit.SECONDS).source);
+        assertEquals(1, detects.get(), "Concurrent resolve must coalesce to one detect");
+    }
+
+    @Test
+    void awaitDetect_whenFutureFails_softFailsWithFailureError() {
+        CompletableFuture<ClusterVersionsResponse> failed = new CompletableFuture<>();
+        failed.completeExceptionally(new RuntimeException("boom-detect"));
+
+        ClusterVersionsResponse response = service.awaitDetect(failed, "auto");
+
+        assertEquals("default", response.source);
+        assertTrue(response.errors.stream().anyMatch(e -> e.contains("Cluster detect failed")),
+                "Non-timeout failures must soft-fail with a detect-failed note: " + response.errors);
+        assertFalse(response.errors.stream().anyMatch(e -> e.contains("timed out")));
     }
 
     // ── I-7 unbounded CSV list residual ──────────────────────────────────────
@@ -504,6 +643,7 @@ class ClusterVersionServiceTest {
                         }
                         list.setItems(items);
                         when(op.inAnyNamespace()).thenReturn(n);
+                        when(op.inNamespace(anyString())).thenReturn(n);
                         when(n.list()).thenReturn(list);
                         return op;
                     }
@@ -533,19 +673,39 @@ class ClusterVersionServiceTest {
         var apiextensions = mock(io.fabric8.kubernetes.client.dsl.ApiextensionsAPIGroupDSL.class);
         var v1 = mock(io.fabric8.kubernetes.client.V1ApiextensionAPIGroupDSL.class);
         var crdOps = mock(NonNamespaceOperation.class);
-        var crdResource = mock(Resource.class);
-        CustomResourceDefinition crd = new CustomResourceDefinition();
-        ObjectMeta meta = new ObjectMeta();
-        meta.setName("gatewayclasses.gateway.networking.k8s.io");
-        meta.setAnnotations(Map.of(
+        CustomResourceDefinition gatewayCrd = new CustomResourceDefinition();
+        ObjectMeta gatewayMeta = new ObjectMeta();
+        gatewayMeta.setName("gatewayclasses.gateway.networking.k8s.io");
+        gatewayMeta.setAnnotations(Map.of(
                 "gateway.networking.k8s.io/bundle-version",
                 gatewayApiBundle.startsWith("v") ? gatewayApiBundle : "v" + gatewayApiBundle));
-        crd.setMetadata(meta);
+        gatewayCrd.setMetadata(gatewayMeta);
+
+        CustomResourceDefinition authPolicyCrd = new CustomResourceDefinition();
+        ObjectMeta authMeta = new ObjectMeta();
+        authMeta.setName("authpolicies.kuadrant.io");
+        authPolicyCrd.setMetadata(authMeta);
+
+        boolean hasKuadrant = csvSpecs != null && csvSpecs.stream().anyMatch(s -> {
+            String n = s.name().toLowerCase();
+            return n.contains("kuadrant") || n.contains("rhcl") || n.contains("rh-connectivity");
+        });
+
         when(client.apiextensions()).thenReturn(apiextensions);
         when(apiextensions.v1()).thenReturn(v1);
         when(v1.customResourceDefinitions()).thenReturn(crdOps);
-        when(crdOps.withName("gatewayclasses.gateway.networking.k8s.io")).thenReturn(crdResource);
-        when(crdResource.get()).thenReturn(crd);
+        when(crdOps.withName(anyString())).thenAnswer(inv -> {
+            String name = inv.getArgument(0);
+            Resource resource = mock(Resource.class);
+            if ("gatewayclasses.gateway.networking.k8s.io".equals(name)) {
+                when(resource.get()).thenReturn(gatewayCrd);
+            } else if ("authpolicies.kuadrant.io".equals(name)) {
+                when(resource.get()).thenReturn(hasKuadrant ? authPolicyCrd : null);
+            } else {
+                when(resource.get()).thenReturn(null);
+            }
+            return resource;
+        });
     }
 
     private static GenericKubernetesResource clusterVersion(String version) {
@@ -634,6 +794,7 @@ class ClusterVersionServiceTest {
         MutableClockService(KubernetesClient client, long nowMs) {
             super(client);
             this.now = nowMs;
+            useDetectExecutor(Runnable::run);
         }
 
         @Override
@@ -649,6 +810,7 @@ class ClusterVersionServiceTest {
         SettingsProfileService(KubernetesClient client, String profileValue) {
             super(client);
             this.profileValue = profileValue;
+            useDetectExecutor(Runnable::run);
         }
 
         @Override

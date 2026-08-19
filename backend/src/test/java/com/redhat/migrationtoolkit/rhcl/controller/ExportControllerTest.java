@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.controller;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
+import com.redhat.migrationtoolkit.rhcl.dto.ServiceListPage;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
@@ -18,6 +19,7 @@ import java.util.List;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -65,7 +67,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).listServices(anyString(), anyString());
+        verify(exportService, never()).listServicesPage(anyString(), anyString(), anyInt(), anyInt());
     }
 
     @Test
@@ -77,7 +79,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).listServices(anyString(), anyString());
+        verify(exportService, never()).listServicesPage(anyString(), anyString(), anyInt(), anyInt());
     }
 
     @Test
@@ -88,7 +90,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).listServices(anyString(), anyString());
+        verify(exportService, never()).listServicesPage(anyString(), anyString(), anyInt(), anyInt());
     }
 
     @Test
@@ -100,7 +102,7 @@ class ExportControllerTest {
                 .then()
                 .statusCode(400);
 
-        verify(exportService, never()).listServices(anyString(), anyString());
+        verify(exportService, never()).listServicesPage(anyString(), anyString(), anyInt(), anyInt());
     }
 
     @Test
@@ -108,8 +110,14 @@ class ExportControllerTest {
         ApiService svc = new ApiService();
         svc.id = "1";
         svc.name = "Test API";
-        when(exportService.listServices(eq("https://3scale.example.com"), eq("token123")))
-                .thenReturn(List.of(svc));
+        ServiceListPage page = new ServiceListPage();
+        page.items = List.of(svc);
+        page.page = 1;
+        page.perPage = 20;
+        page.hasMore = false;
+        page.total = 1;
+        when(exportService.listServicesPage(eq("https://3scale.example.com"), eq("token123"), eq(1), eq(20)))
+                .thenReturn(page);
 
         given()
                 .header("Authorization", "Bearer token123")
@@ -117,10 +125,38 @@ class ExportControllerTest {
                 .when().get("/api/services")
                 .then()
                 .statusCode(200)
-                .body("$", hasSize(1))
-                .body("[0].id", equalTo("1"));
+                .body("items", hasSize(1))
+                .body("items[0].id", equalTo("1"))
+                .body("page", equalTo(1))
+                .body("perPage", equalTo(20))
+                .body("hasMore", equalTo(false));
 
-        verify(exportService).listServices("https://3scale.example.com", "token123");
+        verify(exportService).listServicesPage("https://3scale.example.com", "token123", 1, 20);
+    }
+
+    @Test
+    void getServices_withPageParams_forwardsToService() {
+        ServiceListPage page = new ServiceListPage();
+        page.items = List.of();
+        page.page = 2;
+        page.perPage = 10;
+        page.hasMore = true;
+        when(exportService.listServicesPage(eq("https://3scale.example.com"), eq("token123"), eq(2), eq(10)))
+                .thenReturn(page);
+
+        given()
+                .header("Authorization", "Bearer token123")
+                .queryParam("url", "https://3scale.example.com")
+                .queryParam("page", 2)
+                .queryParam("perPage", 10)
+                .when().get("/api/services")
+                .then()
+                .statusCode(200)
+                .body("page", equalTo(2))
+                .body("perPage", equalTo(10))
+                .body("hasMore", equalTo(true));
+
+        verify(exportService).listServicesPage("https://3scale.example.com", "token123", 2, 10);
     }
 
     @Test
@@ -128,8 +164,12 @@ class ExportControllerTest {
         ApiService svc = new ApiService();
         svc.id = "1";
         svc.name = "Test API";
-        when(exportService.listServices(eq("https://3scale.example.com"), eq("header-token")))
-                .thenReturn(List.of(svc));
+        ServiceListPage page = new ServiceListPage();
+        page.items = List.of(svc);
+        page.page = 1;
+        page.perPage = 20;
+        when(exportService.listServicesPage(eq("https://3scale.example.com"), eq("header-token"), eq(1), eq(20)))
+                .thenReturn(page);
 
         given()
                 .header("Authorization", "Bearer header-token")
@@ -139,8 +179,8 @@ class ExportControllerTest {
                 .then()
                 .statusCode(200);
 
-        verify(exportService).listServices("https://3scale.example.com", "header-token");
-        verify(exportService, never()).listServices(anyString(), eq("query-token"));
+        verify(exportService).listServicesPage("https://3scale.example.com", "header-token", 1, 20);
+        verify(exportService, never()).listServicesPage(anyString(), eq("query-token"), anyInt(), anyInt());
     }
 
     @Test

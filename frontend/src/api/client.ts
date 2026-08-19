@@ -1,6 +1,6 @@
 import axios from 'axios';
 import i18n from '../i18n';
-import { ClusterVersionsResponse } from './types';
+import { ClusterVersionsResponse, ServiceListPage } from './types';
 import { clearPersistedConnection } from '../utils/appStateStorage';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -49,15 +49,23 @@ const bearerHeaders = (accessToken: string) => ({
   Authorization: `Bearer ${accessToken}`,
 });
 
+/** Axios timeout for Compatibility Check requests (ms). */
+export const COMPATIBILITY_REQUEST_TIMEOUT_MS = 60_000;
+
 export const servicesApi = {
-  list: (url: string, accessToken: string) =>
-    api.get('/api/services', { params: { url }, headers: bearerHeaders(accessToken) }),
+  list: (url: string, accessToken: string, page = 1, perPage = 20) =>
+    api.get<ServiceListPage>('/api/services', {
+      params: { url, page, perPage },
+      headers: bearerHeaders(accessToken),
+    }),
   get: (id: string, url: string, accessToken: string) =>
     api.get(`/api/services/${id}`, { params: { url }, headers: bearerHeaders(accessToken) }),
   checkCompatibility: (id: string, url: string, accessToken: string, supportedPolicies: string[]) =>
     api.get(`/api/services/${id}/compatibility`, {
       params: { url, supportedPolicies: supportedPolicies.join('|') },
       headers: bearerHeaders(accessToken),
+      // Cluster detect soft-timeout is 15s; keep UI from spinning forever on bad kubeconfigs.
+      timeout: COMPATIBILITY_REQUEST_TIMEOUT_MS,
     }),
 };
 

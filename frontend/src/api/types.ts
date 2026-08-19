@@ -19,6 +19,16 @@ export interface ApiService {
   authentication?: Authentication;
 }
 
+/** One page of 3scale services from GET /api/services. */
+export interface ServiceListPage {
+  items: ApiService[];
+  page: number;
+  perPage: number;
+  hasMore: boolean;
+  /** Set when on the last page; omitted/null when more pages may exist. */
+  total?: number | null;
+}
+
 export interface Backend {
   id: string;
   name: string;

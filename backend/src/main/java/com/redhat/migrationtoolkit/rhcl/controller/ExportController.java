@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.controller;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
+import com.redhat.migrationtoolkit.rhcl.dto.ServiceListPage;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
 import com.redhat.migrationtoolkit.rhcl.service.ClusterVersionService;
@@ -9,6 +10,7 @@ import com.redhat.migrationtoolkit.rhcl.service.CompatibilityService;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.Path;
@@ -22,7 +24,6 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 @Path("/api/services")
@@ -43,8 +44,10 @@ public class ExportController {
     ClusterVersionService clusterVersionService;
 
     @GET
-    @Operation(summary = "List services (summary for selection UI)")
+    @Operation(summary = "List one page of services (summary for selection UI)")
     public Response getServices(@QueryParam("url") String url,
+                                 @QueryParam("page") @DefaultValue("1") int page,
+                                 @QueryParam("perPage") @DefaultValue("20") int perPage,
                                  @HeaderParam("Authorization") String authorization) {
         String accessToken = extractBearerToken(authorization);
         if (url == null || url.isBlank() || accessToken == null) {
@@ -52,8 +55,8 @@ public class ExportController {
                     .entity("url query parameter and Authorization Bearer token are required")
                     .build();
         }
-        List<ApiService> services = exportService.listServices(url, accessToken);
-        return Response.ok(services).build();
+        ServiceListPage result = exportService.listServicesPage(url, accessToken, page, perPage);
+        return Response.ok(result).build();
     }
 
     @GET

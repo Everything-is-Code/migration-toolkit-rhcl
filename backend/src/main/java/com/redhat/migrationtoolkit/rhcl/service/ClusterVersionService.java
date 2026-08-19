@@ -19,6 +19,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 /**
@@ -63,6 +70,26 @@ public class ClusterVersionService {
     private static final long CACHE_TTL_MS = 5 * 60 * 1000L;
 
     /**
+     * Soft timeout for live cluster probes. Unreachable kubeconfigs otherwise block
+     * Compatibility / Convert for minutes (sequential OCP/GAPI/CSV/SMCP calls).
+     * Package-visible for unit tests.
+     */
+    static final long DETECT_TIMEOUT_SECONDS = 15;
+
+    /**
+     * Prefer these namespaces for operator CSVs. Avoid {@code inAnyNamespace()} CSV lists —
+     * RHCL/Authorino CSVs are often copied into dozens of namespaces and blow the detect budget.
+     */
+    static final List<String> OPERATOR_CSV_NAMESPACES = List.of(
+            "kuadrant-system",
+            "openshift-operators",
+            "openshift-operators-redhat",
+            "operators");
+
+    /** Sentinel version when AuthPolicy CRD is present but CSV version was not resolved. */
+    static final String KUADRANT_PRESENT_VIA_CRD = "present";
+
+    /**
      * I-7: warn when a cluster-wide CSV list is this large or larger.
      * Package-visible for unit tests.
      */
@@ -74,12 +101,36 @@ public class ClusterVersionService {
     private volatile ClusterVersionsResponse cache;
     private volatile long cacheAt;
 
+    /** Coalesce concurrent auto-detects for the same profile (avoids N× slow kube walks). */
+    private final ConcurrentHashMap<String, CompletableFuture<ClusterVersionsResponse>> inFlight =
+            new ConcurrentHashMap<>();
+
+    /**
+     * Executor for live cluster probes. Dedicated (not {@code commonPool}) so blocking kube
+     * calls do not starve shared FJP workers, and so unit tests can inject a same-thread
+     * executor — Mockito Fabric8 mocks break across classloaders on ForkJoinPool workers.
+     */
+    private Executor detectExecutor = createDefaultDetectExecutor();
+
     public ClusterVersionService() {
     }
 
     /** Unit-test constructor. */
     public ClusterVersionService(KubernetesClient client) {
         this.client = client;
+    }
+
+    /** Package-visible for unit tests (typically {@code Runnable::run}). */
+    void useDetectExecutor(Executor executor) {
+        this.detectExecutor = executor != null ? executor : createDefaultDetectExecutor();
+    }
+
+    private static Executor createDefaultDetectExecutor() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "cluster-version-detect");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     /** Overridable clock for TTL unit tests. */
@@ -116,14 +167,71 @@ public class ClusterVersionService {
 
     public ClusterVersionsResponse resolve(String profile, boolean refresh) {
         long now = nowMs();
-        if (!refresh && cache != null && sameProfile(cache.profile, profile)
+        String normalized = normalizeProfile(profile);
+        if (!refresh && cache != null && sameProfile(cache.profile, normalized)
                 && (now - cacheAt) < CACHE_TTL_MS) {
             return cache;
         }
-        ClusterVersionsResponse resolved = doResolve(normalizeProfile(profile));
-        cache = resolved;
-        cacheAt = now;
-        return resolved;
+
+        CompletableFuture<ClusterVersionsResponse> future = inFlight.compute(normalized, (key, existing) -> {
+            // Always join an in-flight probe for this profile (including refresh=true) so
+            // concurrent Compatibility/Convert calls share one kube walk.
+            if (existing != null && !existing.isDone()) {
+                return existing;
+            }
+            return CompletableFuture.supplyAsync(() -> runDetect(normalized), detectExecutor);
+        });
+
+        try {
+            ClusterVersionsResponse resolved = awaitDetect(future, normalized);
+            cache = resolved;
+            cacheAt = nowMs();
+            return resolved;
+        } finally {
+            inFlight.compute(normalized, (key, existing) -> existing == future ? null : existing);
+        }
+    }
+
+    /**
+     * Soft timeout ceiling used by {@link #awaitDetect}. Overridable in unit tests so the
+     * TimeoutException path can be exercised without sleeping {@link #DETECT_TIMEOUT_SECONDS}.
+     */
+    long detectTimeoutSeconds() {
+        return DETECT_TIMEOUT_SECONDS;
+    }
+
+    /**
+     * Package-visible detect body for unit tests (coalesce / executor coverage).
+     * Production path is {@link #doResolve}.
+     */
+    ClusterVersionsResponse runDetect(String profile) {
+        return doResolve(profile);
+    }
+
+    /**
+     * Wait for an in-flight detect with a hard ceiling so Compatibility Check cannot hang
+     * when the local kubeconfig points at an unreachable API.
+     * Package-visible for timeout soft-fail unit tests.
+     */
+    ClusterVersionsResponse awaitDetect(
+            CompletableFuture<ClusterVersionsResponse> future, String profile) {
+        long timeoutSeconds = detectTimeoutSeconds();
+        try {
+            return future.orTimeout(timeoutSeconds, TimeUnit.SECONDS).join();
+        } catch (CompletionException e) {
+            // Drop the in-flight task so a retry does not race an abandoned kube probe.
+            future.cancel(true);
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof TimeoutException) {
+                LOG.warnf("Cluster version detect timed out after %ds; using soft-fail defaults",
+                        timeoutSeconds);
+                return softFailDefault(profile, new ArrayList<>(),
+                        "Cluster detect timed out after " + timeoutSeconds + "s");
+            }
+            LOG.warnf(cause, "Cluster version detect failed: %s", cause.getMessage());
+            return softFailDefault(profile, new ArrayList<>(),
+                    "Cluster detect failed: " + safeMessage(cause));
+        }
     }
 
     private static boolean sameProfile(String cached, String requested) {
@@ -201,39 +309,47 @@ public class ClusterVersionService {
             errors.add(sanitize("Gateway API detect failed: " + safeMessage(e)));
         }
 
-        // List CSVs once per detect pass; Kuadrant + OSSM filter the same items.
-        List<GenericKubernetesResource> csvs = null;
+        // Fast Kuadrant/OSSM path: namespaced CSV list once + AuthPolicy CRD probe.
+        // Avoid cluster-wide CSV lists (RHCL CSVs are often copied into dozens of namespaces).
+        List<GenericKubernetesResource> operatorCsvs = List.of();
         try {
-            csvs = listCsvs();
+            operatorCsvs = listOperatorCsvsInPreferredNamespaces();
         } catch (Exception e) {
-            LOG.warnf("CSV list failed: %s", e.getMessage());
-            errors.add(sanitize("CSV list failed: " + safeMessage(e)));
+            LOG.warnf("Namespaced operator CSV list failed: %s", e.getMessage());
+            errors.add(sanitize("Operator CSV list failed: " + safeMessage(e)));
         }
 
-        if (csvs != null) {
-            try {
-                kuadrant = findCsvVersion(csvs, name -> {
-                    String lower = name.toLowerCase(Locale.ROOT);
-                    return lower.contains("kuadrant") || lower.contains("rhcl") || lower.contains("rh-connectivity");
-                });
-            } catch (Exception e) {
-                LOG.warnf("Kuadrant CSV detect failed: %s", e.getMessage());
-                errors.add(sanitize("Kuadrant detect failed: " + safeMessage(e)));
-            }
+        boolean kuadrantCrd = false;
+        try {
+            kuadrantCrd = detectKuadrantCrdPresent();
+        } catch (Exception e) {
+            LOG.warnf("Kuadrant CRD probe failed: %s", e.getMessage());
+            errors.add(sanitize("Kuadrant CRD probe failed: " + safeMessage(e)));
+        }
+        try {
+            kuadrant = findCsvVersion(operatorCsvs, name -> {
+                String lower = name.toLowerCase(Locale.ROOT);
+                return lower.contains("kuadrant") || lower.contains("rhcl") || lower.contains("rh-connectivity");
+            });
+        } catch (Exception e) {
+            LOG.warnf("Kuadrant CSV detect failed: %s", e.getMessage());
+            errors.add(sanitize("Kuadrant detect failed: " + safeMessage(e)));
+        }
+        if (kuadrant == null && kuadrantCrd) {
+            kuadrant = KUADRANT_PRESENT_VIA_CRD;
+        }
 
-            try {
-                ossm = findCsvVersion(csvs, name -> {
-                    String lower = name.toLowerCase(Locale.ROOT);
-                    // Prefer explicit OSSM / service mesh operator names — never treat generic "istio" alone as OSSM
-                    return lower.contains("servicemesh")
-                            || lower.contains("openshift-service-mesh")
-                            || lower.contains("ossm")
-                            || (lower.contains("sail") && lower.contains("operator"));
-                });
-            } catch (Exception e) {
-                LOG.warnf("OSSM CSV detect failed: %s", e.getMessage());
-                errors.add(sanitize("OSSM CSV detect failed: " + safeMessage(e)));
-            }
+        try {
+            ossm = findCsvVersion(operatorCsvs, name -> {
+                String lower = name.toLowerCase(Locale.ROOT);
+                return lower.contains("servicemesh")
+                        || lower.contains("openshift-service-mesh")
+                        || lower.contains("ossm")
+                        || (lower.contains("sail") && lower.contains("operator"));
+            });
+        } catch (Exception e) {
+            LOG.warnf("OSSM CSV detect failed: %s", e.getMessage());
+            errors.add(sanitize("OSSM CSV detect failed: " + safeMessage(e)));
         }
 
         // SMCP/Istio CR is only a fallback when OLM CSV did not yield an OSSM version.
@@ -340,7 +456,59 @@ public class ClusterVersionService {
     }
 
     /**
+     * True when the Kuadrant/RHCL AuthPolicy CRD is installed (fast single GET).
+     * Prefer this over cluster-wide CSV lists for {@code kuadrantPresent}.
+     */
+    boolean detectKuadrantCrdPresent() {
+        try {
+            CustomResourceDefinition crd = client.apiextensions().v1()
+                    .customResourceDefinitions()
+                    .withName("authpolicies.kuadrant.io")
+                    .get();
+            return crd != null;
+        } catch (KubernetesClientException e) {
+            LOG.debugf("AuthPolicy CRD probe failed (%s): %s", e.getCode(), e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Lists CSVs only in {@link #OPERATOR_CSV_NAMESPACES} (deduped by name).
+     */
+    List<GenericKubernetesResource> listOperatorCsvsInPreferredNamespaces() {
+        ResourceDefinitionContext ctx = new ResourceDefinitionContext.Builder()
+                .withGroup("operators.coreos.com")
+                .withVersion("v1alpha1")
+                .withKind("ClusterServiceVersion")
+                .withPlural("clusterserviceversions")
+                .withNamespaced(true)
+                .build();
+        Map<String, GenericKubernetesResource> byName = new LinkedHashMap<>();
+        var csvOps = client.genericKubernetesResources(ctx);
+        for (String ns : OPERATOR_CSV_NAMESPACES) {
+            try {
+                GenericKubernetesResourceList list = csvOps.inNamespace(ns).list();
+                if (list == null || list.getItems() == null) {
+                    continue;
+                }
+                for (GenericKubernetesResource csv : list.getItems()) {
+                    if (csv.getMetadata() == null || csv.getMetadata().getName() == null) {
+                        continue;
+                    }
+                    byName.putIfAbsent(csv.getMetadata().getName(), csv);
+                }
+            } catch (KubernetesClientException e) {
+                LOG.debugf("CSV list in namespace %s failed (%s): %s", ns, e.getCode(), e.getMessage());
+            }
+        }
+        return new ArrayList<>(byName.values());
+    }
+
+    /**
      * Lists ClusterServiceVersions cluster-wide for Kuadrant/OSSM name matching.
+     *
+     * <p><b>Deprecated for live detect:</b> Prefer {@link #listOperatorCsvsInPreferredNamespaces}
+     * + {@link #detectKuadrantCrdPresent}. Kept for unit tests covering I-7 WARN on large lists.
      *
      * <p><b>I-7 residual risk:</b> This intentionally uses unbounded
      * {@code inAnyNamespace().list()} — no blind {@code withLimit} and no unproven
@@ -352,7 +520,7 @@ public class ClusterVersionService {
      * When the returned item count is {@code >=} {@link #CSV_LIST_SIZE_WARN_THRESHOLD},
      * we {@code LOG.warn} so large clusters surface the residual unbounded-list cost.
      */
-    private List<GenericKubernetesResource> listCsvs() {
+    List<GenericKubernetesResource> listCsvs() {
         ResourceDefinitionContext ctx = new ResourceDefinitionContext.Builder()
                 .withGroup("operators.coreos.com")
                 .withVersion("v1alpha1")

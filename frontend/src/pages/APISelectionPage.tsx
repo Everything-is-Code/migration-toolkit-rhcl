@@ -22,6 +22,8 @@ import {
   EmptyStateIcon,
   EmptyStateBody,
   Label,
+  Pagination,
+  PaginationVariant,
 } from '@patternfly/react-core';
 import { CubesIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
@@ -31,6 +33,8 @@ import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
 import shared from '../styles/shared.module.css';
 import styles from './APISelectionPage.module.css';
+
+const DEFAULT_PER_PAGE = 20;
 
 interface Props {
   appState: AppState;
@@ -80,23 +84,37 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   const [services, setServices] = useState<ApiService[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    appState.selectedServices.length > 0 ? appState.selectedServices[0].id : null
+  const [selectedService, setSelectedService] = useState<ApiService | null>(
+    appState.selectedServices.length > 0 ? appState.selectedServices[0] : null
   );
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState<number | null>(null);
 
   useEffect(() => {
     if (appState.connection.connected) {
-      loadServices();
+      loadServices(page, perPage);
     }
-  }, []);
+  }, [page, perPage]);
 
-  const loadServices = async () => {
+  const loadServices = async (pageNum: number, pageSize: number) => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await servicesApi.list(appState.connection.url, appState.connection.accessToken);
-      setServices(resp.data);
+      const resp = await servicesApi.list(
+        appState.connection.url,
+        appState.connection.accessToken,
+        pageNum,
+        pageSize,
+      );
+      const data = resp.data;
+      setServices(data.items ?? []);
+      setHasMore(Boolean(data.hasMore));
+      setTotal(typeof data.total === 'number' ? data.total : null);
+      setPage(data.page ?? pageNum);
+      setPerPage(data.perPage ?? pageSize);
     } catch (e: any) {
       setError(t('apiSelection.errorFetch', { message: e.response?.data || e.message }));
     } finally {
@@ -105,8 +123,8 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
   };
 
   const handleNext = () => {
-    const selected = services.filter(s => s.id === selectedId);
-    setAppState(prev => ({ ...prev, selectedServices: selected }));
+    if (!selectedService) return;
+    setAppState(prev => ({ ...prev, selectedServices: [selectedService] }));
     navigate('/compatibility');
   };
 
@@ -114,6 +132,9 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     (s.systemName || '').toLowerCase().includes(search.toLowerCase())
   );
+
+  // Keep next enabled when total is unknown but hasMore.
+  const itemCount = total ?? ((page - 1) * perPage + services.length + (hasMore ? 1 : 0));
 
   if (!appState.connection.connected) {
     return (
@@ -124,6 +145,8 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
       </PageSection>
     );
   }
+
+  const selectedId = selectedService?.id ?? null;
 
   return (
     <>
@@ -148,19 +171,58 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                   />
                 </ToolbarItem>
                 <ToolbarItem>
-                  <Button variant="secondary" onClick={loadServices} isDisabled={loading}>
+                  <Button
+                    variant="secondary"
+                    onClick={() => loadServices(page, perPage)}
+                    isDisabled={loading}
+                  >
                     {loading ? <Spinner size="sm" /> : t('apiSelection.btnRefresh')}
                   </Button>
                 </ToolbarItem>
                 <ToolbarItem align={{ default: 'alignRight' }}>
-                  {selectedId && (
+                  {selectedService && (
                     <Badge isRead={false}>
-                      {services.find(s => s.id === selectedId)?.name ?? selectedId}
+                      {selectedService.name}
                     </Badge>
                   )}
                 </ToolbarItem>
+                <ToolbarItem align={{ default: 'alignRight' }} variant="pagination">
+                  <Pagination
+                    itemCount={itemCount}
+                    page={page}
+                    perPage={perPage}
+                    perPageOptions={[
+                      { title: '10', value: 10 },
+                      { title: '20', value: 20 },
+                      { title: '50', value: 50 },
+                      { title: '100', value: 100 },
+                    ]}
+                    onSetPage={(_e, newPage) => setPage(newPage)}
+                    onPerPageSelect={(_e, newPerPage) => {
+                      setPerPage(newPerPage);
+                      setPage(1);
+                    }}
+                    isCompact
+                    isDisabled={loading}
+                    toggleTemplate={
+                      total == null
+                        ? ({ firstIndex, lastIndex }) => (
+                            <>
+                              {firstIndex} - {lastIndex}
+                              {hasMore ? '+' : ''}
+                            </>
+                          )
+                        : undefined
+                    }
+                  />
+                </ToolbarItem>
               </ToolbarContent>
             </Toolbar>
+            {search && (
+              <p className={shared.mutedText} style={{ marginBottom: '8px' }}>
+                {t('apiSelection.searchPageHint')}
+              </p>
+            )}
 
             {loading ? (
               <div className={shared.centeredBlock}>
@@ -180,7 +242,12 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 selectedDataListItemId={selectedId ?? undefined}
                 onSelectDataListItem={(_e, id) => {
                   if (id === 'api-list-header') return;
-                  setSelectedId(id === selectedId ? null : id);
+                  if (id === selectedId) {
+                    setSelectedService(null);
+                    return;
+                  }
+                  const found = services.find(s => s.id === id) ?? null;
+                  setSelectedService(found);
                 }}
               >
                 <DataListItem
@@ -248,6 +315,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                               <Badge
                                 isRead={service.state !== 'published'}
                                 className={service.state === 'published' ? styles.publishedBadge : undefined}
+                                title={t('apiSelection.stateTooltip')}
                               >
                                 {service.state || 'unknown'}
                               </Badge>
@@ -276,12 +344,42 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
               </DataList>
             )}
 
+            <Pagination
+              itemCount={itemCount}
+              page={page}
+              perPage={perPage}
+              perPageOptions={[
+                { title: '10', value: 10 },
+                { title: '20', value: 20 },
+                { title: '50', value: 50 },
+                { title: '100', value: 100 },
+              ]}
+              onSetPage={(_e, newPage) => setPage(newPage)}
+              onPerPageSelect={(_e, newPerPage) => {
+                setPerPage(newPerPage);
+                setPage(1);
+              }}
+              variant={PaginationVariant.bottom}
+              isDisabled={loading}
+              style={{ marginTop: '16px' }}
+              toggleTemplate={
+                total == null
+                  ? ({ firstIndex, lastIndex }) => (
+                      <>
+                        {firstIndex} - {lastIndex}
+                        {hasMore ? '+' : ''}
+                      </>
+                    )
+                  : undefined
+              }
+            />
+
             <div className={shared.actionRow} style={{ marginTop: '24px' }}>
               <Button variant="secondary" onClick={() => navigate('/')}>{t('apiSelection.btnBack')}</Button>
               <Button
                 variant="primary"
                 onClick={handleNext}
-                isDisabled={selectedId === null}
+                isDisabled={selectedService === null}
               >
                 {t('apiSelection.btnNext')}
               </Button>
