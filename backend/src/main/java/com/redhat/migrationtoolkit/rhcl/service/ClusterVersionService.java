@@ -22,6 +22,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
@@ -103,12 +105,32 @@ public class ClusterVersionService {
     private final ConcurrentHashMap<String, CompletableFuture<ClusterVersionsResponse>> inFlight =
             new ConcurrentHashMap<>();
 
+    /**
+     * Executor for live cluster probes. Dedicated (not {@code commonPool}) so blocking kube
+     * calls do not starve shared FJP workers, and so unit tests can inject a same-thread
+     * executor — Mockito Fabric8 mocks break across classloaders on ForkJoinPool workers.
+     */
+    private Executor detectExecutor = createDefaultDetectExecutor();
+
     public ClusterVersionService() {
     }
 
     /** Unit-test constructor. */
     public ClusterVersionService(KubernetesClient client) {
         this.client = client;
+    }
+
+    /** Package-visible for unit tests (typically {@code Runnable::run}). */
+    void useDetectExecutor(Executor executor) {
+        this.detectExecutor = executor != null ? executor : createDefaultDetectExecutor();
+    }
+
+    private static Executor createDefaultDetectExecutor() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "cluster-version-detect");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     /** Overridable clock for TTL unit tests. */
@@ -155,7 +177,7 @@ public class ClusterVersionService {
             if (!refresh && existing != null && !existing.isDone()) {
                 return existing;
             }
-            return CompletableFuture.supplyAsync(() -> doResolve(normalized));
+            return CompletableFuture.supplyAsync(() -> doResolve(normalized), detectExecutor);
         });
 
         try {
@@ -187,6 +209,8 @@ public class ClusterVersionService {
         try {
             return future.orTimeout(timeoutSeconds, TimeUnit.SECONDS).join();
         } catch (CompletionException e) {
+            // Drop the in-flight task so a retry does not race an abandoned kube probe.
+            future.cancel(true);
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof TimeoutException) {
                 LOG.warnf("Cluster version detect timed out after %ds; using soft-fail defaults",

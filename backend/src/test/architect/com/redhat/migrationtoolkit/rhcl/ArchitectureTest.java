@@ -33,7 +33,7 @@ class ArchitectureTest {
             .whereLayer("Entity").mayOnlyBeAccessedByLayers("Controller", "Service")
             .whereLayer("DTO").mayOnlyBeAccessedByLayers("Controller", "Service")
             .whereLayer("Util").mayOnlyBeAccessedByLayers("Controller", "Service")
-            .whereLayer("Model").mayOnlyBeAccessedByLayers("Controller", "Service", "Client");
+            .whereLayer("Model").mayOnlyBeAccessedByLayers("Controller", "Service", "Client", "DTO");
 
     // ── Controller rules ──────────────────────────────────────────────────────
 

@@ -48,6 +48,8 @@ class ClusterVersionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ClusterVersionService(client);
+        // Same-thread executor: Mockito Fabric8 mocks are not safe across FJP classloaders.
+        service.useDetectExecutor(Runnable::run);
     }
 
     // ── 1.1 Soft-fail default (Fabric8 403/404) ──────────────────────────────
@@ -104,6 +106,7 @@ class ClusterVersionServiceTest {
     @Test
     void resolve_whenClientNull_usesDefaultProfile() {
         ClusterVersionService offline = new ClusterVersionService(null);
+        offline.useDetectExecutor(Runnable::run);
         ClusterVersionsResponse response = offline.resolve("auto", true);
 
         assertEquals("default", response.source);
@@ -116,6 +119,7 @@ class ClusterVersionServiceTest {
     @Test
     void softFailDefault_ossmNullAndNotPresent_whileExpectedKept() {
         ClusterVersionService offline = new ClusterVersionService(null);
+        offline.useDetectExecutor(Runnable::run);
         ClusterVersionsResponse response = offline.resolve("auto", true);
 
         assertEquals("default", response.source);
@@ -737,6 +741,7 @@ class ClusterVersionServiceTest {
         MutableClockService(KubernetesClient client, long nowMs) {
             super(client);
             this.now = nowMs;
+            useDetectExecutor(Runnable::run);
         }
 
         @Override
@@ -752,6 +757,7 @@ class ClusterVersionServiceTest {
         SettingsProfileService(KubernetesClient client, String profileValue) {
             super(client);
             this.profileValue = profileValue;
+            useDetectExecutor(Runnable::run);
         }
 
         @Override
