@@ -23,15 +23,6 @@ import {
   withDefaultSupportedPolicies,
 } from './supportedPolicies';
 
-export {
-  ALL_POLICIES,
-  DEFAULT_SUPPORTED_POLICIES,
-  invalidateSupportedPoliciesCache,
-  loadSupportedPolicies,
-  seedSupportedPoliciesCache,
-  withDefaultSupportedPolicies,
-} from './supportedPolicies';
-
 const SupportedPoliciesPage: React.FC = () => {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<string[]>(DEFAULT_SUPPORTED_POLICIES);
