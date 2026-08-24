@@ -91,6 +91,14 @@ public class ConversionController {
         List<Map<String, Object>> results = new ArrayList<>();
 
         for (String serviceId : request.serviceIds) {
+            if (serviceId == null || serviceId.isBlank()) {
+                results.add(Map.of(
+                        "serviceId", serviceId == null ? "" : serviceId,
+                        "status", "FAILED",
+                        "error", "serviceId must not be blank"
+                ));
+                continue;
+            }
             try {
                 ApiService service = requirePrefetchedService(exports.get(serviceId), serviceId);
                 Set<String> supportedPolicies = (request.supportedPolicies != null)
@@ -174,6 +182,9 @@ public class ConversionController {
         try {
             List<CompletableFuture<Void>> futures = new ArrayList<>(serviceIds.size());
             for (String serviceId : serviceIds) {
+                if (serviceId == null || serviceId.isBlank()) {
+                    continue;
+                }
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
                         ApiService service = exportService.exportService(
@@ -213,7 +224,8 @@ public class ConversionController {
         if (error instanceof RuntimeException runtime) {
             return runtime;
         }
-        return new RuntimeException(error);
+        // Preserve original message for API error payloads (checked exceptions are rare on this path).
+        return new RuntimeException(error.getMessage() != null ? error.getMessage() : error.toString(), error);
     }
 
     private ClusterCapabilities resolveCapabilities() {

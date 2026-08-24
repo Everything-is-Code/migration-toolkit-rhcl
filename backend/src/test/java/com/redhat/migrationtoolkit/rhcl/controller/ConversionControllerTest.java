@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -292,6 +293,7 @@ class ConversionControllerTest {
         assertEquals(1, concurrentConverts.get());
         allowFirstConvertToFinish.countDown();
         requester.join(5_000);
+        assertFalse(requester.isAlive(), "request thread should finish within timeout");
         assertEquals(1, maxConcurrentConverts.get(), "convert+persist must stay sequential");
     }
 
