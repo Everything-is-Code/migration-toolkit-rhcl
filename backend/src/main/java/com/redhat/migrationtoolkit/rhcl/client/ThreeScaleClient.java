@@ -36,7 +36,9 @@ public interface ThreeScaleClient {
     @GET
     @Path("/admin/api/services/{serviceId}/backend_usages.json")
     List<Map<String, Object>> getBackendUsages(@PathParam("serviceId") String serviceId,
-                                                @QueryParam("access_token") String accessToken);
+                                                @QueryParam("access_token") String accessToken,
+                                                @QueryParam("page") @DefaultValue("1") int page,
+                                                @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/backend_apis/{backendId}.json")
@@ -51,12 +53,16 @@ public interface ThreeScaleClient {
     @GET
     @Path("/admin/api/services/{serviceId}/proxy/policies.json")
     Map<String, Object> getPolicies(@PathParam("serviceId") String serviceId,
-                                     @QueryParam("access_token") String accessToken);
+                                     @QueryParam("access_token") String accessToken,
+                                     @QueryParam("page") @DefaultValue("1") int page,
+                                     @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/services/{serviceId}/proxy/mapping_rules.json")
     Map<String, Object> getMappingRules(@PathParam("serviceId") String serviceId,
-                                         @QueryParam("access_token") String accessToken);
+                                         @QueryParam("access_token") String accessToken,
+                                         @QueryParam("page") @DefaultValue("1") int page,
+                                         @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/services/{serviceId}/metrics.json")
@@ -76,15 +82,21 @@ public interface ThreeScaleClient {
     @GET
     @Path("/admin/api/applications/{applicationId}/keys.json")
     Map<String, Object> getApplicationKeys(@PathParam("applicationId") String applicationId,
-                                            @QueryParam("access_token") String accessToken);
+                                            @QueryParam("access_token") String accessToken,
+                                            @QueryParam("page") @DefaultValue("1") int page,
+                                            @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/services/{serviceId}/application_plans.json")
     Map<String, Object> getApplicationPlans(@PathParam("serviceId") String serviceId,
-                                             @QueryParam("access_token") String accessToken);
+                                             @QueryParam("access_token") String accessToken,
+                                             @QueryParam("page") @DefaultValue("1") int page,
+                                             @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 
     @GET
     @Path("/admin/api/application_plans/{planId}/limits.json")
     Map<String, Object> getApplicationPlanLimits(@PathParam("planId") String planId,
-                                                  @QueryParam("access_token") String accessToken);
+                                                  @QueryParam("access_token") String accessToken,
+                                                  @QueryParam("page") @DefaultValue("1") int page,
+                                                  @QueryParam("per_page") @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
 }
