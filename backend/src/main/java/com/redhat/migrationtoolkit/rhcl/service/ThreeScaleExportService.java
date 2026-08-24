@@ -721,16 +721,19 @@ public class ThreeScaleExportService {
         try {
             List<CompletableFuture<Void>> futures = new ArrayList<>(applications.size());
             for (Application app : applications) {
-                futures.add(CompletableFuture.runAsync(() ->
-                        app.keys = fetchApplicationKeys(client, url, app.id, accessToken), pool));
+                final String applicationId = app.id;
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        app.keys = fetchApplicationKeys(client, url, applicationId, accessToken);
+                    } catch (RuntimeException e) {
+                        LOG.warnf(e, "Failed to fetch application keys for application %s: %s",
+                                applicationId, e.getMessage());
+                        app.keys = Collections.emptyList();
+                    }
+                }, pool));
             }
             for (CompletableFuture<Void> future : futures) {
-                try {
-                    future.join();
-                } catch (CompletionException e) {
-                    Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    LOG.warnf(cause, "Failed to fetch application keys: %s", cause.getMessage());
-                }
+                future.join();
             }
         } finally {
             pool.shutdown();
@@ -829,8 +832,9 @@ public class ThreeScaleExportService {
                     keys.add(String.valueOf(value));
                 }
             }
-            applicationKeysCache.put(cacheKey, new CachedAppKeys(keys, now + EXPORT_CACHE_TTL_MS));
-            return keys;
+            List<String> immutableKeys = List.copyOf(keys);
+            applicationKeysCache.put(cacheKey, new CachedAppKeys(immutableKeys, now + EXPORT_CACHE_TTL_MS));
+            return immutableKeys;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch keys for application %s: %s", applicationId, e.getMessage());
             return Collections.emptyList();
@@ -891,16 +895,18 @@ public class ThreeScaleExportService {
         try {
             List<CompletableFuture<Void>> futures = new ArrayList<>(plans.size());
             for (ApplicationPlan plan : plans) {
-                futures.add(CompletableFuture.runAsync(() ->
-                        plan.limits = fetchApplicationPlanLimits(client, url, plan.id, accessToken), pool));
+                final String planId = plan.id;
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        plan.limits = fetchApplicationPlanLimits(client, url, planId, accessToken);
+                    } catch (RuntimeException e) {
+                        LOG.warnf(e, "Failed to fetch plan limits for plan %s: %s", planId, e.getMessage());
+                        plan.limits = Collections.emptyList();
+                    }
+                }, pool));
             }
             for (CompletableFuture<Void> future : futures) {
-                try {
-                    future.join();
-                } catch (CompletionException e) {
-                    Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    LOG.warnf(cause, "Failed to fetch plan limits: %s", cause.getMessage());
-                }
+                future.join();
             }
         } finally {
             pool.shutdown();
@@ -964,8 +970,11 @@ public class ThreeScaleExportService {
                     limits.add(normalized);
                 }
             }
-            planLimitsCache.put(cacheKey, new CachedPlanLimits(limits, now + EXPORT_CACHE_TTL_MS));
-            return limits;
+            List<Map<String, Object>> immutableLimits = limits.stream()
+                    .map(m -> Collections.unmodifiableMap(new LinkedHashMap<>(m)))
+                    .toList();
+            planLimitsCache.put(cacheKey, new CachedPlanLimits(immutableLimits, now + EXPORT_CACHE_TTL_MS));
+            return immutableLimits;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch limits for application plan %s: %s", planId, e.getMessage());
             return Collections.emptyList();
