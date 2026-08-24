@@ -1,6 +1,6 @@
 import axios from 'axios';
 import i18n from '../i18n';
-import { ClusterVersionsResponse, ServiceListPage } from './types';
+import { ClusterVersionsResponse, HistoryListPage, ServiceListPage } from './types';
 import { clearPersistedConnection } from '../utils/appStateStorage';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -135,8 +135,9 @@ export const clusterApi = {
 };
 
 export const historyApi = {
+  /** Backend page is 0-based; returns envelope `{ items, total, page, size, hasMore }`. */
   list: (page = 0, size = 50) =>
-    api.get('/api/history', { params: { page, size } }),
+    api.get<HistoryListPage>('/api/history', { params: { page, size } }),
   get: (id: number) => api.get(`/api/history/${id}`),
   downloadZip: (id: number) =>
     api.get(`/api/history/${id}/download`, { responseType: 'blob' }),
