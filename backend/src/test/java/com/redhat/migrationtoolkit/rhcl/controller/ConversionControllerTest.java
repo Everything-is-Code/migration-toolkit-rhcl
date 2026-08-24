@@ -20,17 +20,25 @@ import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -167,8 +175,8 @@ class ConversionControllerTest {
         ApiService svc2 = buildService("svc-2", "API Two", "apiKey");
         CompatibilityResult compat = buildCompat("svc-1", 80, "HIGH");
 
-        when(exportService.exportService(anyString(), anyString(), anyString()))
-                .thenReturn(svc1).thenReturn(svc2);
+        when(exportService.exportService(anyString(), anyString(), eq("svc-1"))).thenReturn(svc1);
+        when(exportService.exportService(anyString(), anyString(), eq("svc-2"))).thenReturn(svc2);
         when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities.class))).thenReturn(compat);
         when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
                 .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
@@ -187,6 +195,135 @@ class ConversionControllerTest {
                 .then()
                 .statusCode(200)
                 .body("results", hasSize(2));
+    }
+
+    @Test
+    void convert_multipleServices_prefetchesExportsConcurrently() throws Exception {
+        ApiService svc1 = buildService("svc-1", "API One", "jwt");
+        ApiService svc2 = buildService("svc-2", "API Two", "apiKey");
+        CountDownLatch bothExportsStarted = new CountDownLatch(2);
+
+        when(exportService.exportService(anyString(), anyString(), eq("svc-1"))).thenAnswer(inv -> {
+            bothExportsStarted.countDown();
+            assertTrue(bothExportsStarted.await(3, TimeUnit.SECONDS),
+                    "exports must start concurrently before either returns");
+            return svc1;
+        });
+        when(exportService.exportService(anyString(), anyString(), eq("svc-2"))).thenAnswer(inv -> {
+            bothExportsStarted.countDown();
+            assertTrue(bothExportsStarted.await(3, TimeUnit.SECONDS),
+                    "exports must start concurrently before either returns");
+            return svc2;
+        });
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 80, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1", "svc-2"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200)
+                .body("results", hasSize(2));
+
+        verify(exportService, times(1)).exportService(anyString(), anyString(), eq("svc-1"));
+        verify(exportService, times(1)).exportService(anyString(), anyString(), eq("svc-2"));
+        InOrder convertOrder = inOrder(conversionService);
+        convertOrder.verify(conversionService).convert(eq(svc1), anyString(), isNull(), any(ConversionOptions.class));
+        convertOrder.verify(conversionService).convert(eq(svc2), anyString(), isNull(), any(ConversionOptions.class));
+    }
+
+    @Test
+    void convert_multipleServices_convertRemainsSequentialAfterPrefetch() throws Exception {
+        ApiService svc1 = buildService("svc-1", "API One", "jwt");
+        ApiService svc2 = buildService("svc-2", "API Two", "apiKey");
+        CountDownLatch firstConvertEntered = new CountDownLatch(1);
+        CountDownLatch allowFirstConvertToFinish = new CountDownLatch(1);
+        AtomicInteger concurrentConverts = new AtomicInteger(0);
+        AtomicInteger maxConcurrentConverts = new AtomicInteger(0);
+
+        when(exportService.exportService(anyString(), anyString(), eq("svc-1"))).thenReturn(svc1);
+        when(exportService.exportService(anyString(), anyString(), eq("svc-2"))).thenReturn(svc2);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 80, "HIGH"));
+        when(conversionService.convert(eq(svc1), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenAnswer(inv -> {
+                    int n = concurrentConverts.incrementAndGet();
+                    maxConcurrentConverts.updateAndGet(prev -> Math.max(prev, n));
+                    firstConvertEntered.countDown();
+                    assertTrue(allowFirstConvertToFinish.await(3, TimeUnit.SECONDS));
+                    concurrentConverts.decrementAndGet();
+                    return Map.of("gateway.yaml", "kind: Gateway");
+                });
+        when(conversionService.convert(eq(svc2), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenAnswer(inv -> {
+                    int n = concurrentConverts.incrementAndGet();
+                    maxConcurrentConverts.updateAndGet(prev -> Math.max(prev, n));
+                    concurrentConverts.decrementAndGet();
+                    return Map.of("gateway.yaml", "kind: Gateway");
+                });
+
+        Thread requester = new Thread(() -> given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1", "svc-2"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200)
+                .body("results", hasSize(2)));
+        requester.start();
+        assertTrue(firstConvertEntered.await(3, TimeUnit.SECONDS), "first convert should start");
+        // While first convert is blocked, second must not have entered convert yet.
+        assertEquals(1, concurrentConverts.get());
+        allowFirstConvertToFinish.countDown();
+        requester.join(5_000);
+        assertEquals(1, maxConcurrentConverts.get(), "convert+persist must stay sequential");
+    }
+
+    @Test
+    void convert_oneExportFails_otherServiceStillSucceeds() {
+        ApiService svc2 = buildService("svc-2", "API Two", "apiKey");
+        when(exportService.exportService(anyString(), anyString(), eq("svc-1")))
+                .thenThrow(new RuntimeException("export boom"));
+        when(exportService.exportService(anyString(), anyString(), eq("svc-2"))).thenReturn(svc2);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-2", 80, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1", "svc-2"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200)
+                .body("results", hasSize(2))
+                .body("results.find { it.serviceId == 'svc-1' }.status", equalTo("FAILED"))
+                .body("results.find { it.serviceId == 'svc-2' }.compatibilityScore", equalTo(80));
+
+        verify(conversionService, times(1)).convert(eq(svc2), anyString(), isNull(), any(ConversionOptions.class));
     }
 
     @Test

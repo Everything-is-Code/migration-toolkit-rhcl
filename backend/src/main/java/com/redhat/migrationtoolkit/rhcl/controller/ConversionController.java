@@ -32,6 +32,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Path("/api/convert")
 @Produces(MediaType.APPLICATION_JSON)
@@ -40,6 +45,9 @@ import java.util.Set;
 public class ConversionController {
 
     private static final Logger LOG = Logger.getLogger(ConversionController.class);
+
+    /** Max wait for virtual-thread export prefetch pool shutdown. */
+    private static final long PREFETCH_TERMINATION_SECONDS = 120;
 
     @Inject
     ThreeScaleExportService exportService;
@@ -77,12 +85,14 @@ public class ConversionController {
 
         ClusterCapabilities caps = resolveCapabilities();
 
+        Map<String, PrefetchedExport> exports = prefetchExports(
+                request.threescaleUrl, request.accessToken, request.serviceIds);
+
         List<Map<String, Object>> results = new ArrayList<>();
 
         for (String serviceId : request.serviceIds) {
             try {
-                ApiService service = exportService.exportService(
-                        request.threescaleUrl, request.accessToken, serviceId);
+                ApiService service = requirePrefetchedService(exports.get(serviceId), serviceId);
                 Set<String> supportedPolicies = (request.supportedPolicies != null)
                         ? new HashSet<>(request.supportedPolicies)
                         : Set.of();
@@ -150,8 +160,74 @@ public class ConversionController {
         )).build();
     }
 
+    /**
+     * Pre-fetch all service exports concurrently (virtual threads). Convert and history
+     * persistence stay sequential in {@link #convert} for transactional safety.
+     */
+    private Map<String, PrefetchedExport> prefetchExports(
+            String threescaleUrl, String accessToken, List<String> serviceIds) {
+        Map<String, PrefetchedExport> exports = new ConcurrentHashMap<>();
+        if (serviceIds == null || serviceIds.isEmpty()) {
+            return exports;
+        }
+        ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+        try {
+            List<CompletableFuture<Void>> futures = new ArrayList<>(serviceIds.size());
+            for (String serviceId : serviceIds) {
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        ApiService service = exportService.exportService(
+                                threescaleUrl, accessToken, serviceId);
+                        exports.put(serviceId, PrefetchedExport.ok(service));
+                    } catch (Exception e) {
+                        exports.put(serviceId, PrefetchedExport.failed(e));
+                    }
+                }, pool));
+            }
+            CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+        } finally {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(PREFETCH_TERMINATION_SECONDS, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException ie) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+        return exports;
+    }
+
+    private static ApiService requirePrefetchedService(PrefetchedExport prefetched, String serviceId) {
+        if (prefetched == null) {
+            throw new IllegalStateException("Missing prefetched export for service " + serviceId);
+        }
+        if (prefetched.error() != null) {
+            throw wrap(prefetched.error());
+        }
+        return prefetched.service();
+    }
+
+    private static RuntimeException wrap(Exception error) {
+        if (error instanceof RuntimeException runtime) {
+            return runtime;
+        }
+        return new RuntimeException(error);
+    }
+
     private ClusterCapabilities resolveCapabilities() {
         ClusterVersionsResponse versions = clusterVersionService.resolveFromSettings(false);
         return versions != null ? versions.capabilities : null;
+    }
+
+    private record PrefetchedExport(ApiService service, Exception error) {
+        static PrefetchedExport ok(ApiService service) {
+            return new PrefetchedExport(service, null);
+        }
+
+        static PrefetchedExport failed(Exception error) {
+            return new PrefetchedExport(null, error);
+        }
     }
 }
