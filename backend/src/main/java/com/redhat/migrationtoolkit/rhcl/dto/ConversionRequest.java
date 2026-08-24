@@ -13,7 +13,7 @@ public class ConversionRequest {
     public String tenant;
     public String namespace;
     @NotEmpty
-    public List<String> serviceIds;
+    public List<@NotBlank String> serviceIds;
     /** External backend URL (e.g. https://foo.ecs.us-east-2.on.aws/api).
      * When specified, generates ServiceEntry + DestinationRule + Host rewrite. */
     public String externalBackendUrl;
