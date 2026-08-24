@@ -218,7 +218,11 @@ class MigrationWorkflowIT {
                 .when().get("/api/history")
                 .then()
                 .statusCode(200)
-                .body("$", instanceOf(List.class));
+                .body("items", instanceOf(List.class))
+                .body("total", equalTo(0))
+                .body("page", equalTo(0))
+                .body("size", equalTo(50))
+                .body("hasMore", equalTo(false));
     }
 
     @Test

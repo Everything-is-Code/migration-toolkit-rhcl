@@ -222,6 +222,38 @@ class ValidationServiceTest {
                 && i.message.contains("placeholder")));
     }
 
+    @Test
+    void validate_parsesYamlOncePerFile() {
+        service.parseInvocations.set(0);
+        Map<String, String> files = Map.of("gateway.yaml", """
+                apiVersion: gateway.networking.k8s.io/v1
+                kind: Gateway
+                metadata:
+                  name: test-gateway
+                  namespace: test-ns
+                spec:
+                  gatewayClassName: istio
+                """);
+        ValidationResult result = service.validate(files);
+        assertEquals(1, service.parseInvocations.get(),
+                "SnakeYAML loadAll must run once per file across all validators");
+        assertTrue(result.items.stream().anyMatch(i -> i.check.contains("YAML Syntax")));
+        assertTrue(result.items.stream().anyMatch(i -> i.check.startsWith("CRD:")));
+        assertTrue(result.items.stream().anyMatch(i -> i.check.startsWith("Namespace:")));
+    }
+
+    @Test
+    void validate_invalidYaml_doesNotRethrowFromLaterValidators() {
+        service.parseInvocations.set(0);
+        Map<String, String> files = Map.of("bad.yaml", "{{invalid: yaml: content: :");
+        ValidationResult result = service.validate(files);
+        assertFalse(result.valid);
+        assertEquals(1, service.parseInvocations.get());
+        assertTrue(result.items.stream().anyMatch(i -> "ERROR".equals(i.status)
+                && i.check.contains("YAML Syntax")));
+        assertTrue(result.items.stream().noneMatch(i -> i.check.startsWith("CRD:")));
+    }
+
     // ── Overall validity ──────────────────────────────────────────────────────
 
     @Test

@@ -41,12 +41,11 @@ public class HistoryController {
     @Operation(summary = "Get conversion history (lightweight response excluding exportedYaml)")
     public Response getHistory(@QueryParam("page") @DefaultValue("0") int page,
                                @QueryParam("size") @DefaultValue("50") int size) {
-        List<ConversionHistoryEntity> history = ConversionHistoryEntity
-                .find("ORDER BY createdAt DESC")
-                .page(page, size)
-                .list();
+        var query = ConversionHistoryEntity.find("ORDER BY createdAt DESC");
+        long total = query.count();
+        List<ConversionHistoryEntity> history = query.page(page, size).list();
         // Exclude exportedYaml from the list API due to its large size
-        List<Map<String, Object>> result = history.stream().map(h -> {
+        List<Map<String, Object>> items = history.stream().map(h -> {
             Map<String, Object> m = new java.util.LinkedHashMap<>();
             m.put("id",               h.id);
             m.put("source",           h.source);
@@ -63,7 +62,8 @@ public class HistoryController {
             m.put("createdAt",        h.createdAt);
             return m;
         }).collect(java.util.stream.Collectors.toList());
-        return Response.ok(result).build();
+        // Breaking JSON shape (bare array → envelope) for FE WU-2 Pagination.
+        return Response.ok(pageEnvelope(items, total, page, size)).build();
     }
 
     @GET
@@ -79,9 +79,23 @@ public class HistoryController {
 
     @GET
     @Path("/projects")
-    @Operation(summary = "Get all projects")
-    public Response getProjects() {
-        return Response.ok(ProjectEntity.listAll()).build();
+    @Operation(summary = "Get projects (paginated)")
+    public Response getProjects(@QueryParam("page") @DefaultValue("0") int page,
+                                @QueryParam("size") @DefaultValue("50") int size) {
+        var query = ProjectEntity.findAll();
+        long total = query.count();
+        List<ProjectEntity> items = query.page(page, size).list();
+        return Response.ok(pageEnvelope(items, total, page, size)).build();
+    }
+
+    private static Map<String, Object> pageEnvelope(Object items, long total, int page, int size) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("items", items);
+        body.put("total", total);
+        body.put("page", page);
+        body.put("size", size);
+        body.put("hasMore", (long) (page + 1) * size < total);
+        return body;
     }
 
     /** Download history exported YAML as a ZIP file */
