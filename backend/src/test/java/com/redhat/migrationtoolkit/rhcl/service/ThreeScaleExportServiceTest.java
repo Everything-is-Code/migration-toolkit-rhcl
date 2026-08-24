@@ -589,6 +589,119 @@ class ThreeScaleExportServiceTest {
         assertFalse(a.contains("secret-a"), "Raw token must not appear in cache key");
     }
 
+    // ── WU-A: parallel fetchExport (F2) + catalog reuse (F3) ─────────────────
+
+    @Test
+    void exportService_fetchesIndependentLegsAndReturnsCompletePayload() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubMinimalExport(client, "7", "Full");
+        org.mockito.Mockito.when(client.getPolicies(eq("7"), anyString()))
+                .thenReturn(Map.of("policies_config", List.of(
+                        Map.of("name", "logging", "version", "1.0", "enabled", true,
+                                "configuration", Map.of()))));
+        org.mockito.Mockito.when(client.getMappingRules(eq("7"), anyString()))
+                .thenReturn(Map.of("mapping_rules", List.of(
+                        Map.of("mapping_rule", Map.of(
+                                "id", 1, "http_method", "GET", "pattern", "/",
+                                "metric_system_name", "hits", "last", false)))));
+        org.mockito.Mockito.when(client.getMetrics(eq("7"), anyString()))
+                .thenReturn(Map.of("metrics", List.of(
+                        Map.of("metric", Map.of(
+                                "id", 1, "friendly_name", "Hits", "system_name", "hits",
+                                "unit", "hit")))));
+        org.mockito.Mockito.when(client.getApplicationPlans(eq("7"), anyString()))
+                .thenReturn(Map.of("plans", List.of(
+                        Map.of("application_plan", Map.of(
+                                "id", 9, "name", "Basic", "system_name", "basic")))));
+        org.mockito.Mockito.when(client.getApplicationPlanLimits(eq("9"), anyString()))
+                .thenReturn(Map.of("limits", List.of()));
+
+        ApiService exported = service.exportService(client, "https://3scale.example", "tok", "7");
+
+        assertEquals("Full", exported.name);
+        assertEquals(1, exported.policies.size());
+        assertEquals("logging", exported.policies.get(0).name);
+        assertEquals(1, exported.mappingRules.size());
+        assertEquals(1, exported.metrics.size());
+        assertEquals(1, exported.applicationPlans.size());
+        org.mockito.Mockito.verify(client).getPolicies(eq("7"), anyString());
+        org.mockito.Mockito.verify(client).getMappingRules(eq("7"), anyString());
+        org.mockito.Mockito.verify(client).getMetrics(eq("7"), anyString());
+        org.mockito.Mockito.verify(client).getApplications(anyString(), anyInt(), anyInt());
+        org.mockito.Mockito.verify(client).getApplicationPlans(eq("7"), anyString());
+        org.mockito.Mockito.verify(client).getBackendUsages(eq("7"), anyString());
+    }
+
+    @Test
+    void exportService_usesBackendCatalog_skipsPerBackendGet() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubMinimalExport(client, "7", "Catalog");
+        org.mockito.Mockito.when(client.getBackends(anyString(), anyInt(), anyInt()))
+                .thenReturn(Map.of("backend_apis", List.of(
+                        Map.of("backend_api", Map.of(
+                                "id", 10, "name", "Orders", "system_name", "orders",
+                                "private_endpoint", "https://orders.example.com")))));
+        org.mockito.Mockito.when(client.getBackendUsages(eq("7"), anyString()))
+                .thenReturn(List.of(Map.of("backend_usage", Map.of(
+                        "backend_id", 10, "path", "/api", "weight", 2))));
+
+        ApiService exported = service.exportService(client, "https://3scale.example", "tok", "7");
+
+        assertEquals(1, exported.backends.size());
+        assertEquals("Orders", exported.backends.get(0).name);
+        assertEquals("/api", exported.backends.get(0).path);
+        assertEquals(2, exported.backends.get(0).weight);
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.atLeastOnce())
+                .getBackends(anyString(), anyInt(), anyInt());
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getBackend(anyString(), anyString());
+    }
+
+    @Test
+    void exportService_fetchExportLegsOverlapInTime() throws Exception {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubMinimalExport(client, "7", "Parallel");
+
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(2);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+
+        org.mockito.Mockito.when(client.getPolicies(eq("7"), anyString()))
+                .thenAnswer(inv -> {
+                    entered.countDown();
+                    assertTrue(release.await(3, java.util.concurrent.TimeUnit.SECONDS),
+                            "Policies leg must overlap with another export leg");
+                    return Map.of("policies_config", List.of());
+                });
+        org.mockito.Mockito.when(client.getMappingRules(eq("7"), anyString()))
+                .thenAnswer(inv -> {
+                    entered.countDown();
+                    assertTrue(release.await(3, java.util.concurrent.TimeUnit.SECONDS),
+                            "Mapping-rules leg must overlap with another export leg");
+                    return Map.of("mapping_rules", List.of());
+                });
+
+        Thread releaser = new Thread(() -> {
+            try {
+                assertTrue(entered.await(3, java.util.concurrent.TimeUnit.SECONDS),
+                        "Both policies and mapping-rules legs must start concurrently");
+                release.countDown();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        releaser.start();
+
+        ApiService exported = service.exportService(client, "https://3scale.example", "tok", "7");
+        releaser.join(5_000);
+
+        assertEquals("Parallel", exported.name);
+        org.mockito.Mockito.verify(client).getPolicies(eq("7"), anyString());
+        org.mockito.Mockito.verify(client).getMappingRules(eq("7"), anyString());
+    }
+
     private static void stubMinimalExport(
             com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client,
             String serviceId,
@@ -607,6 +720,8 @@ class ThreeScaleExportServiceTest {
                 .thenReturn(Map.of("metrics", List.of()));
         org.mockito.Mockito.when(client.getBackendUsages(eq(serviceId), anyString()))
                 .thenReturn(List.of());
+        org.mockito.Mockito.when(client.getBackends(anyString(), anyInt(), anyInt()))
+                .thenReturn(Map.of("backend_apis", List.of()));
         org.mockito.Mockito.when(client.getApplications(anyString(), anyInt(), anyInt()))
                 .thenReturn(Map.of("applications", List.of()));
         org.mockito.Mockito.when(client.getApplicationPlans(eq(serviceId), anyString()))
