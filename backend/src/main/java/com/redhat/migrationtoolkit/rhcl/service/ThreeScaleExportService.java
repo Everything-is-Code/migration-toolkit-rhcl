@@ -477,13 +477,43 @@ public class ThreeScaleExportService {
         service.systemName = (String) svc.get("system_name");
         service.backendVersion = (String) svc.get("backend_version");
         service.deploymentOption = (String) svc.get("deployment_option");
-        service.policies = fetchPolicies(client, serviceId, accessToken);
-        service.mappingRules = fetchMappingRules(client, serviceId, accessToken);
-        service.metrics = fetchMetrics(client, serviceId, accessToken);
         service.authentication = extractAuthentication(svc);
-        service.backends = fetchBackendsForService(client, serviceId, accessToken);
-        service.applications = fetchApplications(client, url, serviceId, accessToken);
-        service.applicationPlans = fetchApplicationPlans(client, serviceId, accessToken);
+
+        // Parallelize independent Admin API legs (F2). Backends reuse the shared catalog (F3).
+        ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+        try {
+            CompletableFuture<List<Policy>> policiesF = CompletableFuture.supplyAsync(
+                    () -> fetchPolicies(client, serviceId, accessToken), pool);
+            CompletableFuture<List<MappingRule>> rulesF = CompletableFuture.supplyAsync(
+                    () -> fetchMappingRules(client, serviceId, accessToken), pool);
+            CompletableFuture<List<Metric>> metricsF = CompletableFuture.supplyAsync(
+                    () -> fetchMetrics(client, serviceId, accessToken), pool);
+            CompletableFuture<List<Backend>> backendsF = CompletableFuture.supplyAsync(() -> {
+                Map<String, Backend> catalog = cachedBackendCatalog(client, url, accessToken);
+                return resolveBackendsFromUsages(client, serviceId, accessToken, catalog);
+            }, pool);
+            CompletableFuture<List<Application>> appsF = CompletableFuture.supplyAsync(
+                    () -> fetchApplications(client, url, serviceId, accessToken), pool);
+            CompletableFuture<List<ApplicationPlan>> plansF = CompletableFuture.supplyAsync(
+                    () -> fetchApplicationPlans(client, serviceId, accessToken), pool);
+
+            service.policies = policiesF.join();
+            service.mappingRules = rulesF.join();
+            service.metrics = metricsF.join();
+            service.backends = backendsF.join();
+            service.applications = appsF.join();
+            service.applicationPlans = plansF.join();
+        } finally {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(LIST_ENRICH_TERMINATION_SECONDS, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException ie) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
 
         return service;
     }
@@ -553,44 +583,6 @@ public class ThreeScaleExportService {
             return metrics;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch metrics for service %s: %s", serviceId, e.getMessage());
-            return Collections.emptyList();
-        }
-    }
-
-    private List<Backend> fetchBackendsForService(ThreeScaleClient client, String serviceId, String accessToken) {
-        try {
-            // backend_usages returns a JSON array directly (not wrapped in an object)
-            List<Map<String, Object>> usages = client.getBackendUsages(serviceId, accessToken);
-            List<Backend> backends = new ArrayList<>();
-            for (Map<String, Object> uw : usages) {
-                Map<String, Object> usage = (Map<String, Object>) uw.get("backend_usage");
-                if (usage == null) {
-                    continue;
-                }
-                Object backendIdObj = usage.get("backend_id");
-                if (backendIdObj == null) {
-                    continue;
-                }
-                String backendId = String.valueOf(backendIdObj);
-                try {
-                    Map<String, Object> bResp = client.getBackend(backendId, accessToken);
-                    Map<String, Object> b = (Map<String, Object>) bResp.get("backend_api");
-                    if (b == null) {
-                        continue;
-                    }
-                    Backend backend = new Backend();
-                    backend.id = String.valueOf(b.get("id"));
-                    backend.name = (String) b.get("name");
-                    backend.systemName = (String) b.get("system_name");
-                    backend.privateEndpoint = (String) b.get("private_endpoint");
-                    backends.add(cloneBackendWithUsage(backend, usage));
-                } catch (Exception ex) {
-                    LOG.warnf(ex, "Failed to fetch backend %s: %s", backendId, ex.getMessage());
-                }
-            }
-            return backends;
-        } catch (Exception e) {
-            LOG.warnf(e, "Failed to fetch backend usages for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
         }
     }
