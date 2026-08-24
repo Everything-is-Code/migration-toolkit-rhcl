@@ -8,10 +8,10 @@ import org.jboss.logging.Logger;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @ApplicationScoped
 public class ValidationService {
@@ -33,6 +33,9 @@ public class ValidationService {
             "v1"
     );
 
+    /** Package-visible for unit tests (F6 parse-once). */
+    final AtomicInteger parseInvocations = new AtomicInteger();
+
     public ValidationResult validate(Map<String, String> yamlFiles) {
         ValidationResult result = new ValidationResult();
         result.items = new ArrayList<>();
@@ -45,10 +48,19 @@ public class ValidationService {
                 continue;
             }
 
-            result.items.addAll(validateYamlSyntax(filename, content));
-            result.items.addAll(validateCrd(filename, content));
-            result.items.addAll(validateNamespace(filename, content));
-            result.items.addAll(validateReferences(filename, content, yamlFiles));
+            List<Map<String, Object>> docs;
+            try {
+                docs = loadAllDocs(content);
+            } catch (Exception e) {
+                result.items.add(new ValidationItem(
+                        "YAML Syntax: " + filename, "ERROR", "Invalid YAML: " + e.getMessage()));
+                continue;
+            }
+
+            result.items.addAll(validateYamlSyntax(filename, docs));
+            result.items.addAll(validateCrd(filename, docs));
+            result.items.addAll(validateNamespace(filename, docs));
+            result.items.addAll(validateReferences(filename, content, docs, yamlFiles));
         }
 
         result.valid = result.items.stream().noneMatch(i -> "ERROR".equals(i.status));
@@ -57,6 +69,7 @@ public class ValidationService {
 
     /** Split YAML by --- and return each document as a list. Handles multi-document YAML via loadAll(). */
     private List<Map<String, Object>> loadAllDocs(String content) {
+        parseInvocations.incrementAndGet();
         Yaml yaml = new Yaml();
         List<Map<String, Object>> docs = new ArrayList<>();
         for (Object obj : yaml.loadAll(content)) {
@@ -69,77 +82,60 @@ public class ValidationService {
         return docs;
     }
 
-    private List<ValidationItem> validateYamlSyntax(String filename, String content) {
-        try {
-            List<Map<String, Object>> docs = loadAllDocs(content);
-            int count = docs.size();
-            String detail = count > 1
-                    ? "Valid YAML syntax (" + count + " documents)" : "Valid YAML syntax";
-            return List.of(new ValidationItem("YAML Syntax: " + filename, "OK", detail));
-        } catch (Exception e) {
-            return List.of(new ValidationItem(
-                    "YAML Syntax: " + filename, "ERROR", "Invalid YAML: " + e.getMessage()));
-        }
+    private List<ValidationItem> validateYamlSyntax(String filename, List<Map<String, Object>> docs) {
+        int count = docs.size();
+        String detail = count > 1
+                ? "Valid YAML syntax (" + count + " documents)" : "Valid YAML syntax";
+        return List.of(new ValidationItem("YAML Syntax: " + filename, "OK", detail));
     }
 
     @SuppressWarnings("unchecked")
-    private List<ValidationItem> validateCrd(String filename, String content) {
-        try {
-            List<Map<String, Object>> docs = loadAllDocs(content);
-            List<ValidationItem> items = new ArrayList<>();
-            for (Map<String, Object> doc : docs) {
-                String apiVersion = (String) doc.get("apiVersion");
-                if (apiVersion == null) {
-                    continue;
-                }
-                boolean known = KNOWN_CRDS.stream().anyMatch(apiVersion::startsWith);
-                if (known) {
-                    items.add(new ValidationItem("CRD: " + apiVersion, "OK", "Known CRD group"));
-                } else {
-                    items.add(new ValidationItem("CRD: " + apiVersion, "WARNING",
-                            "Unknown CRD - verify it is installed in the cluster"));
-                }
+    private List<ValidationItem> validateCrd(String filename, List<Map<String, Object>> docs) {
+        List<ValidationItem> items = new ArrayList<>();
+        for (Map<String, Object> doc : docs) {
+            String apiVersion = (String) doc.get("apiVersion");
+            if (apiVersion == null) {
+                continue;
             }
-            return items;
-        } catch (Exception e) {
-            LOG.debugf("CRD validation skipped for %s after parse failure: %s", filename, e.getMessage());
-            return Collections.emptyList();
+            boolean known = KNOWN_CRDS.stream().anyMatch(apiVersion::startsWith);
+            if (known) {
+                items.add(new ValidationItem("CRD: " + apiVersion, "OK", "Known CRD group"));
+            } else {
+                items.add(new ValidationItem("CRD: " + apiVersion, "WARNING",
+                        "Unknown CRD - verify it is installed in the cluster"));
+            }
         }
+        return items;
     }
 
     @SuppressWarnings("unchecked")
-    private List<ValidationItem> validateNamespace(String filename, String content) {
-        try {
-            List<Map<String, Object>> docs = loadAllDocs(content);
-            List<ValidationItem> items = new ArrayList<>();
-            for (Map<String, Object> doc : docs) {
-                Map<String, Object> metadata = (Map<String, Object>) doc.get("metadata");
-                if (metadata == null) {
-                    continue;
-                }
-                String kind = (String) doc.get("kind");
-                String label = kind != null ? filename + " (" + kind + ")" : filename;
-                String ns = (String) metadata.get("namespace");
-                if (ns == null || ns.isBlank()) {
-                    items.add(new ValidationItem("Namespace: " + label, "WARNING",
-                            "No namespace set, will use default namespace"));
-                } else {
-                    items.add(new ValidationItem("Namespace: " + label, "OK", "Namespace: " + ns));
-                }
+    private List<ValidationItem> validateNamespace(String filename, List<Map<String, Object>> docs) {
+        List<ValidationItem> items = new ArrayList<>();
+        for (Map<String, Object> doc : docs) {
+            Map<String, Object> metadata = (Map<String, Object>) doc.get("metadata");
+            if (metadata == null) {
+                continue;
             }
-            return items;
-        } catch (Exception e) {
-            LOG.debugf("Namespace validation skipped for %s after parse failure: %s", filename, e.getMessage());
-            return Collections.emptyList();
+            String kind = (String) doc.get("kind");
+            String label = kind != null ? filename + " (" + kind + ")" : filename;
+            String ns = (String) metadata.get("namespace");
+            if (ns == null || ns.isBlank()) {
+                items.add(new ValidationItem("Namespace: " + label, "WARNING",
+                        "No namespace set, will use default namespace"));
+            } else {
+                items.add(new ValidationItem("Namespace: " + label, "OK", "Namespace: " + ns));
+            }
         }
+        return items;
     }
 
     @SuppressWarnings("unchecked")
     private List<ValidationItem> validateReferences(String filename, String content,
+                                                     List<Map<String, Object>> docs,
                                                      Map<String, String> allFiles) {
         List<ValidationItem> items = new ArrayList<>();
         try {
-            for (Map<String, Object> doc : loadAllDocs(content)) {
+            for (Map<String, Object> doc : docs) {
                 String kind = (String) doc.get("kind");
 
                 if ("HTTPRoute".equals(kind)) {
@@ -185,8 +181,7 @@ public class ValidationService {
             }
 
         } catch (Exception e) {
-            // ignore parse errors, already caught in syntax check
-            LOG.debugf("Reference validation skipped for %s after parse failure: %s", filename, e.getMessage());
+            LOG.debugf("Reference validation skipped for %s: %s", filename, e.getMessage());
         }
         return items;
     }

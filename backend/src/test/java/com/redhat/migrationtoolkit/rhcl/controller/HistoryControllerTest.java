@@ -39,7 +39,11 @@ class HistoryControllerTest {
                 .when().get("/api/history")
                 .then()
                 .statusCode(200)
-                .body("$", instanceOf(java.util.List.class));
+                .body("items", instanceOf(java.util.List.class))
+                .body("total", notNullValue())
+                .body("page", equalTo(0))
+                .body("size", equalTo(50))
+                .body("hasMore", equalTo(false));
     }
 
     @Test
@@ -49,7 +53,9 @@ class HistoryControllerTest {
                 .queryParam("size", 10)
                 .when().get("/api/history")
                 .then()
-                .statusCode(200);
+                .statusCode(200)
+                .body("page", equalTo(0))
+                .body("size", equalTo(10));
     }
 
     @Test
@@ -60,8 +66,9 @@ class HistoryControllerTest {
                 .when().get("/api/history")
                 .then()
                 .statusCode(200)
-                .body("$", not(empty()))
-                .body("[0].serviceName", equalTo("Service Alpha"));
+                .body("items", not(empty()))
+                .body("items[0].serviceName", equalTo("Service Alpha"))
+                .body("total", greaterThanOrEqualTo(1));
     }
 
     @Test
@@ -72,7 +79,33 @@ class HistoryControllerTest {
                 .when().get("/api/history")
                 .then()
                 .statusCode(200)
-                .body("[0].id", notNullValue());
+                .body("items[0].id", notNullValue());
+    }
+
+    @Test
+    void getHistory_secondPage_hasMoreAndSlice() {
+        for (int i = 0; i < 3; i++) {
+            createHistory("svc-page-" + i, "Paged " + i, "COMPLETED", null);
+        }
+
+        given()
+                .queryParam("page", 0)
+                .queryParam("size", 2)
+                .when().get("/api/history")
+                .then()
+                .statusCode(200)
+                .body("items.size()", equalTo(2))
+                .body("total", greaterThanOrEqualTo(3))
+                .body("hasMore", equalTo(true));
+
+        given()
+                .queryParam("page", 1)
+                .queryParam("size", 2)
+                .when().get("/api/history")
+                .then()
+                .statusCode(200)
+                .body("items.size()", lessThanOrEqualTo(2))
+                .body("page", equalTo(1));
     }
 
     // ── GET /api/history/{id} ─────────────────────────────────────────────────
@@ -103,7 +136,23 @@ class HistoryControllerTest {
         given()
                 .when().get("/api/history/projects")
                 .then()
-                .statusCode(200);
+                .statusCode(200)
+                .body("items", instanceOf(java.util.List.class))
+                .body("total", notNullValue())
+                .body("page", equalTo(0))
+                .body("size", equalTo(50));
+    }
+
+    @Test
+    void getProjects_paginated_bounded() {
+        given()
+                .queryParam("page", 0)
+                .queryParam("size", 1)
+                .when().get("/api/history/projects")
+                .then()
+                .statusCode(200)
+                .body("size", equalTo(1))
+                .body("items.size()", lessThanOrEqualTo(1));
     }
 
     // ── GET /api/history/{id}/download ────────────────────────────────────────

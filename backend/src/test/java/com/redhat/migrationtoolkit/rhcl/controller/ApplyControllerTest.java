@@ -10,6 +10,8 @@ import io.fabric8.kubernetes.api.model.rbac.PolicyRule;
 import io.fabric8.kubernetes.api.model.rbac.PolicyRuleBuilder;
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.dsl.Resource;
+import io.fabric8.kubernetes.client.dsl.base.PatchContext;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.MockitoConfig;
@@ -28,6 +30,9 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @QuarkusTest
@@ -168,12 +173,13 @@ class ApplyControllerTest {
         live.setMetadata(new ObjectMeta());
         var mockGkrOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
         var mockGkrNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
-        var mockGkrRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        @SuppressWarnings("unchecked")
+        Resource<GenericKubernetesResource> mockGkrRes = Mockito.mock(Resource.class);
         when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
         when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
         when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
-        when(mockGkrRes.patch(any(), any())).thenReturn(live);
-        when(mockGkrRes.get()).thenReturn(live);
+        // Must match patch(PatchContext, T) — bare any()/any() can bind to patch(PatchContext, String).
+        when(mockGkrRes.patch(any(PatchContext.class), any(GenericKubernetesResource.class))).thenReturn(live);
 
         given()
                 .contentType(ContentType.JSON)
@@ -190,6 +196,51 @@ class ApplyControllerTest {
                 .statusCode(200)
                 .body("successCount", equalTo(1))
                 .body("errorCount", equalTo(0));
+
+        verify(mockGkrRes, never()).get();
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void applyFiles_nullPatchReturn_fallsBackToGet() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(new Namespace());
+
+        mockRbacFullSuccess();
+
+        GenericKubernetesResource live = new GenericKubernetesResource();
+        live.setKind("Gateway");
+        live.setMetadata(new ObjectMeta());
+        live.getMetadata().setName("my-gw");
+        var mockGkrOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGkrNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        @SuppressWarnings("unchecked")
+        Resource<GenericKubernetesResource> mockGkrRes = Mockito.mock(Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
+        when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
+        when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
+        when(mockGkrRes.patch(any(PatchContext.class), any(GenericKubernetesResource.class))).thenReturn(null);
+        when(mockGkrRes.get()).thenReturn(live);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "gateway.yaml": "apiVersion: gateway.networking.k8s.io/v1\\nkind: Gateway\\nmetadata:\\n  name: my-gw"
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(200)
+                .body("successCount", equalTo(1));
+
+        verify(mockGkrRes, times(1)).get();
     }
 
     @SuppressWarnings("unchecked")

@@ -140,14 +140,18 @@ public class ApplyController {
                     }
                     try {
                         ResourceDefinitionContext rdc = buildRdc(gkr.getApiVersion(), kind);
-                        client.genericKubernetesResources(rdc).inNamespace(ns).withName(name).patch(ctx, gkr);
+                        GenericKubernetesResource patched = client.genericKubernetesResources(rdc)
+                                .inNamespace(ns).withName(name).patch(ctx, gkr);
                         LOG.infof("Applied %s/%s to namespace %s", kind, name, ns);
                         resourceResults.add(new ResourceResult(fileName, kind, name, ns, true, null));
 
-                        // Export the actual resource from the cluster (equivalent to -o yaml)
+                        // Prefer SSA patch return for live YAML; fall back to GET when null.
                         try {
-                            GenericKubernetesResource live = client.genericKubernetesResources(rdc)
-                                    .inNamespace(ns).withName(name).get();
+                            GenericKubernetesResource live = patched;
+                            if (live == null) {
+                                live = client.genericKubernetesResources(rdc)
+                                        .inNamespace(ns).withName(name).get();
+                            }
                             if (live != null) {
                                 if (exportedSb.length() > 0) {
                                     exportedSb.append("\n---\n");
