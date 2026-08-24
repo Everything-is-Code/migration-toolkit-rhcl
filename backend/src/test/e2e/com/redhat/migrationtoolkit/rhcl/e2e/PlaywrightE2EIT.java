@@ -111,7 +111,8 @@ class PlaywrightE2EIT {
         assertNotNull(response);
         assertEquals(200, response.status());
         String content = response.text();
-        assertTrue(content.startsWith("["), "History should return JSON array");
+        assertTrue(content.contains("\"items\""), "History should return paginated envelope with items");
+        assertTrue(content.contains("\"hasMore\""), "History envelope should include hasMore");
     }
 
     @Test
