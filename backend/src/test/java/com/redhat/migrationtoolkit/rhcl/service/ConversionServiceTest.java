@@ -14,6 +14,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -629,6 +632,57 @@ class ConversionServiceTest {
     @Test
     void detectBackendType_null_isInternal() {
         assertEquals(ConversionService.BackendType.INTERNAL, service.detectBackendType(null));
+    }
+
+    // ── README notes collector (#170) ─────────────────────────────────────────
+
+    @Test
+    void readmeNotes_skipsNullAndBlank_andAllIsImmutableCopy() {
+        ConversionService.ReadmeNotes notes = new ConversionService.ReadmeNotes();
+        notes.add(null);
+        notes.add("");
+        notes.add("   ");
+        notes.add("## A\n");
+        notes.add("## B\n");
+
+        List<String> all = notes.all();
+        assertEquals(List.of("## A\n", "## B\n"), all);
+        assertThrows(UnsupportedOperationException.class, () -> all.add("## C\n"));
+
+        notes.add("## C\n");
+        assertEquals(List.of("## A\n", "## B\n"), all,
+                "all() must be a snapshot copy, not a live view");
+        assertEquals(List.of("## A\n", "## B\n", "## C\n"), notes.all());
+    }
+
+    @Test
+    void generateReadme_acceptsSingleReadmeNotesCollector_notPerPolicyNoteStrings() {
+        Method generateReadme = Arrays.stream(ConversionService.class.getDeclaredMethods())
+                .filter(m -> "generateReadme".equals(m.getName()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("generateReadme not found"));
+        assertTrue(Modifier.isPrivate(generateReadme.getModifiers()));
+
+        Class<?>[] params = generateReadme.getParameterTypes();
+        long readmeNotesParams = Arrays.stream(params)
+                .filter(p -> p == ConversionService.ReadmeNotes.class)
+                .count();
+        assertEquals(1, readmeNotesParams,
+                "generateReadme must take exactly one ReadmeNotes collector");
+
+        // Structural Strings may remain (name, namespace, externalHost, …) but there must be
+        // no trailing run of four+ consecutive String params after the last non-String —
+        // the old per-policy note slots were four consecutive Strings before install args.
+        int lastNonString = -1;
+        for (int i = 0; i < params.length; i++) {
+            if (params[i] != String.class) {
+                lastNonString = i;
+            }
+        }
+        int trailingStrings = params.length - 1 - lastNonString;
+        assertTrue(trailingStrings <= 2,
+                "generateReadme must not end with a long trailing String note arg list; got "
+                        + trailingStrings + " trailing Strings after last non-String param");
     }
 
     // ── README content ────────────────────────────────────────────────────────
