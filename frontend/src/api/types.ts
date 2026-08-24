@@ -186,3 +186,12 @@ export interface ConversionHistory {
   exportedYaml?: string;
   createdAt: string;
 }
+
+/** Paginated list from GET /api/history (and /api/history/projects). */
+export interface HistoryListPage {
+  items: ConversionHistory[];
+  total: number;
+  page: number;
+  size: number;
+  hasMore: boolean;
+}

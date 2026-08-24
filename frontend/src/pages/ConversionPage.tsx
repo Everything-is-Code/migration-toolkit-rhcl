@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { loadSupportedPolicies } from './SupportedPoliciesPage';
+import { loadSupportedPolicies } from './supportedPolicies';
 import { corsConversionHintKey } from './clusterCapabilityUi';
 import {
   PageSection,

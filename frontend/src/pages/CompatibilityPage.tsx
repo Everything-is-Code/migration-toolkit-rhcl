@@ -23,7 +23,7 @@ import { servicesApi } from '../api/client';
 import { CompatibilityResult } from '../api/types';
 import { AppState } from '../App';
 import { useNavigate } from 'react-router-dom';
-import { loadSupportedPolicies } from './SupportedPoliciesPage';
+import { loadSupportedPolicies } from './supportedPolicies';
 import { runCompatibilityChecks } from './compatibilityChecks';
 import {
   PF_DANGER,

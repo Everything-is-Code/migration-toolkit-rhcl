@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PageSection,
   PageSectionVariants,
@@ -128,10 +128,26 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
     navigate('/compatibility');
   };
 
-  const filtered = services.filter(s =>
-    s.name.toLowerCase().includes(search.toLowerCase()) ||
-    (s.systemName || '').toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(
+    () =>
+      services.filter(
+        s =>
+          s.name.toLowerCase().includes(search.toLowerCase()) ||
+          (s.systemName || '').toLowerCase().includes(search.toLowerCase()),
+      ),
+    [services, search],
   );
+
+  const enabledPoliciesById = useMemo(() => {
+    const map = new Map<string, typeof services[number]['policies']>();
+    for (const s of services) {
+      map.set(
+        s.id,
+        (s.policies ?? []).filter(p => p.enabled),
+      );
+    }
+    return map;
+  }, [services]);
 
   // Keep next enabled when total is unknown but hasMore.
   const itemCount = total ?? ((page - 1) * perPage + services.length + (hasMore ? 1 : 0));
@@ -290,7 +306,7 @@ const APISelectionPage: React.FC<Props> = ({ appState, setAppState }) => {
                 {filtered.map(service => {
                   const isSelected = selectedId === service.id;
                   const allPolicies = service.policies ?? [];
-                  const enabledPolicies = allPolicies.filter(p => p.enabled);
+                  const enabledPolicies = enabledPoliciesById.get(service.id) ?? [];
                   return (
                     <DataListItem
                       key={service.id}

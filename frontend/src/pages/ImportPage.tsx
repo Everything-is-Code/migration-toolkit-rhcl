@@ -1,4 +1,4 @@
-import React, { useState, useRef, Component, ErrorInfo, ReactNode, useCallback } from 'react';
+import React, { useState, useRef, Component, ErrorInfo, ReactNode, useCallback, useMemo } from 'react';
 import {
   PageSection,
   PageSectionVariants,
@@ -397,12 +397,19 @@ const SimpleYamlTabs: React.FC<SimpleTabs> = ({ files, edits, onEdit }) => {
   const [active, setActive] = useState(0);
   const [mode, setMode] = useState<'view' | 'edit' | 'diff'>('view');
 
-  if (files.length === 0) return null;
   const current = files[active] ?? files[0];
-  const content = edits[current.name] ?? current.content;
-  const isEdited = edits[current.name] !== undefined && edits[current.name] !== current.content;
+  const content = current ? (edits[current.name] ?? current.content) : '';
+  const isEdited = Boolean(
+    current && edits[current.name] !== undefined && edits[current.name] !== current.content,
+  );
+  const originalContent = current?.content ?? '';
 
-  const diffLines = mode === 'diff' ? computeDiff(current.content, content) : [];
+  const diffLines = useMemo(
+    () => (mode === 'diff' && current ? computeDiff(originalContent, content) : []),
+    [mode, originalContent, content, current],
+  );
+
+  if (files.length === 0 || !current) return null;
 
   const panelId = 'yaml-panel';
 

@@ -16,6 +16,8 @@ import {
   Checkbox,
   Modal,
   ModalVariant,
+  Pagination,
+  PaginationVariant,
 } from '@patternfly/react-core';
 import {
   HistoryIcon,
@@ -34,6 +36,8 @@ import { getTimezone } from '../utils/timezone';
 import { PF_COLOR_MUTED } from '../styles/pfTokens';
 import shared from '../styles/shared.module.css';
 import styles from './HistoryPage.module.css';
+
+const DEFAULT_PAGE_SIZE = 50;
 
 const formatDate = (iso: string): string => {
   try {
@@ -72,15 +76,23 @@ const HistoryPage: React.FC = () => {
   const [deleteModal, setDeleteModal] = useState(false);
   const [deleting, setDeleting]       = useState(false);
   const [toast, setToast]             = useState<string | null>(null);
+  // PF Pagination is 1-based; history API page is 0-based.
+  const [page, setPage]               = useState(1);
+  const [perPage, setPerPage]         = useState(DEFAULT_PAGE_SIZE);
+  const [total, setTotal]             = useState(0);
 
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    historyApi.list()
-      .then(r => setHistory(Array.isArray(r.data) ? r.data : []))
+    historyApi.list(page - 1, perPage)
+      .then(r => {
+        const data = r.data;
+        setHistory(Array.isArray(data?.items) ? data.items : []);
+        setTotal(typeof data?.total === 'number' ? data.total : 0);
+      })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, perPage]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -92,7 +104,11 @@ const HistoryPage: React.FC = () => {
   const toggleSelect = (id: number) => {
     setSelected(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -108,7 +124,11 @@ const HistoryPage: React.FC = () => {
   const toggleExpand = (id: number) => {
     setExpanded(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -226,8 +246,27 @@ const HistoryPage: React.FC = () => {
                         : t('history.selectAll')}
                     </span>
                   </div>
-                  <Badge isRead>{t('history.countBadge', { count: history.length })}</Badge>
+                  <Badge isRead>{t('history.countBadge', { count: total })}</Badge>
                 </div>
+
+                <Pagination
+                  itemCount={total}
+                  page={page}
+                  perPage={perPage}
+                  perPageOptions={[
+                    { title: '20', value: 20 },
+                    { title: '50', value: 50 },
+                    { title: '100', value: 100 },
+                  ]}
+                  onSetPage={(_e, newPage) => setPage(newPage)}
+                  onPerPageSelect={(_e, newPerPage) => {
+                    setPerPage(newPerPage);
+                    setPage(1);
+                  }}
+                  isCompact
+                  isDisabled={loading}
+                  style={{ padding: '8px 16px' }}
+                />
 
                 {/* Table */}
                 <div style={{ overflowX: 'auto' }}>
@@ -397,6 +436,25 @@ const HistoryPage: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+
+                <Pagination
+                  itemCount={total}
+                  page={page}
+                  perPage={perPage}
+                  perPageOptions={[
+                    { title: '20', value: 20 },
+                    { title: '50', value: 50 },
+                    { title: '100', value: 100 },
+                  ]}
+                  onSetPage={(_e, newPage) => setPage(newPage)}
+                  onPerPageSelect={(_e, newPerPage) => {
+                    setPerPage(newPerPage);
+                    setPage(1);
+                  }}
+                  variant={PaginationVariant.bottom}
+                  isDisabled={loading}
+                  style={{ padding: '8px 16px' }}
+                />
               </>
             )}
           </CardBody>
