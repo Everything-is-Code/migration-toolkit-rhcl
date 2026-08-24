@@ -56,9 +56,14 @@ public class ThreeScaleExportService {
     public static final int DEFAULT_UI_PAGE_SIZE = 20;
     public static final int MAX_UI_PAGE_SIZE = 100;
 
+    /** Safety cap for sub-resource Admin API page loops (F10). */
+    static final int MAX_SUBRESOURCE_PAGES = 20;
+
     private final ConcurrentHashMap<String, CachedExport> exportCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CachedCatalog> backendCatalogCache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CachedApplications> applicationsCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CachedPlanLimits> planLimitsCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CachedAppKeys> applicationKeysCache = new ConcurrentHashMap<>();
 
     private record CachedExport(ApiService service, long expiresAtMs) {
     }
@@ -67,6 +72,12 @@ public class ThreeScaleExportService {
     }
 
     private record CachedApplications(List<Map<String, Object>> apps, long expiresAtMs) {
+    }
+
+    private record CachedPlanLimits(List<Map<String, Object>> limits, long expiresAtMs) {
+    }
+
+    private record CachedAppKeys(List<String> keys, long expiresAtMs) {
     }
 
     @ConfigProperty(name = "threescale.connect-timeout")
@@ -261,11 +272,13 @@ public class ThreeScaleExportService {
         return catalog;
     }
 
-    /** Clears export + backend-catalog + applications caches (tests / refresh). */
+    /** Clears export + backend-catalog + applications + plan-limits + app-keys caches (tests / refresh). */
     public void clearExportCache() {
         exportCache.clear();
         backendCatalogCache.clear();
         applicationsCache.clear();
+        planLimitsCache.clear();
+        applicationKeysCache.clear();
     }
 
     private ApiService mapServiceSummary(Map<String, Object> svc) {
@@ -365,7 +378,7 @@ public class ThreeScaleExportService {
     List<Backend> resolveBackendsFromUsages(ThreeScaleClient client, String serviceId,
                                             String accessToken, Map<String, Backend> catalog) {
         try {
-            List<Map<String, Object>> usages = client.getBackendUsages(serviceId, accessToken);
+            List<Map<String, Object>> usages = fetchAllBackendUsages(client, serviceId, accessToken);
             List<Backend> backends = new ArrayList<>();
             for (Map<String, Object> uw : usages) {
                 Map<String, Object> usage = (Map<String, Object>) uw.get("backend_usage");
@@ -495,7 +508,7 @@ public class ThreeScaleExportService {
             CompletableFuture<List<Application>> appsF = CompletableFuture.supplyAsync(
                     () -> fetchApplications(client, url, serviceId, accessToken), pool);
             CompletableFuture<List<ApplicationPlan>> plansF = CompletableFuture.supplyAsync(
-                    () -> fetchApplicationPlans(client, serviceId, accessToken), pool);
+                    () -> fetchApplicationPlans(client, url, serviceId, accessToken), pool);
 
             service.policies = policiesF.join();
             service.mappingRules = rulesF.join();
@@ -518,10 +531,13 @@ public class ThreeScaleExportService {
         return service;
     }
 
+    @SuppressWarnings("unchecked")
     private List<Policy> fetchPolicies(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
-            Map<String, Object> resp = client.getPolicies(serviceId, accessToken);
-            List<Map<String, Object>> policyList = extractList(resp, "policies_config");
+            List<Map<String, Object>> policyList = accumulatePagedMaps(
+                    (page, perPage) -> client.getPolicies(serviceId, accessToken, page, perPage),
+                    "policies_config",
+                    "policies for service " + serviceId);
             List<Policy> policies = new ArrayList<>();
             for (Map<String, Object> p : policyList) {
                 Policy policy = new Policy();
@@ -538,10 +554,13 @@ public class ThreeScaleExportService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     List<MappingRule> fetchMappingRules(ThreeScaleClient client, String serviceId, String accessToken) {
         try {
-            Map<String, Object> resp = client.getMappingRules(serviceId, accessToken);
-            List<Map<String, Object>> ruleList = extractList(resp, "mapping_rules");
+            List<Map<String, Object>> ruleList = accumulatePagedMaps(
+                    (page, perPage) -> client.getMappingRules(serviceId, accessToken, page, perPage),
+                    "mapping_rules",
+                    "mapping rules for service " + serviceId);
             List<MappingRule> rules = new ArrayList<>();
             for (Map<String, Object> rw : ruleList) {
                 Map<String, Object> r = (Map<String, Object>) rw.get("mapping_rule");
@@ -679,17 +698,50 @@ public class ThreeScaleExportService {
                     applicationId = appMap.get("user_key");
                 }
                 app.appId = applicationId != null ? String.valueOf(applicationId) : null;
-                app.keys = fetchApplicationKeys(client, app.id, accessToken);
                 applications.add(app);
             }
             if (!tenantApps.isEmpty() && matched == 0) {
                 LOG.debugf("No applications matched service_id=%s among %d tenant apps",
                         serviceId, tenantApps.size());
             }
+            fetchApplicationKeysInParallel(client, url, accessToken, applications);
             return applications;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch applications for service %s: %s", serviceId, e.getMessage());
             return Collections.emptyList();
+        }
+    }
+
+    private void fetchApplicationKeysInParallel(ThreeScaleClient client, String url, String accessToken,
+                                                List<Application> applications) {
+        if (applications.isEmpty()) {
+            return;
+        }
+        ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
+        try {
+            List<CompletableFuture<Void>> futures = new ArrayList<>(applications.size());
+            for (Application app : applications) {
+                futures.add(CompletableFuture.runAsync(() ->
+                        app.keys = fetchApplicationKeys(client, url, app.id, accessToken), pool));
+            }
+            for (CompletableFuture<Void> future : futures) {
+                try {
+                    future.join();
+                } catch (CompletionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    LOG.warnf(cause, "Failed to fetch application keys: %s", cause.getMessage());
+                }
+            }
+        } finally {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(LIST_ENRICH_TERMINATION_SECONDS, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException ie) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
@@ -751,10 +803,18 @@ public class ThreeScaleExportService {
     }
 
     @SuppressWarnings("unchecked")
-    List<String> fetchApplicationKeys(ThreeScaleClient client, String applicationId, String accessToken) {
+    List<String> fetchApplicationKeys(ThreeScaleClient client, String url, String applicationId, String accessToken) {
+        String cacheKey = credentialCacheKey(url, accessToken) + "|" + (applicationId == null ? "" : applicationId.trim());
+        long now = System.currentTimeMillis();
+        CachedAppKeys hit = applicationKeysCache.get(cacheKey);
+        if (hit != null && hit.expiresAtMs() > now) {
+            return hit.keys();
+        }
         try {
-            Map<String, Object> resp = client.getApplicationKeys(applicationId, accessToken);
-            List<Map<String, Object>> keyList = extractList(resp, "keys");
+            List<Map<String, Object>> keyList = accumulatePagedMaps(
+                    (page, perPage) -> client.getApplicationKeys(applicationId, accessToken, page, perPage),
+                    "keys",
+                    "application keys for " + applicationId);
             List<String> keys = new ArrayList<>();
             for (Map<String, Object> wrapper : keyList) {
                 Map<String, Object> keyMap = wrapper;
@@ -769,6 +829,7 @@ public class ThreeScaleExportService {
                     keys.add(String.valueOf(value));
                 }
             }
+            applicationKeysCache.put(cacheKey, new CachedAppKeys(keys, now + EXPORT_CACHE_TTL_MS));
             return keys;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch keys for application %s: %s", applicationId, e.getMessage());
@@ -780,12 +841,24 @@ public class ThreeScaleExportService {
      * Fetch application plans and their usage limits from the Admin API.
      */
     @SuppressWarnings("unchecked")
-    List<ApplicationPlan> fetchApplicationPlans(ThreeScaleClient client, String serviceId, String accessToken) {
+    List<ApplicationPlan> fetchApplicationPlans(ThreeScaleClient client, String url,
+                                                String serviceId, String accessToken) {
         try {
-            Map<String, Object> resp = client.getApplicationPlans(serviceId, accessToken);
-            List<Map<String, Object>> planList = extractList(resp, "plans");
-            if (planList.isEmpty()) {
-                planList = extractList(resp, "application_plans");
+            List<Map<String, Object>> planList = new ArrayList<>();
+            for (int page = 1; page <= MAX_SUBRESOURCE_PAGES; page++) {
+                Map<String, Object> resp = client.getApplicationPlans(serviceId, accessToken, page, pageSize);
+                List<Map<String, Object>> items = extractList(resp, "plans");
+                if (items.isEmpty()) {
+                    items = extractList(resp, "application_plans");
+                }
+                planList.addAll(items);
+                if (items.size() < pageSize) {
+                    break;
+                }
+                if (page == MAX_SUBRESOURCE_PAGES) {
+                    LOG.warnf("Possible truncation fetching application plans for service %s after %d full pages",
+                            serviceId, MAX_SUBRESOURCE_PAGES);
+                }
             }
             List<ApplicationPlan> plans = new ArrayList<>();
             for (Map<String, Object> wrapper : planList) {
@@ -799,9 +872,9 @@ public class ThreeScaleExportService {
                 plan.id = String.valueOf(planMap.get("id"));
                 plan.name = (String) planMap.get("name");
                 plan.systemName = (String) planMap.get("system_name");
-                plan.limits = fetchApplicationPlanLimits(client, plan.id, accessToken);
                 plans.add(plan);
             }
+            fetchPlanLimitsInParallel(client, url, accessToken, plans);
             return plans;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch application plans for service %s: %s", serviceId, e.getMessage());
@@ -809,12 +882,53 @@ public class ThreeScaleExportService {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> fetchApplicationPlanLimits(
-            ThreeScaleClient client, String planId, String accessToken) {
+    private void fetchPlanLimitsInParallel(ThreeScaleClient client, String url, String accessToken,
+                                           List<ApplicationPlan> plans) {
+        if (plans.isEmpty()) {
+            return;
+        }
+        ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor();
         try {
-            Map<String, Object> resp = client.getApplicationPlanLimits(planId, accessToken);
-            List<Map<String, Object>> limitList = extractList(resp, "limits");
+            List<CompletableFuture<Void>> futures = new ArrayList<>(plans.size());
+            for (ApplicationPlan plan : plans) {
+                futures.add(CompletableFuture.runAsync(() ->
+                        plan.limits = fetchApplicationPlanLimits(client, url, plan.id, accessToken), pool));
+            }
+            for (CompletableFuture<Void> future : futures) {
+                try {
+                    future.join();
+                } catch (CompletionException e) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    LOG.warnf(cause, "Failed to fetch plan limits: %s", cause.getMessage());
+                }
+            }
+        } finally {
+            pool.shutdown();
+            try {
+                if (!pool.awaitTermination(LIST_ENRICH_TERMINATION_SECONDS, TimeUnit.SECONDS)) {
+                    pool.shutdownNow();
+                }
+            } catch (InterruptedException ie) {
+                pool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    List<Map<String, Object>> fetchApplicationPlanLimits(
+            ThreeScaleClient client, String url, String planId, String accessToken) {
+        String cacheKey = credentialCacheKey(url, accessToken) + "|" + (planId == null ? "" : planId.trim());
+        long now = System.currentTimeMillis();
+        CachedPlanLimits hit = planLimitsCache.get(cacheKey);
+        if (hit != null && hit.expiresAtMs() > now) {
+            return hit.limits();
+        }
+        try {
+            List<Map<String, Object>> limitList = accumulatePagedMaps(
+                    (page, perPage) -> client.getApplicationPlanLimits(planId, accessToken, page, perPage),
+                    "limits",
+                    "plan limits for " + planId);
             List<Map<String, Object>> limits = new ArrayList<>();
             for (Map<String, Object> wrapper : limitList) {
                 Map<String, Object> limitMap = wrapper;
@@ -850,11 +964,53 @@ public class ThreeScaleExportService {
                     limits.add(normalized);
                 }
             }
+            planLimitsCache.put(cacheKey, new CachedPlanLimits(limits, now + EXPORT_CACHE_TTL_MS));
             return limits;
         } catch (Exception e) {
             LOG.warnf(e, "Failed to fetch limits for application plan %s: %s", planId, e.getMessage());
             return Collections.emptyList();
         }
+    }
+
+    @FunctionalInterface
+    private interface PagedMapFetcher {
+        Map<String, Object> fetch(int page, int perPage);
+    }
+
+    /**
+     * Accumulate Admin API map-wrapped list pages until a short page, or warn at
+     * {@link #MAX_SUBRESOURCE_PAGES}.
+     */
+    List<Map<String, Object>> accumulatePagedMaps(PagedMapFetcher fetcher, String listKey, String label) {
+        List<Map<String, Object>> all = new ArrayList<>();
+        for (int page = 1; page <= MAX_SUBRESOURCE_PAGES; page++) {
+            Map<String, Object> resp = fetcher.fetch(page, pageSize);
+            List<Map<String, Object>> items = extractList(resp, listKey);
+            all.addAll(items);
+            if (items.size() < pageSize) {
+                return all;
+            }
+        }
+        LOG.warnf("Possible truncation fetching %s after %d full pages (per_page=%d)",
+                label, MAX_SUBRESOURCE_PAGES, pageSize);
+        return all;
+    }
+
+    List<Map<String, Object>> fetchAllBackendUsages(ThreeScaleClient client, String serviceId, String accessToken) {
+        List<Map<String, Object>> all = new ArrayList<>();
+        for (int page = 1; page <= MAX_SUBRESOURCE_PAGES; page++) {
+            List<Map<String, Object>> items = client.getBackendUsages(serviceId, accessToken, page, pageSize);
+            if (items == null) {
+                items = List.of();
+            }
+            all.addAll(items);
+            if (items.size() < pageSize) {
+                return all;
+            }
+        }
+        LOG.warnf("Possible truncation fetching backend usages for service %s after %d full pages (per_page=%d)",
+                serviceId, MAX_SUBRESOURCE_PAGES, pageSize);
+        return all;
     }
 
     private Map<String, Object> safeGetProxyConfig(ThreeScaleClient client, String serviceId, String accessToken) {
