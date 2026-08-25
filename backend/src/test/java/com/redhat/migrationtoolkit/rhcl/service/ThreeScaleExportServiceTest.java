@@ -302,6 +302,83 @@ class ThreeScaleExportServiceTest {
                 "Failed limits fetch must leave empty limits, not invent values");
     }
 
+    // ── accumulatePagedMaps multi-key (#186) ─────────────────────────────────
+
+    @Test
+    void accumulatePagedMaps_fallbackKeyWhenPrimaryEmpty() {
+        Map<String, Object> page = Map.of(
+                "plans", List.of(),
+                "application_plans", List.of(Map.of("id", "fb-1")));
+        List<Map<String, Object>> all = service.accumulatePagedMaps(
+                (p, perPage) -> page,
+                new String[]{"plans", "application_plans"},
+                "plans dual-key");
+        assertEquals(1, all.size());
+        assertEquals("fb-1", String.valueOf(all.get(0).get("id")));
+    }
+
+    @Test
+    void accumulatePagedMaps_primaryKeyPreferredWhenBothPresent() {
+        Map<String, Object> page = Map.of(
+                "plans", List.of(Map.of("id", "primary")),
+                "application_plans", List.of(Map.of("id", "fallback")));
+        List<Map<String, Object>> all = service.accumulatePagedMaps(
+                (p, perPage) -> page,
+                new String[]{"plans", "application_plans"},
+                "plans dual-key");
+        assertEquals(1, all.size());
+        assertEquals("primary", String.valueOf(all.get(0).get("id")));
+    }
+
+    @Test
+    void accumulatePagedMaps_shortPageEndsPagination() {
+        service.pageSize = 2;
+        List<Map<String, Object>> all = service.accumulatePagedMaps(
+                (page, perPage) -> {
+                    if (page == 1) {
+                        return Map.of("plans", List.of(Map.of("id", "a"), Map.of("id", "b")));
+                    }
+                    if (page == 2) {
+                        return Map.of("plans", List.of(Map.of("id", "c")));
+                    }
+                    fail("Should not request page " + page);
+                    return Map.of();
+                },
+                new String[]{"plans"},
+                "short-page");
+        assertEquals(3, all.size());
+        assertEquals(List.of("a", "b", "c"),
+                all.stream().map(m -> String.valueOf(m.get("id"))).toList());
+    }
+
+    @Test
+    void fetchApplicationPlans_applicationPlansKey_andMultiPageMerge() {
+        service.pageSize = 2;
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+
+        Map<String, Object> p1 = Map.of("id", 1, "name", "P1", "system_name", "p1");
+        Map<String, Object> p2 = Map.of("id", 2, "name", "P2", "system_name", "p2");
+        Map<String, Object> p3 = Map.of("id", 3, "name", "P3", "system_name", "p3");
+        org.mockito.Mockito.when(client.getApplicationPlans(eq("svc-1"), anyString(), eq(1), eq(2)))
+                .thenReturn(Map.of("application_plans", List.of(
+                        Map.of("application_plan", p1),
+                        Map.of("application_plan", p2))));
+        org.mockito.Mockito.when(client.getApplicationPlans(eq("svc-1"), anyString(), eq(2), eq(2)))
+                .thenReturn(Map.of("application_plans", List.of(
+                        Map.of("application_plan", p3))));
+        org.mockito.Mockito.when(client.getApplicationPlanLimits(anyString(), anyString(), anyInt(), anyInt()))
+                .thenReturn(Map.of("limits", List.of()));
+
+        List<ApplicationPlan> plans = service.fetchApplicationPlans(client, "https://3scale.example", "svc-1", "tok");
+        assertEquals(3, plans.size());
+        assertEquals(List.of("1", "2", "3"), plans.stream().map(p -> p.id).toList());
+        org.mockito.Mockito.verify(client).getApplicationPlans(eq("svc-1"), anyString(), eq(1), eq(2));
+        org.mockito.Mockito.verify(client).getApplicationPlans(eq("svc-1"), anyString(), eq(2), eq(2));
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never())
+                .getApplicationPlans(eq("svc-1"), anyString(), eq(3), eq(2));
+    }
+
     // ── exportService() error handling ────────────────────────────────────────
 
     @Test
