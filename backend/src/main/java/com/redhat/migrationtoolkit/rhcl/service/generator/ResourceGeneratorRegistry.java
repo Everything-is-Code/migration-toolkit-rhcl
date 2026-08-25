@@ -73,8 +73,4 @@ public class ResourceGeneratorRegistry {
         }
         return generators;
     }
-
-    private static int priorityOf(ResourceGenerator generator) {
-        return ContributorOrdering.priorityOf(generator);
-    }
 }

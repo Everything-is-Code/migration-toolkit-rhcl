@@ -43,7 +43,7 @@ public class ConversionService {
     @Inject
     RateLimitSupport injectedRateLimitSupport;
 
-    private ResourceGeneratorRegistry manualResourceGeneratorRegistry;
+    private volatile ResourceGeneratorRegistry manualResourceGeneratorRegistry;
 
     PolicyFinder policyFinder() {
         return injectedPolicyFinder != null ? injectedPolicyFinder : new PolicyFinder();

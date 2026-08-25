@@ -59,6 +59,9 @@ public final class ConversionContext {
 
         String serviceKebabName = StringUtils.toKebabCase(
                 service.systemName != null ? service.systemName : service.name);
+        if (serviceKebabName.isEmpty()) {
+            serviceKebabName = "service";
+        }
 
         int backendCount = service.backends != null ? service.backends.size() : 0;
         boolean overrideIgnored = backendUrl != null && !backendUrl.isBlank() && backendCount > 1;

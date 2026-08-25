@@ -7,6 +7,11 @@ import java.util.List;
 
 /**
  * Mutable accumulator for AuthPolicy YAML assembled by contributors.
+ * <p>
+ * Contributors that call {@link #setBaseYaml} are responsible for interpolating
+ * {@link #authCacheBlock()} into their YAML template. {@code build()} merges
+ * authorization rule blocks and the discovery marker but does <b>not</b> apply
+ * the cache block — the base-auth contributor owns that contract.
  */
 public final class AuthPolicyBuilder {
 
@@ -61,9 +66,6 @@ public final class AuthPolicyBuilder {
             return "";
         }
         String yaml = baseYaml;
-        if (!authCacheBlock.isEmpty() && yaml.contains("%s")) {
-            yaml = yaml.formatted(authCacheBlock);
-        }
         for (String block : authorizationRuleBlocks) {
             yaml = AuthPolicyYamlMerger.mergeAuthorizationNamedRules(yaml, block);
         }

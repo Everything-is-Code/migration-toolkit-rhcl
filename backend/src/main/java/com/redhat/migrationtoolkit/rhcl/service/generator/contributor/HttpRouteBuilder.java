@@ -17,7 +17,7 @@ public final class HttpRouteBuilder {
     private final StringBuilder annotationBody = new StringBuilder();
     private final StringBuilder rulesBody = new StringBuilder();
     private final LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
-    private String sharedFilters = "";
+    private final StringBuilder sharedFilters = new StringBuilder();
     private String timeoutsBlock = "";
     private String retryBlock = "";
     private boolean corsEnabled = false;
@@ -46,11 +46,11 @@ public final class HttpRouteBuilder {
     }
 
     public String sharedFilters() {
-        return sharedFilters;
+        return sharedFilters.toString();
     }
 
     public void appendSharedFilters(String fragment) {
-        sharedFilters += fragment;
+        sharedFilters.append(fragment);
     }
 
     public String timeoutsBlock() {
