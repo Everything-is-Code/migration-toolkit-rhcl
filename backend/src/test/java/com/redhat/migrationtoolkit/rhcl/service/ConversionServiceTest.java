@@ -9,6 +9,7 @@ import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendType;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeNotes;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
 import org.junit.jupiter.api.BeforeEach;
@@ -648,7 +649,7 @@ class ConversionServiceTest {
 
     @Test
     void readmeNotes_skipsNullAndBlank_andAllIsImmutableCopy() {
-        ConversionService.ReadmeNotes notes = new ConversionService.ReadmeNotes();
+        ReadmeNotes notes = new ReadmeNotes();
         notes.add(null);
         notes.add("");
         notes.add("   ");
@@ -675,7 +676,7 @@ class ConversionServiceTest {
 
         Class<?>[] params = build.getParameterTypes();
         long readmeNotesParams = Arrays.stream(params)
-                .filter(p -> p == ConversionService.ReadmeNotes.class)
+                .filter(p -> p == ReadmeNotes.class)
                 .count();
         assertEquals(1, readmeNotesParams,
                 "ReadmeSupport.build must take exactly one ReadmeNotes collector");

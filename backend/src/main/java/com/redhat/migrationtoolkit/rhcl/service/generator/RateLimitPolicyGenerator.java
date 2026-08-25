@@ -22,7 +22,7 @@ public class RateLimitPolicyGenerator implements ResourceGenerator {
     public boolean applies(ConversionContext ctx) {
         boolean hasEdgeLimiting = ctx.service.policies != null
                 && ctx.service.policies.stream().anyMatch(p ->
-                        p.enabled && "edge_limiting".equals(p.name));
+                        Boolean.TRUE.equals(p.enabled) && "edge_limiting".equals(p.name));
         boolean hasPlansWithLimits = ctx.service.applicationPlans != null
                 && ctx.service.applicationPlans.stream().anyMatch(plan ->
                         plan.limits != null && !plan.limits.isEmpty());

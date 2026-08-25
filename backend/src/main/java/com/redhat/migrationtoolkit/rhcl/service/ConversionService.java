@@ -15,7 +15,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,25 +74,6 @@ public class ConversionService {
         return injectedRateLimitSupport != null ? injectedRateLimitSupport : RateLimitSupport.forManual();
     }
 
-    /**
-     * Cross-cutting README markdown sections collected during convert (#170).
-     * Prefer {@link com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeSupport#build}
-     * with a single {@link ReadmeNotes} collector over growing positional note args.
-     */
-    public static final class ReadmeNotes {
-        private final List<String> notes = new ArrayList<>();
-
-        public void add(String markdown) {
-            if (markdown == null || markdown.isBlank()) {
-                return;
-            }
-            notes.add(markdown);
-        }
-
-        public List<String> all() {
-            return List.copyOf(notes);
-        }
-    }
 
     public Map<String, String> convert(ApiService service, String namespace) {
         return convert(service, namespace, null, new ConversionOptions());
