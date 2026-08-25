@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { isAxiosError } from 'axios';
 import { gatewayApi } from '../../api/client';
 
 interface GatewayUrlState {
@@ -8,6 +9,29 @@ interface GatewayUrlState {
   error: string | null;
   phase: 'lb' | 'dns' | 'done';
   refetch: () => void;
+}
+
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      },
+      { once: true },
+    );
+  });
+}
+
+function isAbortError(e: unknown): boolean {
+  if (e instanceof DOMException && e.name === 'AbortError') return true;
+  if (isAxiosError(e) && e.code === 'ERR_CANCELED') return true;
+  return false;
 }
 
 export function useGatewayUrl(gatewayName: string | undefined, namespace: string): GatewayUrlState {
@@ -20,20 +44,36 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
 
   const fetch = useCallback(async () => {
     if (!gatewayName || !namespace) return;
-    setLoading(true); setError(null); setPhase('lb');
+    const signal = controllerRef.current?.signal;
+    if (!signal) return;
+
+    setLoading(true);
+    setError(null);
+    setPhase('lb');
 
     let hostname = '';
     for (let i = 0; i < 12; i++) {
-      if (controllerRef.current?.signal.aborted) return;
+      if (signal.aborted) return;
       try {
-        const res = await gatewayApi.getInfo(namespace, gatewayName);
-        if (res.data.ready) { hostname = res.data.hostname; break; }
-      } catch (_e) { /* retry */ }
-      if (i < 11) await new Promise(r => setTimeout(r, 5000));
+        const res = await gatewayApi.getInfo(namespace, gatewayName, { signal });
+        if (res.data.ready) {
+          hostname = res.data.hostname;
+          break;
+        }
+      } catch (e) {
+        if (isAbortError(e)) return;
+      }
+      if (i < 11) {
+        try {
+          await abortableSleep(5000, signal);
+        } catch {
+          return;
+        }
+      }
     }
-    if (controllerRef.current?.signal.aborted) return;
+
+    if (signal.aborted) return;
     if (!hostname) {
-      if (controllerRef.current?.signal.aborted) return;
       setError(t('import.testPanel.gwNotReady'));
       setLoading(false);
       return;
@@ -41,20 +81,28 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
 
     setPhase('dns');
     for (let i = 0; i < 30; i++) {
-      if (controllerRef.current?.signal.aborted) return;
+      if (signal.aborted) return;
       try {
-        const res = await gatewayApi.getInfo(namespace, gatewayName);
+        const res = await gatewayApi.getInfo(namespace, gatewayName, { signal });
         if (res.data.dnsReady) {
-          if (controllerRef.current?.signal.aborted) return;
           setUrl(res.data.httpUrl);
           setPhase('done');
           setLoading(false);
           return;
         }
-      } catch (_e) { /* retry */ }
-      if (i < 29) await new Promise(r => setTimeout(r, 10000));
+      } catch (e) {
+        if (isAbortError(e)) return;
+      }
+      if (i < 29) {
+        try {
+          await abortableSleep(10000, signal);
+        } catch {
+          return;
+        }
+      }
     }
-    if (controllerRef.current?.signal.aborted) return;
+
+    if (signal.aborted) return;
     setUrl(`http://${hostname}`);
     setPhase('done');
     setLoading(false);
@@ -65,7 +113,9 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
     const controller = new AbortController();
     controllerRef.current = controller;
     fetch();
-    return () => { controller.abort(); };
+    return () => {
+      controller.abort();
+    };
   }, [fetch]);
 
   return { url, loading, error, phase, refetch: fetch };

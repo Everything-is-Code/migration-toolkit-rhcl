@@ -117,8 +117,11 @@ export const importApi = {
 };
 
 export const gatewayApi = {
-  getInfo: (namespace: string, name: string) =>
-    api.get('/api/gateway/info', { params: { namespace, name } }),
+  getInfo: (namespace: string, name: string, options?: { signal?: AbortSignal }) =>
+    api.get('/api/gateway/info', {
+      params: { namespace, name },
+      signal: options?.signal,
+    }),
 };
 
 export const settingsApi = {

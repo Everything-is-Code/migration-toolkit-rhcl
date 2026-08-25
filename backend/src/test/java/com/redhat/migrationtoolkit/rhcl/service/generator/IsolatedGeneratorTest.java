@@ -95,6 +95,27 @@ class IsolatedGeneratorTest {
     }
 
     @Test
+    void rateLimitPolicyGenerator_applies_returnsTrue_whenEdgeLimitingNameCaseDiffers() {
+        RateLimitPolicyGenerator generator = new RateLimitPolicyGenerator();
+
+        Policy edgeLimiting = new Policy();
+        edgeLimiting.name = "Edge_Limiting";
+        edgeLimiting.enabled = true;
+
+        ApiService service = new ApiService();
+        service.id = "1";
+        service.name = "case-limits";
+        service.systemName = "case-limits";
+        service.policies = List.of(edgeLimiting);
+
+        ConversionContext ctx = ConversionContext.build(
+                service, "test-ns", null, new ConversionOptions(), new BackendResolver());
+
+        assertTrue(generator.applies(ctx),
+                "applies() must match edge_limiting case-insensitively like RateLimitSupport.findEnabled");
+    }
+
+    @Test
     void rateLimitPolicyGenerator_applies_returnsFalse_whenEnabledIsNull() {
         RateLimitPolicyGenerator generator = new RateLimitPolicyGenerator();
 
