@@ -13,6 +13,9 @@ public class RateLimitPolicyGenerator implements ResourceGenerator {
     @Inject
     RateLimitSupport rateLimitSupport;
 
+    private String cachedYaml;
+    private ConversionContext cachedCtx;
+
     @Override
     public String outputKey() {
         return "ratelimitpolicy.yaml";
@@ -20,15 +23,22 @@ public class RateLimitPolicyGenerator implements ResourceGenerator {
 
     @Override
     public boolean applies(ConversionContext ctx) {
-        String yaml = rateLimitSupport.generateRateLimitPolicy(
-                ctx.serviceKebabName, ctx.namespace, ctx.service);
+        String yaml = resolveYaml(ctx);
         return yaml != null && !yaml.isBlank();
     }
 
     @Override
     public String generate(ConversionContext ctx) {
-        return rateLimitSupport.generateRateLimitPolicy(
-                ctx.serviceKebabName, ctx.namespace, ctx.service);
+        return resolveYaml(ctx);
+    }
+
+    private String resolveYaml(ConversionContext ctx) {
+        if (cachedCtx != ctx) {
+            cachedYaml = rateLimitSupport.generateRateLimitPolicy(
+                    ctx.serviceKebabName, ctx.namespace, ctx.service);
+            cachedCtx = ctx;
+        }
+        return cachedYaml;
     }
 
     void bindManual(RateLimitSupport support) {

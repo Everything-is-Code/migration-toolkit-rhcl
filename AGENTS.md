@@ -26,7 +26,7 @@ This repo is the **consolidated** 3scale → Connectivity Link (Kuadrant) migrat
 - **Strategy + Registry** — `ResourceGenerator` per K8s output file (`gateway.yaml`, `httproute.yaml`, `policy.yaml`, `secret.yaml`, EnvoyFilters, optional TLS/DNS, etc.), looked up via CDI registry instead of hardcoded branches in `convert()`.
 - **Collector/Contributor** — `httproute.yaml`, `policy.yaml`, and `secret.yaml` aggregate fragments from multiple 3scale policies via `*Contributor` beans against shared builders.
 
-Full file list and conditions: SDD store `docs/conversion-architecture.md`.
+Full file list and conditions: sibling `../migration-toolkit-sdd/docs/conversion-architecture.md` (requires the SDD store cloned alongside this repo; see *Spec-driven development* below).
 
 Before adding a new policy conversion, check:
 - **#149** — epic tracking recognized-but-unconverted 3scale policies.

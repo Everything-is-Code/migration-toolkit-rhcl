@@ -25,7 +25,7 @@ class ConversionServiceConcurrencyTest {
     ConversionService conversionService;
 
     @Test
-    void parallelConversions_doNotShareMutableState() throws Exception {
+    void parallelConversions_produceIsolatedOutputs() throws Exception {
         List<Callable<Map<String, String>>> tasks = new ArrayList<>();
         for (int i = 0; i < 8; i++) {
             final int index = i;

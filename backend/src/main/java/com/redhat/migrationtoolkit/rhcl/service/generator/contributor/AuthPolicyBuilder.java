@@ -61,6 +61,9 @@ public final class AuthPolicyBuilder {
             return "";
         }
         String yaml = baseYaml;
+        if (!authCacheBlock.isEmpty() && yaml.contains("%s")) {
+            yaml = yaml.formatted(authCacheBlock);
+        }
         for (String block : authorizationRuleBlocks) {
             yaml = AuthPolicyYamlMerger.mergeAuthorizationNamedRules(yaml, block);
         }

@@ -5,6 +5,7 @@ import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -14,6 +15,8 @@ import java.util.Map;
 
 @ApplicationScoped
 public class ResourceGeneratorRegistry {
+
+    private static final Logger LOG = Logger.getLogger(ResourceGeneratorRegistry.class);
 
     private final Instance<ResourceGenerator> cdiGenerators;
     private final List<ResourceGenerator> manualGenerators;
@@ -50,7 +53,9 @@ public class ResourceGeneratorRegistry {
             String key = generator.outputKey();
             String existing = files.get(key);
             if (existing != null) {
-                files.put(key, existing + content);
+                LOG.warnf("Duplicate outputKey '%s' from %s — concatenating with YAML doc separator",
+                        key, generator.getClass().getSimpleName());
+                files.put(key, existing + "---\n" + content);
             } else {
                 files.put(key, content);
             }

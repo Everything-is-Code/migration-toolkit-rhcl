@@ -112,11 +112,11 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
             }
         }
 
-        boolean hasLogging = policyFinder.findEnabled(service, "logging") != null;
+        boolean hasLogging = policyFinder.findEnabledExact(service, "logging") != null;
         String loggingFile = hasLogging
                 ? "| gateway.yaml | Gateway + Istio Telemetry / EnvoyFilter (access log configuration) |\n" : "";
 
-        boolean hasUrlRewriting = policyFinder.findEnabled(service, "url_rewriting") != null;
+        boolean hasUrlRewriting = policyFinder.findEnabledExact(service, "url_rewriting") != null;
         String urlRewritingFile = hasUrlRewriting
                 ? "| envoyfilter-url-rewriting.yaml | Reproduces the 3scale URL Rewriting policy via Lua filter (PCRE→Lua pattern conversion is best-effort — verify before use) |\n"
                 : "";
