@@ -26,6 +26,12 @@ public final class ConversionConstants {
     public static final int LIST_PAGE_SIZE = 500;
 
     /**
+     * Line separator for generated Kubernetes YAML. Always LF — do not use
+     * {@code %n} or {@link System#lineSeparator()} in format strings (Windows emits CRLF).
+     */
+    public static final String YAML_NEWLINE = "\n";
+
+    /**
      * Compile-time string form of {@link #LIST_PAGE_SIZE} for JAX-RS {@code @DefaultValue}.
      */
     public static final String LIST_PAGE_SIZE_DEFAULT = "500";
