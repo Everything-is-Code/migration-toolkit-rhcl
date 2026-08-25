@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '../utils/apiError';
 import {
   PageSection,
   PageSectionVariants,
@@ -17,15 +18,10 @@ import { CheckCircleIcon, ExclamationTriangleIcon, TimesCircleIcon } from '@patt
 import { useTranslation } from 'react-i18next';
 import { validationApi } from '../api/client';
 import { ValidationResult } from '../api/types';
-import { AppState } from '../App';
+import { useAppState } from '../components/AppStateContext';
 import { useNavigate } from 'react-router-dom';
 import { PF_DANGER, PF_SUCCESS, PF_WARNING } from '../styles/pfTokens';
 import styles from '../styles/shared.module.css';
-
-interface Props {
-  appState: AppState;
-  setAppState: React.Dispatch<React.SetStateAction<AppState>>;
-}
 
 const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   switch (status) {
@@ -36,7 +32,8 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   }
 };
 
-const ValidationPage: React.FC<Props> = ({ appState }) => {
+const ValidationPage: React.FC = () => {
+  const { appState } = useAppState();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -53,12 +50,12 @@ const ValidationPage: React.FC<Props> = ({ appState }) => {
       try {
         const resp = await validationApi.validate(convResult.yamlFiles);
         all.push({ service: convResult.serviceName, result: resp.data });
-      } catch (e: any) {
+      } catch (e: unknown) {
         all.push({
           service: convResult.serviceName,
           result: {
             valid: false,
-            items: [{ check: 'API Error', status: 'ERROR', message: e.message }],
+            items: [{ check: 'API Error', status: 'ERROR', message: apiErrorMessage(e, 'Validation failed') }],
           },
         });
       }

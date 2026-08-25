@@ -1,8 +1,6 @@
-import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import i18n from './i18n';
-import i18next from 'i18next';
 import {
   Page,
   PageSidebar,
@@ -49,113 +47,14 @@ import ImportPage from './pages/ImportPage';
 import SettingsPage from './pages/SettingsPage';
 import SupportedPoliciesPage from './pages/SupportedPoliciesPage';
 
-import {
-  ConnectionRequest,
-  ApiService,
-  ConversionResultItem,
-  ClusterVersionsResponse,
-  ClusterProfile,
-} from './api/types';
-import { loadPersistedConnection, savePersistedConnection } from './utils/appStateStorage';
+import { AppStateProvider, useAppState } from './components/AppStateContext';
+import LangSwitcher from './components/LangSwitcher';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
+
 import styles from './App.module.css';
 
-/* ── Root-level Error Boundary ──
-   Even if a page component crashes,
-   the navigation (sidebar / masthead) remains visible. */
-interface EBState { hasError: boolean; message: string; path: string; }
-class RouteErrorBoundary extends Component<{ children: ReactNode }, EBState> {
-  state: EBState = { hasError: false, message: '', path: '' };
-  static getDerivedStateFromError(e: Error): Partial<EBState> {
-    return { hasError: true, message: e.message };
-  }
-  componentDidCatch(e: Error, info: ErrorInfo) {
-    console.error('[RouteErrorBoundary]', e, info);
-    this.setState({ path: window.location.pathname });
-  }
-  componentDidUpdate(_: unknown, prev: EBState) {
-    if (prev.path && window.location.pathname !== prev.path) {
-      this.setState({ hasError: false, message: '', path: '' });
-    }
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: '32px' }}>
-          <div className={styles.errorBanner}>
-            <p className={styles.errorTitle}>
-              {i18next.t('app.errorTitle')}
-            </p>
-            <p className={styles.errorMessage}>
-              {this.state.message}
-            </p>
-            <button
-              onClick={() => this.setState({ hasError: false, message: '', path: '' })}
-              className={styles.errorRetry}
-            >
-              {i18next.t('app.btnRetry')}
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
+type NavSectionItem = { path: string; label: string; icon: React.ReactNode };
 
-export interface AppState {
-  connection: ConnectionRequest & { connected: boolean };
-  selectedServices: ApiService[];
-  conversionResults: ConversionResultItem[];
-  namespace: string;
-  /** Resolved cluster versions + capabilities from GET /api/cluster/versions. */
-  clusterVersions: ClusterVersionsResponse | null;
-  /** Selected profile override (auto | ocp-4.19 | ocp-4.21). */
-  clusterProfile: ClusterProfile;
-}
-
-/* ── Language switcher tabs ── */
-const LangSwitcher: React.FC = () => {
-  const { i18n: i18nInst } = useTranslation();
-  const current = (i18nInst.language || 'en').startsWith('ja') ? 'ja' : 'en';
-
-  useEffect(() => {
-    document.documentElement.lang = current;
-  }, [current]);
-
-  const setLanguage = (lang: string) => {
-    void i18n.changeLanguage(lang).then(() => {
-      document.documentElement.lang = lang;
-    });
-  };
-
-  const btn = (lang: string, label: string, ariaLabel: string) => (
-    <button
-      key={lang}
-      type="button"
-      onClick={() => setLanguage(lang)}
-      aria-pressed={current === lang}
-      aria-label={ariaLabel}
-      className={[
-        styles.langButton,
-        current === lang ? styles.isActive : '',
-        lang === 'ja' ? styles.langButtonJa : styles.langButtonEn,
-      ].filter(Boolean).join(' ')}
-    >
-      {label}
-    </button>
-  );
-
-  return (
-    <div style={{ display: 'flex' }} role="group" aria-label="Language">
-      {btn('ja', 'JA', 'Japanese')}
-      {btn('en', 'EN', 'English')}
-    </div>
-  );
-};
-
-/* ── Red Hat official hat icon SVG (shared component) ──
-   Path data source: https://upload.wikimedia.org/wikipedia/commons/d/d8/Red_Hat_logo.svg
-   Colors inverted (white) for use on dark backgrounds. */
 const RHHatIcon: React.FC<{ size?: number }> = ({ size = 32 }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -165,35 +64,26 @@ const RHHatIcon: React.FC<{ size?: number }> = ({ size = 32 }) => (
     aria-hidden="true"
     style={{ flexShrink: 0 }}
   >
-    {/* Upper part (hat body) — originally #ee0000, inverted to white for dark bg */}
     <path fill="#ffffff" d="m128,84c12.5,0 30.6,-2.6 30.6,-17.5a19.53,19.53 0 0 0-0.3,-3.4L150.9,30.7C149.2,23.6 147.7,20.3 135.2,14.1 125.5,9.1 104.4,1 98.1,1 92.2,1 90.5,8.5 83.6,8.5 76.9,8.5 72,2.9 65.7,2.9c-6,0-9.9,4.1-12.9,12.5 0,0-8.4,23.7-9.5,27.2a6.15,6.15 0 0 0-0.2,1.9C43,53.7 79.3,83.9 128,84m32.5,-11.4c1.7,8.2 1.7,9.1 1.7,10.1 0,14-15.7,21.8-36.4,21.8C79,104.5 38.1,77.1 38.1,59a18.35,18.35 0 0 1 1.5,-7.3C22.8,52.5 1,55.5 1,74.7 1,106.2 75.6,145 134.6,145c45.3,0 56.7,-20.5 56.7,-36.7 0,-12.7-11,-27.1-30.8,-35.7"/>
-    {/* Lower part (brim shadow) — originally black, semi-transparent white for dark bg */}
     <path fill="rgba(255,255,255,0.55)" d="m160.5,72.6c1.7,8.2 1.7,9.1 1.7,10.1 0,14-15.7,21.8-36.4,21.8C79,104.5 38.1,77.1 38.1,59a18.35,18.35 0 0 1 1.5,-7.3l3.7,-9.1a6.15,6.15 0 0 0-0.2,1.9c0,9.2 36.3,39.4 84.9,39.4 12.5,0 30.6,-2.6 30.6,-17.5A19.53,19.53 0 0 0 158.3,63Z"/>
   </svg>
 );
 
-/* ── Red Hat logo for Masthead ── */
 const RedHatLogo: React.FC = () => (
   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
     <RHHatIcon size={30} />
-    <span className={styles.brandWordmark}>
-      Red Hat
-    </span>
+    <span className={styles.brandWordmark}>Red Hat</span>
   </div>
 );
 
-/* ── Footer ── */
 const Footer: React.FC = () => {
   const { t } = useTranslation();
-  return (
-  <div className={styles.footer}>
-    <span>{t('app.copyright')}</span>
-  </div>
-  );
+  return <div className={styles.footer}><span>{t('app.copyright')}</span></div>;
 };
 
 const AppContent: React.FC = () => {
   const { t } = useTranslation();
+  const { appState } = useAppState();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [workflowExpanded, setWorkflowExpanded] = useState(true);
   const [toolsExpanded, setToolsExpanded] = useState(true);
@@ -201,55 +91,42 @@ const AppContent: React.FC = () => {
   const location = useLocation();
   const [settingsExpanded, setSettingsExpanded] = useState(() => location.pathname.startsWith('/settings'));
 
-  const [appState, setAppState] = useState<AppState>(() => {
-    const persisted = loadPersistedConnection();
-    // I-2: never restore connected:true without a non-empty token (load already clears token).
-    const token = persisted?.connection?.accessToken ?? '';
-    const connected =
-      Boolean(token.trim()) && Boolean(persisted?.connection?.connected);
-    return {
-      connection: {
-        url: persisted?.connection?.url ?? '',
-        accessToken: token,
-        tenant: persisted?.connection?.tenant ?? '',
-        connected,
-      },
-      selectedServices: [],
-      conversionResults: [],
-      namespace: persisted?.namespace || 'default',
-      clusterVersions: null,
-      clusterProfile: persisted?.clusterProfile || 'auto',
-    };
-  });
-
-  // Keep 3scale connection across route changes / HMR remounts for this browser tab.
-  useEffect(() => {
-    savePersistedConnection({
-      connection: appState.connection,
-      namespace: appState.namespace,
-      clusterProfile: appState.clusterProfile,
-    });
-  }, [appState.connection, appState.namespace, appState.clusterProfile]);
-
-  const workflowItems = [
-    { path: '/',            label: t('nav.connection'),   icon: <PluggedIcon /> },
-    { path: '/services',   label: t('nav.apiList'),       icon: <ListIcon /> },
-    { path: '/compatibility', label: t('nav.compatibility'), icon: <CheckCircleIcon /> },
-    { path: '/convert',    label: t('nav.convert'),       icon: <CodeIcon /> },
-    { path: '/yaml',       label: t('nav.yamlPreview'),   icon: <EyeIcon /> },
-    { path: '/validate',   label: t('nav.validation'),    icon: <SecurityIcon /> },
-    { path: '/download',   label: t('nav.download'),      icon: <DownloadIcon /> },
+  const workflowItems: NavSectionItem[] = [
+    { path: '/',              label: t('nav.connection'),    icon: <PluggedIcon /> },
+    { path: '/services',      label: t('nav.apiList'),        icon: <ListIcon /> },
+    { path: '/compatibility', label: t('nav.compatibility'),  icon: <CheckCircleIcon /> },
+    { path: '/convert',       label: t('nav.convert'),        icon: <CodeIcon /> },
+    { path: '/yaml',          label: t('nav.yamlPreview'),    icon: <EyeIcon /> },
+    { path: '/validate',      label: t('nav.validation'),     icon: <SecurityIcon /> },
+    { path: '/download',      label: t('nav.download'),       icon: <DownloadIcon /> },
   ];
-
-  const toolItems = [
+  const toolItems: NavSectionItem[] = [
     { path: '/import',  label: t('nav.import'),  icon: <UploadIcon /> },
     { path: '/history', label: t('nav.history'), icon: <HistoryIcon /> },
   ];
-
-  const settingsItems = [
-    { path: '/settings', label: t('nav.settingsGeneral'), icon: <CogIcon /> },
+  const settingsItems: NavSectionItem[] = [
+    { path: '/settings',          label: t('nav.settingsGeneral'),  icon: <CogIcon /> },
     { path: '/settings/policies', label: t('nav.settingsPolicies'), icon: <CogIcon /> },
   ];
+
+  const renderNavSection = (
+    title: string,
+    items: NavSectionItem[],
+    isExpanded: boolean,
+    onExpand: (v: boolean) => void,
+    isActive: boolean,
+  ) => (
+    <NavExpandable title={title} isExpanded={isExpanded} onExpand={(_e, val) => onExpand(val)} isActive={isActive}>
+      {items.map(item => (
+        <NavItem key={item.path} isActive={location.pathname === item.path} onClick={() => navigate(item.path)}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '16px', flexShrink: 0, opacity: 0.85 }}>{item.icon}</span>
+            {item.label}
+          </span>
+        </NavItem>
+      ))}
+    </NavExpandable>
+  );
 
   const isWorkflowActive = workflowItems.some(i => i.path === location.pathname);
   const isToolsActive = toolItems.some(i => i.path === location.pathname);
@@ -259,65 +136,9 @@ const AppContent: React.FC = () => {
     <PageSidebar isSidebarOpen={isSidebarOpen}>
       <PageSidebarBody>
         <Nav theme="dark">
-          <NavExpandable
-            title={t('nav.workflow')}
-            isExpanded={workflowExpanded}
-            onExpand={(_e, val) => setWorkflowExpanded(val)}
-            isActive={isWorkflowActive}
-          >
-            {workflowItems.map(item => (
-              <NavItem
-                key={item.path}
-                isActive={location.pathname === item.path}
-                onClick={() => navigate(item.path)}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ width: '16px', flexShrink: 0, opacity: 0.85 }}>{item.icon}</span>
-                  {item.label}
-                </span>
-              </NavItem>
-            ))}
-          </NavExpandable>
-
-          <NavExpandable
-            title={t('nav.tools')}
-            isExpanded={toolsExpanded}
-            onExpand={(_e, val) => setToolsExpanded(val)}
-            isActive={isToolsActive}
-          >
-            {toolItems.map(item => (
-              <NavItem
-                key={item.path}
-                isActive={location.pathname === item.path}
-                onClick={() => navigate(item.path)}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ width: '16px', flexShrink: 0, opacity: 0.85 }}>{item.icon}</span>
-                  {item.label}
-                </span>
-              </NavItem>
-            ))}
-          </NavExpandable>
-
-          <NavExpandable
-            title={t('nav.settings')}
-            isExpanded={settingsExpanded}
-            onExpand={(_e, val) => setSettingsExpanded(val)}
-            isActive={isSettingsActive}
-          >
-            {settingsItems.map(item => (
-              <NavItem
-                key={item.path}
-                isActive={location.pathname === item.path}
-                onClick={() => navigate(item.path)}
-              >
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ width: '16px', flexShrink: 0, opacity: 0.85 }}>{item.icon}</span>
-                  {item.label}
-                </span>
-              </NavItem>
-            ))}
-          </NavExpandable>
+          {renderNavSection(t('nav.workflow'), workflowItems, workflowExpanded, setWorkflowExpanded, isWorkflowActive)}
+          {renderNavSection(t('nav.tools'),    toolItems,     toolsExpanded,    setToolsExpanded,    isToolsActive)}
+          {renderNavSection(t('nav.settings'), settingsItems, settingsExpanded, setSettingsExpanded, isSettingsActive)}
         </Nav>
       </PageSidebarBody>
     </PageSidebar>
@@ -337,18 +158,14 @@ const AppContent: React.FC = () => {
         </PageToggleButton>
       </MastheadToggle>
       <MastheadMain>
-        <MastheadBrand>
-          <RedHatLogo />
-        </MastheadBrand>
+        <MastheadBrand><RedHatLogo /></MastheadBrand>
       </MastheadMain>
       <MastheadContent>
         <Toolbar>
           <ToolbarContent>
             <ToolbarItem>
               <TextContent>
-                <Text component={TextVariants.p} className={styles.appTitle}>
-                  {t('nav.appTitle')}
-                </Text>
+                <Text component={TextVariants.p} className={styles.appTitle}>{t('nav.appTitle')}</Text>
               </TextContent>
             </ToolbarItem>
             <ToolbarItem align={{ default: 'alignRight' }}>
@@ -360,9 +177,7 @@ const AppContent: React.FC = () => {
                 </TextContent>
               )}
             </ToolbarItem>
-            <ToolbarItem>
-              <LangSwitcher />
-            </ToolbarItem>
+            <ToolbarItem><LangSwitcher /></ToolbarItem>
           </ToolbarContent>
         </Toolbar>
       </MastheadContent>
@@ -379,13 +194,13 @@ const AppContent: React.FC = () => {
       >
         <RouteErrorBoundary>
           <Routes>
-            <Route path="/" element={<ConnectionPage appState={appState} setAppState={setAppState} />} />
-            <Route path="/services" element={<APISelectionPage appState={appState} setAppState={setAppState} />} />
-            <Route path="/compatibility" element={<CompatibilityPage appState={appState} setAppState={setAppState} />} />
-            <Route path="/convert" element={<ConversionPage appState={appState} setAppState={setAppState} />} />
-            <Route path="/yaml" element={<YAMLViewerPage appState={appState} setAppState={setAppState} />} />
-            <Route path="/validate" element={<ValidationPage appState={appState} setAppState={setAppState} />} />
-            <Route path="/download" element={<DownloadPage appState={appState} setAppState={setAppState} />} />
+            <Route path="/" element={<ConnectionPage />} />
+            <Route path="/services" element={<APISelectionPage />} />
+            <Route path="/compatibility" element={<CompatibilityPage />} />
+            <Route path="/convert" element={<ConversionPage />} />
+            <Route path="/yaml" element={<YAMLViewerPage />} />
+            <Route path="/validate" element={<ValidationPage />} />
+            <Route path="/download" element={<DownloadPage />} />
             <Route path="/import" element={<ImportPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/settings" element={<SettingsPage />} />
@@ -400,7 +215,9 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => (
   <BrowserRouter>
-    <AppContent />
+    <AppStateProvider>
+      <AppContent />
+    </AppStateProvider>
   </BrowserRouter>
 );
 

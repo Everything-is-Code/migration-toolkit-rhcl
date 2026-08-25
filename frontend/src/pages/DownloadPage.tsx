@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiErrorMessage } from '../utils/apiError';
 import {
   PageSection,
   PageSectionVariants,
@@ -19,16 +20,12 @@ import {
 import { DownloadIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { downloadApi } from '../api/client';
-import { AppState } from '../App';
+import { useAppState } from '../components/AppStateContext';
 import { useNavigate } from 'react-router-dom';
 import styles from '../styles/shared.module.css';
 
-interface Props {
-  appState: AppState;
-  setAppState: React.Dispatch<React.SetStateAction<AppState>>;
-}
-
-const DownloadPage: React.FC<Props> = ({ appState }) => {
+const DownloadPage: React.FC = () => {
+  const { appState } = useAppState();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
@@ -47,8 +44,8 @@ const DownloadPage: React.FC<Props> = ({ appState }) => {
       link.download = `${result.packageName}.zip`;
       link.click();
       window.URL.revokeObjectURL(url);
-    } catch (e: any) {
-      setError(t('download.errorDownload', { message: e.message }));
+    } catch (e: unknown) {
+      setError(t('download.errorDownload', { message: apiErrorMessage(e, 'Download failed') }));
     } finally {
       setDownloading(prev => ({ ...prev, [result.serviceId]: false }));
     }
