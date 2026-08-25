@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@patternfly/react-core';
 import { UndoIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import styles from '../../pages/YAMLViewerPage.module.css';
+import styles from './yamlViewer.module.css';
 
 const POLICY_PATTERNS = [
   /kind:\s*AuthPolicy/,

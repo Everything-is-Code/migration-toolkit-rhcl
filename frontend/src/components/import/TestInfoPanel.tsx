@@ -11,7 +11,7 @@ import {
 import { CheckCircleIcon, CopyIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { gatewayApi } from '../../api/client';
-import styles from '../../pages/ImportPage.module.css';
+import styles from './import.module.css';
 import type { TestInfo, RouteInfo } from './importUtils';
 
 interface Props {

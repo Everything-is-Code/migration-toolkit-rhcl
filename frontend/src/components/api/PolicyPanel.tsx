@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Policy } from '../../api/types';
-import styles from '../../pages/APISelectionPage.module.css';
+import styles from './apiSelection.module.css';
 import shared from '../../styles/shared.module.css';
 
 const renderConfigValue = (v: unknown): string => {

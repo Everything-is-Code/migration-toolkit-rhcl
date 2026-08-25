@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { settingsApi } from '../../api/client';
 import { ClusterProfile } from '../../api/types';
 import { useAppState } from '../AppStateContext';
-import { clusterProfileI18nKey } from '../../pages/clusterCapabilityUi';
+import { clusterProfileI18nKey } from '../../utils/clusterCapabilityUi';
 import { apiErrorMessage } from '../../utils/apiError';
 import {
   PF_FONT_SIZE_SM,

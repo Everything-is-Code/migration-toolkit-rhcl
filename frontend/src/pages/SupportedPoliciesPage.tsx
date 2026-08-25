@@ -21,7 +21,7 @@ import {
   loadSupportedPolicies,
   seedSupportedPoliciesCache,
   withDefaultSupportedPolicies,
-} from './supportedPolicies';
+} from '../utils/supportedPolicies';
 
 const SupportedPoliciesPage: React.FC = () => {
   const { t } = useTranslation();

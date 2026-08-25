@@ -16,7 +16,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { ConversionHistory, FailureDetail } from '../../api/types';
 import { formatDate, statusColor, sourceLabel } from './historyUtils';
-import styles from '../../pages/HistoryPage.module.css';
+import styles from './history.module.css';
 
 const PER_PAGE_OPTIONS = [
   { title: '20', value: 20 },

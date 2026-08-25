@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { clusterApi } from '../api/client';
 import { ClusterVersionsResponse } from '../api/types';
 import { useAppState } from '../components/AppStateContext';
-import { shouldShowClusterVersionsCard } from './clusterCapabilityUi';
+import { shouldShowClusterVersionsCard } from '../utils/clusterCapabilityUi';
 import { apiErrorMessage } from '../utils/apiError';
 import ConnectionForm from '../components/connection/ConnectionForm';
 import ClusterVersionsPanel from '../components/connection/ClusterVersionsPanel';

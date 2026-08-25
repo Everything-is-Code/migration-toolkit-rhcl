@@ -11,7 +11,7 @@ import {
 import { HistoryIcon, TrashIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { PF_COLOR_MUTED } from '../../styles/pfTokens';
-import styles from '../../pages/HistoryPage.module.css';
+import styles from './history.module.css';
 
 const PER_PAGE_OPTIONS = [
   { title: '20', value: 20 },

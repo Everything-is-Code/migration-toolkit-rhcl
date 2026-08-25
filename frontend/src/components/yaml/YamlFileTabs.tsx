@@ -8,7 +8,7 @@ import {
   MenuToggle,
 } from '@patternfly/react-core';
 import { ConversionResultItem } from '../../api/types';
-import styles from '../../pages/YAMLViewerPage.module.css';
+import styles from './yamlViewer.module.css';
 
 interface Props {
   results: ConversionResultItem[];

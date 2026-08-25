@@ -14,7 +14,7 @@ import {
 import { CheckCircleIcon, DownloadIcon, PlayIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { PF_SUCCESS } from '../../styles/pfTokens';
-import styles from '../../pages/ImportPage.module.css';
+import styles from './import.module.css';
 
 interface Props {
   namespace: string;

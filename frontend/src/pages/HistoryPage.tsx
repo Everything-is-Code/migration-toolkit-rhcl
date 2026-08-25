@@ -17,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { historyApi } from '../api/client';
 import { ConversionHistory } from '../api/types';
 import shared from '../styles/shared.module.css';
-import styles from './HistoryPage.module.css';
+import styles from '../components/history/history.module.css';
 import { HistoryHeader } from '../components/history/HistoryToolbar';
 import HistoryToolbar from '../components/history/HistoryToolbar';
 import HistoryTable from '../components/history/HistoryTable';

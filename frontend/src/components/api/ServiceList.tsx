@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiService, Policy } from '../../api/types';
 import PolicyPanel from './PolicyPanel';
 import shared from '../../styles/shared.module.css';
-import styles from '../../pages/APISelectionPage.module.css';
+import styles from './apiSelection.module.css';
 
 interface Props {
   loading: boolean;

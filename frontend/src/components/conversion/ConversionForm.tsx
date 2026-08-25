@@ -12,32 +12,28 @@ import {
   Spinner,
   Progress,
   Button,
-  Checkbox,
-  TextInput,
-  FormGroup,
-  FormHelperText,
-  HelperText,
-  HelperTextItem,
-  Form,
-  Radio,
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { clusterApi, conversionApi } from '../../api/client';
-import { apiErrorMessage } from '../../utils/apiError';
-import { loadSupportedPolicies } from '../../pages/supportedPolicies';
 import { useAppState } from '../AppStateContext';
-import { toKebabName } from './conversionUtils';
+import ConversionBackendSettings from './ConversionBackendSettings';
+import ConversionOutputSettings from './ConversionOutputSettings';
+import ConversionPolicySettings from './ConversionPolicySettings';
+import type { ConversionFormOptions } from './conversionFormTypes';
 import styles from '../../styles/shared.module.css';
 
-const ConversionForm: React.FC = () => {
-  const { appState, setAppState } = useAppState();
+interface Props {
+  loading: boolean;
+  error: string | null;
+  progress: number;
+  onConvert: (options: ConversionFormOptions) => void;
+}
+
+const ConversionForm: React.FC<Props> = ({ loading, error, progress, onConvert }) => {
+  const { appState } = useAppState();
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
   const [isExternal, setIsExternal] = useState(false);
   const [externalBackendUrl, setExternalBackendUrl] = useState('');
   const [loggingTarget, setLoggingTarget] = useState<'gateway' | 'workload'>('gateway');
@@ -61,50 +57,21 @@ const ConversionForm: React.FC = () => {
 
   const results = appState.conversionResults;
 
-  const handleConvert = async () => {
-    setLoading(true);
-    setError(null);
-    setProgress(10);
-
-    try {
-      if (includeDnsPolicy && !dnsHostname.trim()) {
-        setError(t(
-          'conversion.errorDnsHostnameRequired',
-          'Gateway hostname is required when DNSPolicy generation is enabled.',
-        ));
-        return;
-      }
-      const supportedPolicies = await loadSupportedPolicies();
-      const resp = await conversionApi.convert({
-        threescaleUrl: appState.connection.url,
-        accessToken: appState.connection.accessToken,
-        tenant: appState.connection.tenant,
-        namespace: appState.namespace,
-        serviceIds: appState.selectedServices.map(s => s.id),
-        externalBackendUrl: isExternal && externalBackendUrl ? externalBackendUrl : undefined,
-        supportedPolicies,
-        loggingTarget,
-        anonymousTarget,
-        includeMigratedFromLabel,
-        ipCheckMode,
-        includeTlsPolicy: includeTlsPolicy || undefined,
-        tlsIssuerKind: includeTlsPolicy ? tlsIssuerKind : undefined,
-        tlsIssuerName: includeTlsPolicy ? tlsIssuerName : undefined,
-        includeDnsPolicy: includeDnsPolicy || undefined,
-        dnsHostname: includeDnsPolicy ? dnsHostname.trim() || undefined : undefined,
-        dnsProviderSecretName:
-          includeDnsPolicy && dnsProviderSecretName.trim()
-            ? dnsProviderSecretName.trim()
-            : undefined,
-      });
-      setProgress(100);
-      const convResults = resp.data.results;
-      setAppState(prev => ({ ...prev, conversionResults: convResults }));
-    } catch (e: unknown) {
-      setError(t('conversion.errorConvert', { message: apiErrorMessage(e, 'Conversion failed') }));
-    } finally {
-      setLoading(false);
-    }
+  const handleConvertClick = () => {
+    onConvert({
+      isExternal,
+      externalBackendUrl,
+      loggingTarget,
+      anonymousTarget,
+      ipCheckMode,
+      includeMigratedFromLabel,
+      includeTlsPolicy,
+      tlsIssuerKind,
+      tlsIssuerName,
+      includeDnsPolicy,
+      dnsHostname,
+      dnsProviderSecretName,
+    });
   };
 
   return (
@@ -135,272 +102,42 @@ const ConversionForm: React.FC = () => {
           ))}
         </DataList>
 
-        {/* Backend settings */}
-        <div className={styles.bluePanel}>
-          <div className={styles.bluePanelTitle}>
-            {t('conversion.backendType', 'Backend Settings')}
-          </div>
-          <Form>
-            <FormGroup>
-              <Checkbox
-                id="external-backend"
-                label={t('conversion.externalBackend', 'Backend is an external service (AWS ECS / external HTTPS endpoint)')}
-                isChecked={isExternal}
-                onChange={(_e, checked) => setIsExternal(checked)}
-              />
-            </FormGroup>
-            {isExternal && (
-              <>
-                <FormGroup
-                  label={t('conversion.externalBackendUrl', 'External Backend URL')}
-                  fieldId="external-backend-url"
-                  isRequired
-                >
-                  <TextInput
-                    id="external-backend-url"
-                    type="url"
-                    value={externalBackendUrl}
-                    onChange={(_e, val) => setExternalBackendUrl(val)}
-                    placeholder={t('conversion.externalBackendUrlPlaceholder')}
-                  />
-                  <FormHelperText>
-                    <HelperText>
-                      <HelperTextItem>
-                        {t('conversion.externalBackendUrlHelp', 'e.g.: https://foo.ecs.us-east-2.on.aws')}
-                      </HelperTextItem>
-                    </HelperText>
-                  </FormHelperText>
-                </FormGroup>
-                <div className={styles.warningCallout}>
-                  <div style={{ fontWeight: 600, marginBottom: '6px' }}>
-                    {t('conversion.externalNote', 'The following resources will be additionally generated for external services:')}
-                  </div>
-                  <ul style={{ margin: 0, paddingLeft: '18px', lineHeight: '1.8' }}>
-                    <li dangerouslySetInnerHTML={{ __html: t('conversion.externalNoteEnvoy') }} />
-                    <li dangerouslySetInnerHTML={{ __html: t('conversion.externalNoteRoute') }} />
-                  </ul>
-                </div>
-              </>
-            )}
-          </Form>
-        </div>
+        <ConversionBackendSettings
+          isExternal={isExternal}
+          externalBackendUrl={externalBackendUrl}
+          onExternalChange={setIsExternal}
+          onExternalUrlChange={setExternalBackendUrl}
+        />
 
-        {/* Output settings */}
-        <div className={styles.bluePanel}>
-          <div className={styles.bluePanelTitle}>
-            {t('conversion.outputSettings', 'Output Settings')}
-          </div>
-          <Form>
-            <FormGroup>
-              <Checkbox
-                id="include-migrated-from-label"
-                label={t('conversion.includeMigratedFromLabel', 'Add migrated-from: 3scale label')}
-                isChecked={includeMigratedFromLabel}
-                onChange={(_e, checked) => setIncludeMigratedFromLabel(checked)}
-              />
-            </FormGroup>
-            <FormGroup>
-              <Checkbox
-                id="include-tls-policy"
-                label={t('conversion.includeTlsPolicy', 'Generate TLSPolicy (cert-manager)')}
-                isChecked={includeTlsPolicy}
-                onChange={(_e, checked) => {
-                  setIncludeTlsPolicy(checked);
-                  if (checked) {
-                    setTlsIssuerKind((prev) => prev || 'ClusterIssuer');
-                    setTlsIssuerName((prev) => prev || 'letsencrypt-prod');
-                  }
-                }}
-                description={t(
-                  'conversion.includeTlsPolicyDesc',
-                  'Opt-in Kuadrant TLSPolicy targeting the Gateway. Requires a ClusterIssuer (default: letsencrypt-prod). Secret {name}-tls is issued by cert-manager — no Certificate CR is generated.',
-                )}
-              />
-            </FormGroup>
-            {includeTlsPolicy && (
-              <>
-                <FormGroup label={t('conversion.tlsIssuerKind', 'TLS issuer kind')} fieldId="tls-issuer-kind">
-                  <TextInput
-                    id="tls-issuer-kind"
-                    value={tlsIssuerKind}
-                    onChange={(_e, val) => setTlsIssuerKind(val)}
-                    aria-label={t('conversion.tlsIssuerKind', 'TLS issuer kind')}
-                  />
-                </FormGroup>
-                <FormGroup label={t('conversion.tlsIssuerName', 'TLS issuer name')} fieldId="tls-issuer-name">
-                  <TextInput
-                    id="tls-issuer-name"
-                    value={tlsIssuerName}
-                    onChange={(_e, val) => setTlsIssuerName(val)}
-                    aria-label={t('conversion.tlsIssuerName', 'TLS issuer name')}
-                  />
-                  <FormHelperText>
-                    <HelperText>
-                      <HelperTextItem>
-                        {t('conversion.tlsIssuerHelp', 'Prefills ClusterIssuer / letsencrypt-prod when TLSPolicy is enabled. Edit if your cluster uses a different issuer.')}
-                      </HelperTextItem>
-                    </HelperText>
-                  </FormHelperText>
-                </FormGroup>
-              </>
-            )}
-            <FormGroup>
-              <Checkbox
-                id="include-dns-policy"
-                label={t('conversion.includeDnsPolicy', 'Generate DNSPolicy + Gateway hostname')}
-                isChecked={includeDnsPolicy}
-                onChange={async (_e, checked) => {
-                  setIncludeDnsPolicy(checked);
-                  if (!checked || dnsHostname.trim()) return;
-                  const first = appState.selectedServices[0];
-                  const kebab = toKebabName(
-                    (first?.systemName || first?.name || '').trim() || 'app',
-                  );
-                  try {
-                    const res = await clusterApi.getDomain();
-                    const domain = res.data?.domain?.trim();
-                    if (domain) setDnsHostname(`${kebab}.${domain}`);
-                  } catch {
-                    // Domain API failure: leave hostname empty/editable.
-                  }
-                }}
-                description={t(
-                  'conversion.includeDnsPolicyDesc',
-                  'Sets hostname on both Gateway http and https listeners and emits dnspolicy.yaml. Prefill uses {kebabName}.{clusterDomain} (domain already has apps.).',
-                )}
-              />
-            </FormGroup>
-            {includeDnsPolicy && (
-              <>
-                <FormGroup
-                  label={t('conversion.dnsHostname', 'Gateway hostname')}
-                  fieldId="dns-hostname"
-                  isRequired
-                >
-                  <TextInput
-                    id="dns-hostname"
-                    value={dnsHostname}
-                    onChange={(_e, val) => setDnsHostname(val)}
-                    aria-label={t('conversion.dnsHostname', 'Gateway hostname')}
-                    placeholder="my-app.apps.cluster.example.com"
-                  />
-                  <FormHelperText>
-                    <HelperText>
-                      <HelperTextItem>
-                        {t('conversion.dnsHostnameHelp', 'Applied to both http and https listeners. Override the prefill if needed.')}
-                      </HelperTextItem>
-                    </HelperText>
-                  </FormHelperText>
-                </FormGroup>
-                <FormGroup
-                  label={t('conversion.dnsProviderSecretName', 'DNS provider Secret name (optional)')}
-                  fieldId="dns-provider-secret"
-                >
-                  <TextInput
-                    id="dns-provider-secret"
-                    value={dnsProviderSecretName}
-                    onChange={(_e, val) => setDnsProviderSecretName(val)}
-                    aria-label={t('conversion.dnsProviderSecretName', 'DNS provider Secret name (optional)')}
-                  />
-                  <FormHelperText>
-                    <HelperText>
-                      <HelperTextItem>
-                        {t('conversion.dnsProviderSecretHelp', 'If set, DNSPolicy includes providerRefs[{name}]. If blank, omit providerRefs and rely on the cluster default-provider Secret. Never embed credentials in the package.')}
-                      </HelperTextItem>
-                    </HelperText>
-                  </FormHelperText>
-                </FormGroup>
-              </>
-            )}
-          </Form>
-        </div>
+        <ConversionOutputSettings
+          selectedServices={appState.selectedServices}
+          includeMigratedFromLabel={includeMigratedFromLabel}
+          includeTlsPolicy={includeTlsPolicy}
+          tlsIssuerKind={tlsIssuerKind}
+          tlsIssuerName={tlsIssuerName}
+          includeDnsPolicy={includeDnsPolicy}
+          dnsHostname={dnsHostname}
+          dnsProviderSecretName={dnsProviderSecretName}
+          onIncludeMigratedFromLabelChange={setIncludeMigratedFromLabel}
+          onIncludeTlsPolicyChange={setIncludeTlsPolicy}
+          onTlsIssuerKindChange={setTlsIssuerKind}
+          onTlsIssuerNameChange={setTlsIssuerName}
+          onIncludeDnsPolicyChange={setIncludeDnsPolicy}
+          onDnsHostnameChange={setDnsHostname}
+          onDnsProviderSecretNameChange={setDnsProviderSecretName}
+        />
 
-        {/* Policy settings (shown conditionally) */}
-        {(hasLoggingPolicy || hasAnonymousPolicy || hasIpCheckPolicy) && (
-          <div className={styles.bluePanel}>
-            <div className={styles.bluePanelTitle}>
-              {t('conversion.policySettings', 'Policy Settings')}
-            </div>
-
-            {hasLoggingPolicy && (
-              <div style={{ marginBottom: (hasAnonymousPolicy || hasIpCheckPolicy) ? '16px' : 0 }}>
-                <div className={styles.sectionHeading}>
-                  {t('conversion.loggingTarget', 'Logging Policy Target')}
-                </div>
-                <div style={{ display: 'flex', gap: '24px' }}>
-                  <Radio
-                    id="logging-target-gateway"
-                    name="loggingTarget"
-                    label={t('conversion.loggingTargetGateway', 'Gateway Pod (recommended)')}
-                    isChecked={loggingTarget === 'gateway'}
-                    onChange={() => setLoggingTarget('gateway')}
-                    description={t('conversion.loggingTargetGatewayDesc', 'context: GATEWAY / istio.io/gateway-name selector')}
-                  />
-                  <Radio
-                    id="logging-target-workload"
-                    name="loggingTarget"
-                    label={t('conversion.loggingTargetWorkload', 'Workload Pod')}
-                    isChecked={loggingTarget === 'workload'}
-                    onChange={() => setLoggingTarget('workload')}
-                    description={t('conversion.loggingTargetWorkloadDesc', 'context: SIDECAR_INBOUND / app selector')}
-                  />
-                </div>
-              </div>
-            )}
-
-            {hasAnonymousPolicy && (
-              <div style={{ marginBottom: hasIpCheckPolicy ? '16px' : 0 }}>
-                <div className={styles.sectionHeading}>
-                  {t('conversion.anonymousTarget', 'Anonymous Access Policy Target')}
-                </div>
-                <div style={{ display: 'flex', gap: '24px' }}>
-                  <Radio
-                    id="anonymous-target-gateway"
-                    name="anonymousTarget"
-                    label={t('conversion.anonymousTargetGateway', 'Gateway')}
-                    isChecked={anonymousTarget === 'gateway'}
-                    onChange={() => setAnonymousTarget('gateway')}
-                    description={t('conversion.anonymousTargetGatewayDesc', 'targetRef.kind: Gateway — Applies to all routes via Gateway')}
-                  />
-                  <Radio
-                    id="anonymous-target-httproute"
-                    name="anonymousTarget"
-                    label={t('conversion.anonymousTargetHttpRoute', 'HTTPRoute (recommended)')}
-                    isChecked={anonymousTarget === 'httproute'}
-                    onChange={() => setAnonymousTarget('httproute')}
-                    description={t('conversion.anonymousTargetHttpRouteDesc', 'targetRef.kind: HTTPRoute — Applies to specific routes only')}
-                  />
-                </div>
-              </div>
-            )}
-
-            {hasIpCheckPolicy && (
-              <div>
-                <div className={styles.sectionHeading}>
-                  {t('conversion.ipCheckMode', 'IP Check target')}
-                </div>
-                <div style={{ display: 'flex', gap: '24px' }}>
-                  <Radio
-                    id="ip-check-authorization-policy"
-                    name="ipCheckMode"
-                    label={t('conversion.ipCheckModeAuthz', 'AuthorizationPolicy (recommended)')}
-                    isChecked={ipCheckMode === 'authorizationPolicy'}
-                    onChange={() => setIpCheckMode('authorizationPolicy')}
-                    description={t('conversion.ipCheckModeAuthzDesc', 'Istio AuthorizationPolicy with remoteIpBlocks')}
-                  />
-                  <Radio
-                    id="ip-check-auth-policy-opa"
-                    name="ipCheckMode"
-                    label={t('conversion.ipCheckModeOpa', 'AuthPolicy / OPA')}
-                    isChecked={ipCheckMode === 'authPolicyOpa'}
-                    onChange={() => setIpCheckMode('authPolicyOpa')}
-                    description={t('conversion.ipCheckModeOpaDesc', 'Kuadrant AuthPolicy authorization with OPA/Rego')}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <ConversionPolicySettings
+          hasLoggingPolicy={hasLoggingPolicy}
+          hasAnonymousPolicy={hasAnonymousPolicy}
+          hasIpCheckPolicy={hasIpCheckPolicy}
+          loggingTarget={loggingTarget}
+          anonymousTarget={anonymousTarget}
+          ipCheckMode={ipCheckMode}
+          onLoggingTargetChange={setLoggingTarget}
+          onAnonymousTargetChange={setAnonymousTarget}
+          onIpCheckModeChange={setIpCheckMode}
+        />
 
         {error && <Alert variant="danger" title={error} style={{ marginTop: '16px' }} />}
 
@@ -417,7 +154,7 @@ const ConversionForm: React.FC = () => {
           <Button variant="secondary" onClick={() => navigate('/compatibility')}>
             {t('conversion.btnBack')}
           </Button>
-          <Button variant="primary" onClick={handleConvert} isDisabled={loading}>
+          <Button variant="primary" onClick={handleConvertClick} isDisabled={loading}>
             {loading
               ? t('conversion.btnConverting')
               : results.length > 0

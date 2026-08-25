@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';
 import { importApi, downloadApi, applyApi } from '../api/client';
 import { fixHttpRoutePort } from '../utils/fixHttpRoutePort';
-import styles from './ImportPage.module.css';
+import styles from '../components/import/import.module.css';
 import type { YamlFile, EditMap, ApplyResult, TestInfo } from '../components/import/importUtils';
 import { parseTestInfo, detectExternalBackend, normalizeApiVersions, deriveEdits } from '../components/import/importUtils';
 import TestInfoPanel from '../components/import/TestInfoPanel';

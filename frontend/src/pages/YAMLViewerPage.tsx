@@ -14,7 +14,7 @@ import { useAppState } from '../components/AppStateContext';
 import { useNavigate } from 'react-router-dom';
 import YamlFileTabs from '../components/yaml/YamlFileTabs';
 import YamlEditorPanel from '../components/yaml/YamlEditorPanel';
-import styles from './YAMLViewerPage.module.css';
+import styles from '../components/yaml/yamlViewer.module.css';
 
 const YAMLViewerPage: React.FC = () => {
   const { appState, setAppState } = useAppState();

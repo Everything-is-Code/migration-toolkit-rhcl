@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import styles from '../../pages/ImportPage.module.css';
+import styles from './import.module.css';
 import { computeDiff } from './importUtils';
 import type { YamlFile, EditMap } from './importUtils';
 

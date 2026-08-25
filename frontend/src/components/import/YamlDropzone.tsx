@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Card, CardBody, Button, Spinner } from '@patternfly/react-core';
 import { UploadIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import styles from '../../pages/ImportPage.module.css';
+import styles from './import.module.css';
 
 interface Props {
   loading: boolean;

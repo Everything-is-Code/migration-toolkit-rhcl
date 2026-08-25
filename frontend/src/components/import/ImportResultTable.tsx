@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardBody, Title, Alert, Label } from '@patternfly/react-core';
 import { CheckCircleIcon, TimesCircleIcon } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
-import styles from '../../pages/ImportPage.module.css';
+import styles from './import.module.css';
 import type { ApplyResult } from './importUtils';
 
 interface Props {
