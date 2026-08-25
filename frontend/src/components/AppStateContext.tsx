@@ -19,6 +19,8 @@ export interface AppState {
   clusterProfile: ClusterProfile;
 }
 
+// TODO(#172): consider narrower setters (e.g. setConnection, setConversionResults) to
+// reduce coupling — components currently receive the full setAppState updater.
 interface AppStateContextValue {
   appState: AppState;
   setAppState: React.Dispatch<React.SetStateAction<AppState>>;

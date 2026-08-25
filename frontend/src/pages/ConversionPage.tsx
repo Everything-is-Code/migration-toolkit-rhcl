@@ -116,6 +116,8 @@ const ConversionPage: React.FC = () => {
               loading={loading}
               error={error}
               progress={progress}
+              selectedServices={appState.selectedServices}
+              conversionResults={appState.conversionResults}
               onConvert={handleConvert}
             />
           </StackItem>

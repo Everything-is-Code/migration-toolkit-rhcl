@@ -1,8 +1,7 @@
-import React, { useState, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState } from 'react';
 import { apiErrorMessage } from '../utils/apiError';
 import { PageSection, PageSectionVariants, Title, Card, CardBody, Button, Alert, Stack, StackItem } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
-import i18next from 'i18next';
 import { importApi, downloadApi, applyApi } from '../api/client';
 import { fixHttpRoutePort } from '../utils/fixHttpRoutePort';
 import styles from '../components/import/import.module.css';
@@ -16,29 +15,7 @@ import NamespaceFormCard from '../components/import/NamespaceFormCard';
 import FileInfoBar from '../components/import/FileInfoBar';
 import ManualSteps from '../components/import/ManualSteps';
 
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; msg: string }> {
-  state = { hasError: false, msg: '' };
-  static getDerivedStateFromError(e: Error) { return { hasError: true, msg: e.message }; }
-  componentDidCatch(e: Error, i: ErrorInfo) { console.error('[ImportPage]', e, i); }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{ padding: 32 }}>
-          <div className={styles.errorBanner}>
-            <p className={styles.errorBannerTitle}>{i18next.t('import.errorTitle')}</p>
-            <pre style={{ marginTop: 8, fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{this.state.msg}</pre>
-            <button onClick={() => this.setState({ hasError: false, msg: '' })} className={styles.errorRetry}>
-              {i18next.t('import.btnRetry')}
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-const ImportPageInner: React.FC = () => {
+const ImportPage: React.FC = () => {
   const { t } = useTranslation();
   const [loading, setLoading]           = useState(false);
   const [error, setError]               = useState<string | null>(null);
@@ -183,7 +160,6 @@ const ImportPageInner: React.FC = () => {
                 <Card><CardBody>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                     <Title headingLevel="h3" size="md">{t('import.yamlEditorTitle')}</Title>
-                    <span />
                   </div>
                   {downloaded && <Alert variant="success" isInline title={t('import.downloadSuccess')} style={{ marginBottom: 12 }} />}
                   <YamlDiffViewer files={files} edits={edits}
@@ -198,9 +174,5 @@ const ImportPageInner: React.FC = () => {
     </>
   );
 };
-
-const ImportPage: React.FC = () => (
-  <ErrorBoundary><ImportPageInner /></ErrorBoundary>
-);
 
 export default ImportPage;

@@ -15,22 +15,23 @@ import {
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { useAppState } from '../AppStateContext';
 import ConversionBackendSettings from './ConversionBackendSettings';
 import ConversionOutputSettings from './ConversionOutputSettings';
 import ConversionPolicySettings from './ConversionPolicySettings';
 import type { ConversionFormOptions } from './conversionFormTypes';
+import type { ApiService, ConversionResultItem } from '../../api/types';
 import styles from '../../styles/shared.module.css';
 
 interface Props {
   loading: boolean;
   error: string | null;
   progress: number;
+  selectedServices: ApiService[];
+  conversionResults: ConversionResultItem[];
   onConvert: (options: ConversionFormOptions) => void;
 }
 
-const ConversionForm: React.FC<Props> = ({ loading, error, progress, onConvert }) => {
-  const { appState } = useAppState();
+const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedServices, conversionResults, onConvert }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
@@ -47,15 +48,15 @@ const ConversionForm: React.FC<Props> = ({ loading, error, progress, onConvert }
   const [dnsHostname, setDnsHostname] = useState('');
   const [dnsProviderSecretName, setDnsProviderSecretName] = useState('');
 
-  const hasLoggingPolicy = appState.selectedServices.some(svc =>
+  const hasLoggingPolicy = selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'logging'));
-  const hasAnonymousPolicy = appState.selectedServices.some(svc =>
+  const hasAnonymousPolicy = selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled
       && (p.name === 'default_credentials' || p.name === 'anonymous_access')));
-  const hasIpCheckPolicy = appState.selectedServices.some(svc =>
+  const hasIpCheckPolicy = selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'ip_check'));
 
-  const results = appState.conversionResults;
+  const results = conversionResults;
 
   const handleConvertClick = () => {
     onConvert({
@@ -79,7 +80,7 @@ const ConversionForm: React.FC<Props> = ({ loading, error, progress, onConvert }
       <CardBody>
         <Title headingLevel="h3" size="lg">{t('conversion.targetTitle')}</Title>
         <DataList aria-label={t('conversion.ariaTarget')} style={{ marginTop: '16px' }}>
-          {appState.selectedServices.map(svc => (
+          {selectedServices.map(svc => (
             <DataListItem key={svc.id}>
               <DataListItemRow>
                 <DataListItemCells
@@ -110,7 +111,7 @@ const ConversionForm: React.FC<Props> = ({ loading, error, progress, onConvert }
         />
 
         <ConversionOutputSettings
-          selectedServices={appState.selectedServices}
+          selectedServices={selectedServices}
           includeMigratedFromLabel={includeMigratedFromLabel}
           includeTlsPolicy={includeTlsPolicy}
           tlsIssuerKind={tlsIssuerKind}

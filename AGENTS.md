@@ -10,7 +10,7 @@ Short map for automated agents and humans working in this repository.
 | Path | Role |
 |------|------|
 | `backend/` | Quarkus 3.27.x (Java 21) REST API, Flyway, tests |
-| `frontend/` | React + PatternFly + Vite SPA (`components/` + thin `pages/`) |
+| `frontend/` | React + PatternFly + Vite SPA — `components/<domain>/` + thin `pages/` orchestrators; `AppStateContext` for workflow state |
 | `deploy/` | OpenShift S2I manifests + `install.sh` |
 | `helm/` | Helm chart packaging |
 | `docs/` | Published Helm chart index (GitHub Pages) |
@@ -22,9 +22,13 @@ Short map for automated agents and humans working in this repository.
 - Feature work: `feature/<issue>-short-description` from `main` — **do not commit implementation on `main`**
 - OpenSpec `/opsx-apply` edits this repo; create the feature branch before the first implementation commit (see sibling `migration-toolkit-sdd/docs/base-standards.md`)
 
+## Conversion architecture
+
+Full file list and conditions: [`docs/conversion-architecture.md`](https://github.com/Everything-is-Code/rhcl-sdd/blob/main/docs/conversion-architecture.md) in the SDD store (local: `../migration-toolkit-sdd/docs/conversion-architecture.md`).
+
 ## Spec-driven development (SDD)
 
-OpenSpec store: sibling `migration-toolkit-sdd/` (GitHub: `rhcl-sdd`). This repo holds product code only.
+OpenSpec store: sibling `migration-toolkit-sdd/` (GitHub: [`rhcl-sdd`](https://github.com/Everything-is-Code/rhcl-sdd)). This repo holds product code only.
 
 ## Frontend API URL (important)
 

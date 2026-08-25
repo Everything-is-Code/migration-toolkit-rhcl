@@ -17,7 +17,7 @@ alwaysApply: false
 - `const XxxPage: React.FC = (...) => {...}; export default XxxPage;` — orchestrator pages; `interface Props` only when a page still accepts props (most workflow pages use context only).
 - Subcomponents under `components/<domain>/` with explicit prop boundaries; presentational pieces receive data/callbacks from the page orchestrator.
 - State: local `useState` for form fields; workflow state via `useAppState()`. `useCallback` only for functions that are `useEffect` dependencies.
-- API calls: `async/await` in **page orchestrators** (or legacy page handlers), wrapped in `try/catch/finally`, with explicit `loading`/`error` state.
+- API calls: `async/await` in **page orchestrators** (preferred), wrapped in `try/catch/finally`, with explicit `loading`/`error` state. One-shot UI-hint fetches (e.g. `clusterApi.getDomain()` for field prefill) may live in the component that triggers them when the result stays local and failure is silently acceptable.
 - PatternFly 5 components only for UI chrome. Multi-step flow is plain routes + `navigate()` — no `Wizard`.
 
 ## API client (`api/client.ts` / `api/types.ts`)
