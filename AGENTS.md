@@ -10,7 +10,7 @@ Short map for automated agents and humans working in this repository.
 | Path | Role |
 |------|------|
 | `backend/` | Quarkus 3.27.x (Java 21) REST API, Flyway, tests |
-| `frontend/` | React + PatternFly + Vite SPA |
+| `frontend/` | React + PatternFly + Vite SPA — `components/<domain>/` + thin `pages/` orchestrators; `AppStateContext` for workflow state |
 | `deploy/` | OpenShift S2I manifests + `install.sh` |
 | `helm/` | Helm chart packaging |
 | `docs/` | Published Helm chart index (GitHub Pages) |
@@ -18,6 +18,11 @@ Short map for automated agents and humans working in this repository.
 | `testdata/` | Sample payloads for local demos |
 
 This repo is the **consolidated** 3scale → Connectivity Link (Kuadrant) migration tool: one Quarkus backend + one React frontend doing export, compatibility check, and YAML conversion/apply in a single app. The sibling `rhcl-ai` program docs still describe an older split architecture (`3scaleextract` Go export tool + `apishift` Java/Angular migration tool) that predates this repo (first commit 2026-06-29) — treat `rhcl-ai/AGENTS.md`'s architecture/PO-priorities sections as stale until a maintainer reconciles them with this repo.
+
+## Git / branches
+
+- Feature work: `feature/<issue>-short-description` from `main` — **do not commit implementation on `main`**
+- OpenSpec `/opsx-apply` edits this repo; create the feature branch before the first implementation commit (see sibling `migration-toolkit-sdd/docs/base-standards.md`)
 
 ## Policy conversion architecture
 

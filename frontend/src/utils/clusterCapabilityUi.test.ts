@@ -7,7 +7,7 @@ import {
   clusterProfileI18nKey,
   corsConversionHintKey,
   shouldShowClusterVersionsCard,
-} from '../pages/clusterCapabilityUi';
+} from './clusterCapabilityUi';
 
 describe('clusterCapabilityUi', () => {
   it('shows versions card only when connected (Connection WU3)', () => {

@@ -21,9 +21,9 @@ import { CheckCircleIcon, ExclamationTriangleIcon, TimesCircleIcon } from '@patt
 import { useTranslation } from 'react-i18next';
 import { servicesApi } from '../api/client';
 import { CompatibilityResult } from '../api/types';
-import { AppState } from '../App';
+import { useAppState } from '../components/AppStateContext';
 import { useNavigate } from 'react-router-dom';
-import { loadSupportedPolicies } from './supportedPolicies';
+import { loadSupportedPolicies } from '../utils/supportedPolicies';
 import { runCompatibilityChecks } from './compatibilityChecks';
 import {
   PF_DANGER,
@@ -34,11 +34,6 @@ import {
 } from '../styles/pfTokens';
 import shared from '../styles/shared.module.css';
 import styles from './CompatibilityPage.module.css';
-
-interface Props {
-  appState: AppState;
-  setAppState: React.Dispatch<React.SetStateAction<AppState>>;
-}
 
 const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
   switch (status) {
@@ -61,7 +56,8 @@ const ScoreColor = (score: number): ProgressVariant => {
   return ProgressVariant.danger;
 };
 
-const CompatibilityPage: React.FC<Props> = ({ appState, setAppState: _setAppState }) => {
+const CompatibilityPage: React.FC = () => {
+  const { appState } = useAppState();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [results, setResults] = useState<CompatibilityResult[]>([]);

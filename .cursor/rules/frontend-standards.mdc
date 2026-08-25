@@ -1,0 +1,62 @@
+---
+description: Frontend (React/PatternFly/TypeScript) conventions — components, API client, forms, error handling, i18n, styling
+globs: frontend/src/**/*.ts,frontend/src/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend standards
+
+> **Mobile**: this project has no native mobile client and no responsive-mobile-specific code path today (PatternFly's own responsive grid is the only adaptation). Treat this file as the baseline that would extend to a future mobile/React Native client (shared API contracts in `api/types.ts`, same error-message-extraction convention, same i18n key structure) if one is ever built.
+
+## Structure
+
+`components/` holds domain-grouped UI (`import/`, `history/`, `conversion/`, `connection/`, `api/`, `yaml/`) plus cross-cutting pieces (`AppStateContext`, `LangSwitcher`, `RouteErrorBoundary`). `pages/` are thin orchestrators (<200 lines target) that compose components, call APIs, and write via `useAppState()`. Pure logic without JSX lives in `components/<domain>/*Utils.ts` or `pages/*.ts` (`compatibilityChecks.ts`) so it can be tested without mounting. CSS Modules co-locate with components (`components/import/import.module.css`, etc.).
+
+## Component conventions
+
+- `const XxxPage: React.FC = (...) => {...}; export default XxxPage;` — orchestrator pages; `interface Props` only when a page still accepts props (most workflow pages use context only).
+- Subcomponents under `components/<domain>/` with explicit prop boundaries; presentational pieces receive data/callbacks from the page orchestrator.
+- State: local `useState` for form fields; workflow state via `useAppState()`. `useCallback` only for functions that are `useEffect` dependencies.
+- API calls: `async/await` in **page orchestrators** (preferred), wrapped in `try/catch/finally`, with explicit `loading`/`error` state. Exceptions where a leaf component owns its own API call:
+  - **One-shot UI-hint fetches** (e.g. `clusterApi.getDomain()` for field prefill): result stays local, failure silently acceptable.
+  - **Self-contained domain forms** with tightly-coupled test/save cycles (e.g. `ConnectionForm` owns `connectionApi.test` + connect state; `ClusterVersionsPanel` owns `settingsApi.put` for profile). These are intentional leaf-owned workflows where the form's UX and the API round-trip are inseparable — lifting to the page would add prop plumbing without benefit. Such forms must manage their own `loading`/`error` state.
+- PatternFly 5 components only for UI chrome. Multi-step flow is plain routes + `navigate()` — no `Wizard`.
+
+## API client (`api/client.ts` / `api/types.ts`)
+
+- One Axios instance, base URL from `import.meta.env.VITE_API_URL || ''`. Request interceptor sets `Accept-Language` from `i18n.language`; response interceptor only clears the persisted connection on 401/403.
+- No global `Authorization` header — pass `bearerHeaders(accessToken)` explicitly per call.
+- Domain-grouped plain objects: `connectionApi`, `conversionApi`, `historyApi`, etc.
+- `api/types.ts` = API contracts only. `AppState` lives in `components/AppStateContext.tsx`.
+
+## Form validation
+
+- No schema library (`zod`/`yup`). Manual `if` + boolean state; PatternFly `FormHelperText` preferred.
+- Disable submit when invalid (`isDisabled={loading || !url}`).
+
+## Error handling
+
+- Use `apiErrorMessage(e, fallback)` from `utils/apiError.ts` with `catch (e: unknown)` in all pages.
+- `components/RouteErrorBoundary` wraps `<Routes>` in `App.tsx`.
+
+## State
+
+`AppStateContext` + `useAppState()` replace prop drilling. Provider sits inside `BrowserRouter` in `App.tsx`. `utils/appStateStorage.ts` persists a **sanitized** subset to `sessionStorage` — never persist `accessToken` or `connected: true` without a live token (I-2/I-3).
+
+## i18n
+
+- `useTranslation()` + `t('page.key')`, nested keys (`connection.title`). Prefixes: `btnX`, `labelX`, `colX`, `errorX`, `ariaX`.
+- Every key in `locales/en.json` must exist in `locales/ja.json` (`locales/locales.smoke.test.ts`).
+
+## Styling
+
+PatternFly utilities + CSS Modules co-located with components. Use `styles/pfTokens.ts` constants — no CSS-in-JS, Tailwind, or Sass.
+
+## Naming
+
+Files: PascalCase for components (`ConnectionForm.tsx`), camelCase for utils. Handlers: `handleX` in orchestrator, `onX` for props passed down.
+
+## Suggested improvements (not yet implemented)
+
+- Full `@testing-library/react` coverage for forms and wizards — [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
+- Backend unified error envelope once `@ServerExceptionMapper` lands ([#171](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/171)).
