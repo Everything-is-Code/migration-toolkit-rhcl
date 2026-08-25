@@ -9,6 +9,9 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 
+import com.redhat.migrationtoolkit.rhcl.service.ConversionService;
+import com.tngtech.archunit.core.domain.JavaModifier;
+
 @AnalyzeClasses(
         packages = "com.redhat.migrationtoolkit.rhcl",
         importOptions = ImportOption.DoNotIncludeTests.class
@@ -62,9 +65,14 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule services_haveApplicationScopedAnnotation = classes()
             .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.service..")
+            .and().resideOutsideOfPackage("com.redhat.migrationtoolkit.rhcl.service.conversion..")
+            .and().resideOutsideOfPackage("com.redhat.migrationtoolkit.rhcl.service.generator.contributor..")
             .and().areNotInterfaces()
             .and().areNotMemberClasses()
             .and().areNotEnums()
+            .and().doNotHaveModifier(JavaModifier.ABSTRACT)
+            .and().areTopLevelClasses()
+            .and().haveSimpleNameNotEndingWith("Factory")
             .should().beAnnotatedWith(jakarta.enterprise.context.ApplicationScoped.class);
 
     @ArchTest
@@ -129,6 +137,26 @@ class ArchitectureTest {
             .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.util..")
             .should().dependOnClassesThat()
             .resideInAPackage("com.redhat.migrationtoolkit.rhcl.controller..");
+
+    @ArchTest
+    static final ArchRule conversionPackage_doesNotDependOnControllers = noClasses()
+            .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.service.conversion..")
+            .should().dependOnClassesThat()
+            .resideInAPackage("com.redhat.migrationtoolkit.rhcl.controller..");
+
+    @ArchTest
+    static final ArchRule generators_mayDependOnConversionAndModel = noClasses()
+            .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.service.generator..")
+            .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                    "com.redhat.migrationtoolkit.rhcl.controller..",
+                    "com.redhat.migrationtoolkit.rhcl.client..",
+                    "com.redhat.migrationtoolkit.rhcl.entity..");
+
+    @ArchTest
+    static final ArchRule contributors_doNotDependOnConversionService = noClasses()
+            .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.service.generator.contributor..")
+            .should().dependOnClassesThat().areAssignableTo(ConversionService.class);
 
     // ── General code quality rules ────────────────────────────────────────────
 

@@ -8,6 +8,9 @@ import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendType;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -411,6 +414,13 @@ class ConversionServiceTest {
     }
 
     @Test
+    void normalizeYamlLineEndings_crlfToLf() {
+        assertEquals("a\nb\n", ConversionService.normalizeYamlLineEndings("a\r\nb\r\n"));
+        assertEquals("a\nb", ConversionService.normalizeYamlLineEndings("a\nb"));
+        assertNull(ConversionService.normalizeYamlLineEndings(null));
+    }
+
+    @Test
     void convert_corsPolicy_includesCredentialsAndMaxAge_native() {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
@@ -613,8 +623,8 @@ class ConversionServiceTest {
     @ValueSource(strings = {"", "  ", "http://my-service:8080",
             "http://svc.namespace.svc.cluster.local", "my-service"})
     void detectBackendType_internal(String url) {
-        ConversionService.BackendType type = service.detectBackendType(url.isBlank() ? null : url);
-        assertEquals(ConversionService.BackendType.INTERNAL, type);
+        BackendType type = service.detectBackendType(url.isBlank() ? null : url);
+        assertEquals(BackendType.INTERNAL, type);
     }
 
     @ParameterizedTest
@@ -625,13 +635,13 @@ class ConversionServiceTest {
         "http://svc.cluster.local, EXTERNAL"
     })
     void detectBackendType_external(String url, String expected) {
-        ConversionService.BackendType type = service.detectBackendType(url);
-        assertEquals(ConversionService.BackendType.valueOf(expected), type);
+        BackendType type = service.detectBackendType(url);
+        assertEquals(BackendType.valueOf(expected), type);
     }
 
     @Test
     void detectBackendType_null_isInternal() {
-        assertEquals(ConversionService.BackendType.INTERNAL, service.detectBackendType(null));
+        assertEquals(BackendType.INTERNAL, service.detectBackendType(null));
     }
 
     // ── README notes collector (#170) ─────────────────────────────────────────
@@ -657,32 +667,22 @@ class ConversionServiceTest {
 
     @Test
     void generateReadme_acceptsSingleReadmeNotesCollector_notPerPolicyNoteStrings() {
-        Method generateReadme = Arrays.stream(ConversionService.class.getDeclaredMethods())
-                .filter(m -> "generateReadme".equals(m.getName()))
+        Method build = Arrays.stream(ReadmeSupport.class.getDeclaredMethods())
+                .filter(m -> "build".equals(m.getName()))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("generateReadme not found"));
-        assertTrue(Modifier.isPrivate(generateReadme.getModifiers()));
+                .orElseThrow(() -> new AssertionError("ReadmeSupport.build not found"));
+        assertTrue(Modifier.isPublic(build.getModifiers()));
 
-        Class<?>[] params = generateReadme.getParameterTypes();
+        Class<?>[] params = build.getParameterTypes();
         long readmeNotesParams = Arrays.stream(params)
                 .filter(p -> p == ConversionService.ReadmeNotes.class)
                 .count();
         assertEquals(1, readmeNotesParams,
-                "generateReadme must take exactly one ReadmeNotes collector");
+                "ReadmeSupport.build must take exactly one ReadmeNotes collector");
 
-        // Structural Strings may remain (name, namespace, externalHost, …) but there must be
-        // no trailing run of four+ consecutive String params after the last non-String —
-        // the old per-policy note slots were four consecutive Strings before install args.
-        int lastNonString = -1;
-        for (int i = 0; i < params.length; i++) {
-            if (params[i] != String.class) {
-                lastNonString = i;
-            }
-        }
-        int trailingStrings = params.length - 1 - lastNonString;
-        assertTrue(trailingStrings <= 2,
-                "generateReadme must not end with a long trailing String note arg list; got "
-                        + trailingStrings + " trailing Strings after last non-String param");
+        long stringParams = Arrays.stream(params).filter(p -> p == String.class).count();
+        assertEquals(0, stringParams,
+                "ReadmeSupport.build must not take positional String note args (#170)");
     }
 
     // ── README content ────────────────────────────────────────────────────────
@@ -1914,10 +1914,11 @@ class ConversionServiceTest {
         svc.backends = List.of(
                 backend("A", "a", "https://a.example.com", "/a"),
                 backend("B", "b", "https://b.example.com", "/b"));
-        List<ConversionService.ResolvedBackend> resolved =
+        List<ResolvedBackend> resolved =
                 service.resolveBackends(svc, "fallback", null, false);
-        List<ConversionService.ResolvedBackend> selected =
-                service.selectBackendsForPath(resolved, "/unrelated");
+        List<ResolvedBackend> selected =
+                com.redhat.migrationtoolkit.rhcl.service.conversion.HttpRouteSupport
+                        .selectBackendsForPath(resolved, "/unrelated");
         assertEquals(2, selected.size());
     }
 
