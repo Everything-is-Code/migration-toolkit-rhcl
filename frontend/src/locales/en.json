@@ -369,6 +369,14 @@
     "saved": "Settings saved",
     "saveError": "Failed to save settings"
   },
+  "error": {
+    "validationFailed": "Validation failed. Please check your input.",
+    "threescaleClient": "Unable to connect to 3scale. Please verify your connection settings.",
+    "applyFailed": "Failed to apply resources to the cluster.",
+    "importParse": "Failed to parse the imported file. Please check the file format.",
+    "importNoYaml": "No YAML files found in the uploaded archive.",
+    "internal": "An unexpected error occurred. Please try again later."
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "Configure application display preferences",

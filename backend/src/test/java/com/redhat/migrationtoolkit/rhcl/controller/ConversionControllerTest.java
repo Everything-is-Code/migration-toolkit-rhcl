@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -92,7 +93,7 @@ class ConversionControllerTest {
                 .when().post("/api/convert")
                 .then()
                 .statusCode(400)
-                .body("violations", is(not(empty())));
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -103,7 +104,7 @@ class ConversionControllerTest {
                 .when().post("/api/convert")
                 .then()
                 .statusCode(400)
-                .body("violations", is(not(empty())));
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -121,7 +122,7 @@ class ConversionControllerTest {
                 .when().post("/api/convert")
                 .then()
                 .statusCode(400)
-                .body("violations", is(not(empty())));
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -139,7 +140,7 @@ class ConversionControllerTest {
                 .when().post("/api/convert")
                 .then()
                 .statusCode(400)
-                .body("violations", is(not(empty())));
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -643,9 +644,32 @@ class ConversionControllerTest {
                 .when().post("/api/convert")
                 .then()
                 .statusCode(400)
-                .body("error", containsString("dnsHostname"));
+                .body("error.code", equalTo("VALIDATION_FAILED"))
+                .body("error.message", containsString("dnsHostname"));
 
         verify(conversionService, never()).convert(any(), anyString(), isNull(), any(ConversionOptions.class));
+    }
+
+    @Test
+    void convert_globalFailure_returns502WithEnvelope() {
+        when(clusterVersionService.resolveFromSettings(anyBoolean()))
+                .thenThrow(new RuntimeException("Infrastructure failure"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(502)
+                .body("error.code", equalTo("THREESCALE_CLIENT_ERROR"))
+                .body("error.message", notNullValue());
     }
 
     @Test

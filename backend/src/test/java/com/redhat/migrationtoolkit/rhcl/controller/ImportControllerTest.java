@@ -42,7 +42,9 @@ class ImportControllerTest {
                 .contentType("multipart/form-data")
                 .when().post("/api/import/zip")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"))
+                .body("error.message", notNullValue());
     }
 
     @Test
@@ -90,7 +92,24 @@ class ImportControllerTest {
                 .when().post("/api/import/zip")
                 .then()
                 .statusCode(400)
-                .body("error", notNullValue());
+                .body("error.code", equalTo("IMPORT_NO_YAML"))
+                .body("error.message", notNullValue());
+    }
+
+    @Test
+    void uploadZip_invalidZipBytes_returns400WithEnvelope() throws IOException {
+        Path tmp = Files.createTempFile("bad-envelope-", ".zip");
+        Files.write(tmp, "not a zip file content".getBytes(StandardCharsets.UTF_8));
+        tmp.toFile().deleteOnExit();
+
+        given()
+                .contentType("multipart/form-data")
+                .multiPart("file", tmp.toFile(), "application/zip")
+                .when().post("/api/import/zip")
+                .then()
+                .statusCode(400)
+                .body("error.code", anyOf(equalTo("IMPORT_PARSE_ERROR"), equalTo("IMPORT_NO_YAML")))
+                .body("error.message", notNullValue());
     }
 
     @Test
@@ -108,20 +127,6 @@ class ImportControllerTest {
                 .body("files.keySet()", hasItem("gateway.yml"));
     }
 
-    @Test
-    void uploadZip_invalidZipBytes_returns400() throws IOException {
-        Path tmp = Files.createTempFile("bad-", ".zip");
-        Files.write(tmp, "not a zip file content".getBytes(StandardCharsets.UTF_8));
-        tmp.toFile().deleteOnExit();
-
-        given()
-                .contentType("multipart/form-data")
-                .multiPart("file", tmp.toFile(), "application/zip")
-                .when().post("/api/import/zip")
-                .then()
-                .statusCode(400)
-                .body("error", notNullValue());
-    }
 
     @Test
     void uploadZip_directoryEntries_skipped() throws IOException {

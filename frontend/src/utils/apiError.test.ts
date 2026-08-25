@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { apiErrorMessage } from './apiError';
+import type { TFunction } from 'i18next';
+import { apiErrorMessage, apiErrorI18nMessage } from './apiError';
 
 describe('apiErrorMessage', () => {
   it('returns response.data.error from axios-like error', () => {
@@ -44,5 +45,30 @@ describe('apiErrorMessage', () => {
 
   it('returns fallback for whitespace-only string', () => {
     expect(apiErrorMessage('   ', 'fallback')).toBe('fallback');
+  });
+
+  it('extracts message from new error envelope object', () => {
+    const err = { response: { data: { error: { code: 'VALIDATION_FAILED', message: 'Bad input' } } } };
+    expect(apiErrorMessage(err, 'fallback')).toBe('Bad input');
+  });
+});
+
+describe('apiErrorI18nMessage', () => {
+  it('returns i18n string for known error code', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    const err = { response: { data: { error: { code: 'VALIDATION_FAILED', message: 'Bad input' } } } };
+    expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('translated:error.validationFailed');
+  });
+
+  it('falls back to backend message for unknown error code', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    const err = { response: { data: { error: { code: 'UNKNOWN_CODE', message: 'Some error' } } } };
+    expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('Some error');
+  });
+
+  it('falls back to legacy extraction for non-envelope errors', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    const err = { response: { data: { error: 'legacy error string' } } };
+    expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('legacy error string');
   });
 });
