@@ -50,7 +50,6 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
     }
 
     setPhase('dns');
-    let lastDnsError: unknown = null;
     for (let i = 0; i < 30; i++) {
       try {
         const res = await gatewayApi.getInfo(namespace, gatewayName);
@@ -61,7 +60,6 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
           return;
         }
       } catch (e: unknown) {
-        lastDnsError = e;
         if (isNonRetryable(e)) {
           setError(apiErrorI18nMessage(e, t, t('import.testPanel.gwNotReady')));
           setLoading(false);
