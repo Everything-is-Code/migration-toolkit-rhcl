@@ -17,7 +17,9 @@ alwaysApply: false
 - `const XxxPage: React.FC = (...) => {...}; export default XxxPage;` — orchestrator pages; `interface Props` only when a page still accepts props (most workflow pages use context only).
 - Subcomponents under `components/<domain>/` with explicit prop boundaries; presentational pieces receive data/callbacks from the page orchestrator.
 - State: local `useState` for form fields; workflow state via `useAppState()`. `useCallback` only for functions that are `useEffect` dependencies.
-- API calls: `async/await` in **page orchestrators** (preferred), wrapped in `try/catch/finally`, with explicit `loading`/`error` state. One-shot UI-hint fetches (e.g. `clusterApi.getDomain()` for field prefill) may live in the component that triggers them when the result stays local and failure is silently acceptable.
+- API calls: `async/await` in **page orchestrators** (preferred), wrapped in `try/catch/finally`, with explicit `loading`/`error` state. Exceptions where a leaf component owns its own API call:
+  - **One-shot UI-hint fetches** (e.g. `clusterApi.getDomain()` for field prefill): result stays local, failure silently acceptable.
+  - **Self-contained domain forms** with tightly-coupled test/save cycles (e.g. `ConnectionForm` owns `connectionApi.test` + connect state; `ClusterVersionsPanel` owns `settingsApi.put` for profile). These are intentional leaf-owned workflows where the form's UX and the API round-trip are inseparable — lifting to the page would add prop plumbing without benefit. Such forms must manage their own `loading`/`error` state.
 - PatternFly 5 components only for UI chrome. Multi-step flow is plain routes + `navigate()` — no `Wizard`.
 
 ## API client (`api/client.ts` / `api/types.ts`)

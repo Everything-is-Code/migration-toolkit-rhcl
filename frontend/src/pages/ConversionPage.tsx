@@ -119,6 +119,7 @@ const ConversionPage: React.FC = () => {
               selectedServices={appState.selectedServices}
               conversionResults={appState.conversionResults}
               onConvert={handleConvert}
+              onBack={() => navigate('/compatibility')}
             />
           </StackItem>
           {appState.conversionResults.length > 0 && (

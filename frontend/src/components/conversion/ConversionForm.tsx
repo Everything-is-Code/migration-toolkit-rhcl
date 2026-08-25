@@ -14,7 +14,6 @@ import {
   Button,
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import ConversionBackendSettings from './ConversionBackendSettings';
 import ConversionOutputSettings from './ConversionOutputSettings';
 import ConversionPolicySettings from './ConversionPolicySettings';
@@ -29,11 +28,11 @@ interface Props {
   selectedServices: ApiService[];
   conversionResults: ConversionResultItem[];
   onConvert: (options: ConversionFormOptions) => void;
+  onBack: () => void;
 }
 
-const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedServices, conversionResults, onConvert }) => {
+const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedServices, conversionResults, onConvert, onBack }) => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
 
   const [isExternal, setIsExternal] = useState(false);
   const [externalBackendUrl, setExternalBackendUrl] = useState('');
@@ -152,7 +151,7 @@ const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedSer
         )}
 
         <div className={styles.actionRow} style={{ marginTop: '24px' }}>
-          <Button variant="secondary" onClick={() => navigate('/compatibility')}>
+          <Button variant="secondary" onClick={onBack}>
             {t('conversion.btnBack')}
           </Button>
           <Button variant="primary" onClick={handleConvertClick} isDisabled={loading}>
