@@ -23,7 +23,6 @@ import styles from './apiSelection.module.css';
 interface Props {
   loading: boolean;
   filtered: ApiService[];
-  services: ApiService[];
   selectedId: string | null;
   enabledPoliciesById: Map<string, Policy[]>;
   onSelect: (id: string) => void;
@@ -33,7 +32,6 @@ interface Props {
 const ServiceList: React.FC<Props> = ({
   loading,
   filtered,
-  services: _services,
   selectedId,
   enabledPoliciesById,
   onSelect,
