@@ -14,6 +14,9 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
+import com.redhat.migrationtoolkit.rhcl.exception.NotFoundException;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
+
 import java.net.InetAddress;
 import java.util.List;
 import java.util.Map;
@@ -42,7 +45,7 @@ public class GatewayInfoController {
             @QueryParam("name") String gatewayName) {
 
         if (namespace == null || namespace.isBlank() || gatewayName == null || gatewayName.isBlank()) {
-            return Response.status(400).entity(Map.of("error", "namespace and name are required")).build();
+            throw new ValidationException("namespace and name are required");
         }
 
         try {
@@ -60,10 +63,7 @@ public class GatewayInfoController {
                     .get();
 
             if (gw == null) {
-                return Response.status(404).entity(Map.of(
-                        "error", "Gateway not found: " + gatewayName,
-                        "ready", false
-                )).build();
+                throw new NotFoundException("GATEWAY_NOT_FOUND", "Gateway not found: " + gatewayName);
             }
 
             String hostname = extractHostname(gw);
@@ -78,12 +78,11 @@ public class GatewayInfoController {
                     "dnsReady", dnsReady
             )).build();
 
+        } catch (com.redhat.migrationtoolkit.rhcl.exception.ApiException e) {
+            throw e;
         } catch (Exception e) {
             LOG.warnf("Failed to get Gateway info for %s/%s: %s", namespace, gatewayName, e.getMessage());
-            return Response.status(500).entity(Map.of(
-                    "error", e.getMessage(),
-                    "ready", false
-            )).build();
+            throw new RuntimeException("Failed to get Gateway info: " + e.getMessage(), e);
         }
     }
 

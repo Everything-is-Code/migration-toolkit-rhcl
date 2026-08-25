@@ -18,7 +18,7 @@ export type CompatibilityCheckDeps = {
     accessToken: string,
     supportedPolicies: string[],
   ) => Promise<{ data: CompatibilityResult }>;
-  errorMessage: string;
+  formatApiError: (e: unknown) => string;
 };
 
 /** One retry absorbs a single transient settings hiccup without re-introducing N loads. */
@@ -58,19 +58,18 @@ export async function runCompatibilityChecks(
           policies,
         );
         results.push(resp.data);
-      } catch {
+      } catch (e: unknown) {
         results.push({
           serviceId: service.id,
           serviceName: service.name,
           score: 0,
           level: 'LOW',
-          items: [{ name: 'Error', status: 'UNSUPPORTED', message: deps.errorMessage }],
+          items: [{ name: 'Error', status: 'UNSUPPORTED', message: deps.formatApiError(e) }],
         });
       }
     }
     return { results, error: null };
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : deps.errorMessage;
-    return { results, error: message };
+    return { results, error: deps.formatApiError(e) };
   }
 }

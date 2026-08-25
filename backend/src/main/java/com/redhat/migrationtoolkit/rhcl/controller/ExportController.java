@@ -22,6 +22,8 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
+
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -51,9 +53,7 @@ public class ExportController {
                                  @HeaderParam("Authorization") String authorization) {
         String accessToken = extractBearerToken(authorization);
         if (url == null || url.isBlank() || accessToken == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("url query parameter and Authorization Bearer token are required")
-                    .build();
+            throw new ValidationException("url query parameter and Authorization Bearer token are required");
         }
         ServiceListPage result = exportService.listServicesPage(url, accessToken, page, perPage);
         return Response.ok(result).build();
@@ -67,9 +67,7 @@ public class ExportController {
                                 @HeaderParam("Authorization") String authorization) {
         String accessToken = extractBearerToken(authorization);
         if (url == null || url.isBlank() || accessToken == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("url query parameter and Authorization Bearer token are required")
-                    .build();
+            throw new ValidationException("url query parameter and Authorization Bearer token are required");
         }
         ApiService service = exportService.exportService(url, accessToken, id);
         return Response.ok(service).build();
@@ -84,9 +82,7 @@ public class ExportController {
                                         @QueryParam("supportedPolicies") String supportedPoliciesParam) {
         String accessToken = extractBearerToken(authorization);
         if (url == null || url.isBlank() || accessToken == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("url query parameter and Authorization Bearer token are required")
-                    .build();
+            throw new ValidationException("url query parameter and Authorization Bearer token are required");
         }
         ApiService service = exportService.exportService(url, accessToken, id);
         Set<String> supportedPolicies = new HashSet<>();

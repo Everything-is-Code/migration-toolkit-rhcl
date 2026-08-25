@@ -32,6 +32,14 @@ export const ERROR_CODE_I18N: Record<string, string> = {
   IMPORT_PARSE_ERROR: 'error.importParse',
   IMPORT_NO_YAML: 'error.importNoYaml',
   INTERNAL_ERROR: 'error.internal',
+  CONNECTION_TEST_FAILED: 'error.connectionTestFailed',
+  HISTORY_NOT_FOUND: 'error.historyNotFound',
+  HISTORY_DOWNLOAD_FAILED: 'error.historyDownloadFailed',
+  CLUSTER_ROUTE_NOT_FOUND: 'error.clusterRouteNotFound',
+  CLUSTER_ROUTE_HOST_PENDING: 'error.clusterRouteHostPending',
+  CLUSTER_DOMAIN_EXTRACT_FAILED: 'error.clusterDomainExtractFailed',
+  GATEWAY_NOT_FOUND: 'error.gatewayNotFound',
+  SETTINGS_NOT_FOUND: 'error.settingsNotFound',
 };
 
 export function apiErrorI18nMessage(e: unknown, t: TFunction, fallback?: string): string {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { apiErrorMessage } from '../utils/apiError';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import {
   PageSection,
   PageSectionVariants,
@@ -45,7 +45,7 @@ const DownloadPage: React.FC = () => {
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (e: unknown) {
-      setError(t('download.errorDownload', { message: apiErrorMessage(e, 'Download failed') }));
+      setError(t('download.errorDownload', { message: apiErrorI18nMessage(e, t, t('download.errorDownloadFallback')) }));
     } finally {
       setDownloading(prev => ({ ...prev, [result.serviceId]: false }));
     }

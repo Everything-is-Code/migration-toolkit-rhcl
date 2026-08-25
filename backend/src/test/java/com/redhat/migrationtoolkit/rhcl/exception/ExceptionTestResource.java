@@ -73,6 +73,12 @@ public class ExceptionTestResource {
     }
 
     @GET
+    @Path("/not-found")
+    public String throwNotFound() {
+        throw new NotFoundException("HISTORY_NOT_FOUND", "History entry 999 not found");
+    }
+
+    @GET
     @Path("/generic-error")
     public String throwGenericError() {
         throw new RuntimeException("Something unexpected happened");

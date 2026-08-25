@@ -71,4 +71,33 @@ describe('apiErrorI18nMessage', () => {
     const err = { response: { data: { error: 'legacy error string' } } };
     expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('legacy error string');
   });
+
+  it('returns i18n string for CONNECTION_TEST_FAILED', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    const err = { response: { data: { error: { code: 'CONNECTION_TEST_FAILED', message: 'Failed' } } } };
+    expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('translated:error.connectionTestFailed');
+  });
+
+  it('returns i18n string for HISTORY_NOT_FOUND', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    const err = { response: { data: { error: { code: 'HISTORY_NOT_FOUND', message: 'Not found' } } } };
+    expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('translated:error.historyNotFound');
+  });
+
+  it('returns i18n string for GATEWAY_NOT_FOUND', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    const err = { response: { data: { error: { code: 'GATEWAY_NOT_FOUND', message: 'Not found' } } } };
+    expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('translated:error.gatewayNotFound');
+  });
+
+  it('handles success:false legacy pattern via fallback', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    const err = { response: { data: { success: false, message: 'Connection failed' } } };
+    expect(apiErrorI18nMessage(err, mockT as unknown as TFunction)).toBe('Connection failed');
+  });
+
+  it('returns fallback string when provided', () => {
+    const mockT = (key: string) => `translated:${key}`;
+    expect(apiErrorI18nMessage(null, mockT as unknown as TFunction, 'my fallback')).toBe('my fallback');
+  });
 });

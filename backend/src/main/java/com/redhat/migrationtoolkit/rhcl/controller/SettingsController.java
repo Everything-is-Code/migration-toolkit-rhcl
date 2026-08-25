@@ -1,6 +1,8 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
 import com.redhat.migrationtoolkit.rhcl.entity.AppSettingsEntity;
+import com.redhat.migrationtoolkit.rhcl.exception.NotFoundException;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -22,7 +24,7 @@ public class SettingsController {
     public Response get(@PathParam("key") String key) {
         AppSettingsEntity entity = AppSettingsEntity.findById(key);
         if (entity == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            throw new NotFoundException("SETTINGS_NOT_FOUND", "Setting '" + key + "' not found");
         }
         return Response.ok(Map.of("key", entity.key, "value", entity.value)).build();
     }
@@ -33,8 +35,7 @@ public class SettingsController {
     public Response put(@PathParam("key") String key, Map<String, String> body) {
         String value = body.get("value");
         if (value == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                .entity(Map.of("message", "value is required")).build();
+            throw new ValidationException("value is required");
         }
         AppSettingsEntity entity = AppSettingsEntity.findById(key);
         if (entity == null) {

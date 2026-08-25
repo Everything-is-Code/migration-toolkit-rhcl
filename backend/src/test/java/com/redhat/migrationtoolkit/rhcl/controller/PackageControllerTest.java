@@ -62,7 +62,8 @@ class PackageControllerTest {
                         """)
                 .when().post("/api/download/zip")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -74,7 +75,8 @@ class PackageControllerTest {
                         """)
                 .when().post("/api/download/zip")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -98,7 +100,8 @@ class PackageControllerTest {
         given()
                 .when().get("/api/download/history/99999")
                 .then()
-                .statusCode(404);
+                .statusCode(404)
+                .body("error.code", equalTo("HISTORY_NOT_FOUND"));
     }
 
     @Test

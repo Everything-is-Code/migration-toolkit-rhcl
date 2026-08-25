@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiErrorMessage } from '../utils/apiError';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import {
   PageSection,
   Card,
@@ -49,7 +49,7 @@ const HistoryPage: React.FC = () => {
         setHistory(Array.isArray(data?.items) ? data.items : []);
         setTotal(typeof data?.total === 'number' ? data.total : 0);
       })
-      .catch((e: unknown) => setError(apiErrorMessage(e, 'Failed to load history')))
+      .catch((e: unknown) => setError(apiErrorI18nMessage(e, t, t('history.errorLoadFallback'))))
       .finally(() => setLoading(false));
   }, [page, perPage]);
 
@@ -93,7 +93,7 @@ const HistoryPage: React.FC = () => {
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (e: unknown) {
-      showToast(t('history.downloadError2', { message: apiErrorMessage(e, 'Download failed') }));
+      showToast(t('history.downloadError2', { message: apiErrorI18nMessage(e, t, t('history.downloadErrorFallback')) }));
     } finally {
       setDownloading(prev => ({ ...prev, [entry.id]: false }));
     }
@@ -108,7 +108,7 @@ const HistoryPage: React.FC = () => {
       showToast(t('history.deleteSuccess', { count: selected.size }));
       load();
     } catch (e: unknown) {
-      showToast(t('history.deleteError', { message: apiErrorMessage(e, 'Delete failed') }));
+      showToast(t('history.deleteError', { message: apiErrorI18nMessage(e, t, t('history.deleteErrorFallback')) }));
     } finally {
       setDeleting(false);
     }
