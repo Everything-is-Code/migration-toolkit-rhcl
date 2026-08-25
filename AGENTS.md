@@ -10,16 +10,21 @@ Short map for automated agents and humans working in this repository.
 | Path | Role |
 |------|------|
 | `backend/` | Quarkus 3.27.x (Java 21) REST API, Flyway, tests |
-| `frontend/` | React + PatternFly + Vite SPA |
+| `frontend/` | React + PatternFly + Vite SPA (`components/` + thin `pages/`) |
 | `deploy/` | OpenShift S2I manifests + `install.sh` |
 | `helm/` | Helm chart packaging |
 | `docs/` | Published Helm chart index (GitHub Pages) |
 | `scripts/` | Seed / helper scripts |
 | `testdata/` | Sample payloads for local demos |
 
+## Git / branches
+
+- Feature work: `feature/<issue>-short-description` from `main` — **do not commit implementation on `main`**
+- OpenSpec `/opsx-apply` edits this repo; create the feature branch before the first implementation commit (see sibling `migration-toolkit-sdd/docs/base-standards.md`)
+
 ## Spec-driven development (SDD)
 
-This project uses **Engram-only** SDD artifacts (topic keys `sdd/{change-name}/…`). Do **not** create or rely on an `openspec/` tree unless maintainers explicitly switch modes.
+OpenSpec store: sibling `migration-toolkit-sdd/` (GitHub: `rhcl-sdd`). This repo holds product code only.
 
 ## Frontend API URL (important)
 
@@ -62,5 +67,5 @@ Full command list: see **Container base digests** in `CONTRIBUTING.md`.
 - Commit secrets, tokens, or private cluster credentials.
 - Hardcode `migration-toolkit` (or any fixed ns) into deploy **image** paths — use `NAMESPACE_PLACEHOLDER`.
 - Expand out-of-scope hygiene issues (e.g. PostgreSQL SUPERUSER, unrelated PF Table rewrites) into an active change without maintainer lock.
-- Invent OpenSpec files when Engram is the active artifact store.
+- Invent OpenSpec change folders in this repo — planning lives in `migration-toolkit-sdd/openspec/`.
 - Skip CODEOWNERS review for substantive PRs.

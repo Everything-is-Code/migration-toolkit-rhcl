@@ -1,0 +1,52 @@
+---
+description: Testing structure and conventions for backend (JUnit5/Quarkus/ArchUnit/Playwright) and frontend (Vitest)
+globs: backend/src/test/**,frontend/src/**/*.test.ts,frontend/src/**/*.test.tsx
+alwaysApply: false
+---
+
+# Testing standards
+
+## Backend (`backend/src/test/`)
+
+| Source dir | Registered by | Naming | Purpose |
+|---|---|---|---|
+| `java/.../{controller,service,dto,model,util}/` | Surefire (`**/*Test.java`) | `<ClassUnderTest>Test.java` | Unit / component tests |
+| `architect/.../ArchitectureTest.java` | extra test-source (`build-helper-maven-plugin`) | — | ArchUnit layering rules |
+| `e2e/.../e2e/{PlaywrightE2EIT, MigrationWorkflowIT}.java` | Failsafe (`**/*IT.java`) | `*IT.java` | Browser / workflow integration tests |
+
+Test method naming: `methodUnderTest_condition_expectedResult` (e.g. `resolve_whenClusterVersionForbidden_usesDefaultProfile`, `applyFiles_emptyRequest_returns400`).
+
+**Frameworks in use:**
+- `@QuarkusTest` + REST-assured (`given().contentType(...).body(...).when().post(...).then().statusCode(...)`) for controller tests.
+- Plain Mockito (`@ExtendWith(MockitoExtension.class)`, `@MockitoSettings(strictness=LENIENT)`) for service-layer unit tests that don't need the Quarkus container.
+- `@InjectMock` / `@MockitoConfig(convertScopes=true)` to mock CDI beans (e.g. Fabric8 `KubernetesClient`) inside `@QuarkusTest`.
+- H2 in-memory DB for the `%test` profile (`quarkus.datasource.db-kind=h2`, Flyway disabled, `schema-management.strategy=drop-and-create`) — clean up with `@AfterEach @Transactional` + `DELETE FROM ...` via injected `EntityManager`.
+- `@TestProfile` for per-test config overrides (see `ExportCorsOriginsOverrideTest`).
+- `BeanValidationDtoTest` pattern for asserting `@NotBlank`/`@NotEmpty` contracts: build a `Validator` via `Validation.buildDefaultValidatorFactory()` and assert on `violation.getPropertyPath()`.
+
+**ArchUnit rules enforced today** (`ArchitectureTest.java`, scans `com.redhat.migrationtoolkit.rhcl`, excludes tests) — do not violate these when adding new classes:
+- Layering: `controller` → `service` → `client`; nothing may depend on `controller`; only `controller` may depend on `client` indirectly through `service` (`controller` must NOT depend on `client` directly).
+- `*Controller` classes must live in `controller..` and have `@Path`.
+- `*Service` classes must live in `service..`/`model..`, be `@ApplicationScoped`, and must NOT have `@Path`.
+- `*Entity` classes must live in `entity..`, have `@Entity`, and must not depend on `controller..`.
+- `client..` types must be interfaces; `*Client` classes live in `client..`.
+- `model..`/`util..` must not depend on `controller..`(`model` also not on `service..`).
+- No class may use `System.out`/`System.err` or `java.util.logging`.
+
+Run: `cd backend && mvn test` (unit) / `mvn verify` (+ITs, JaCoCo, Checkstyle, PMD) / `./generate-report.sh` (full HTML report).
+
+## Frontend (`frontend/src/`)
+
+- Framework: **Vitest** (`vitest run`). Default `environment: 'node'` for `*.test.ts`; **`jsdom`** for `*.test.tsx` (`vitest.config.ts` + `/// @vitest-environment jsdom` when needed).
+- **`@testing-library/react`** for minimal component smoke tests; PatternFly often mocked in unit tests to avoid CSS import issues.
+- Co-located next to the file under test: `<name>.test.ts` or `<name>.test.tsx` (no `__tests__/` folder).
+- Examples: `utils/apiError.test.ts`, `components/import/importUtils.test.ts`, `components/AppStateContext.test.tsx`, `utils/supportedPoliciesCache.test.ts`, `locales/locales.smoke.test.ts`.
+- Mock Axios with `vi.mock('axios', ...)`, then dynamically `await import('./client')` inside the test.
+- `describe`/`it` + `expect(...).toBe/toMatchObject/toBeTruthy`; `beforeEach` to reset mocks/storage.
+
+Run: `cd frontend && npm test` / `npm run typecheck` / `npm run lint`.
+
+## Suggested improvements (not yet implemented)
+
+- Expand RTL coverage beyond utils + smoke tests — [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
+- Add a shared `ExceptionMapper`-level test once centralized error handling is introduced on the backend.
