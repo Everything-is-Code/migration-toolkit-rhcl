@@ -1,5 +1,3 @@
-import React from 'react';
-import { Label } from '@patternfly/react-core';
 import { getTimezone } from '../../utils/timezone';
 
 export const formatDate = (iso: string): string => {
@@ -20,13 +18,4 @@ export const statusColor = (status: string): 'green' | 'red' | 'orange' | 'blue'
     case 'PARTIAL':   return 'orange';
     default:          return 'blue';
   }
-};
-
-export const sourceLabel = (
-  source: string | undefined,
-  t: (key: string) => string,
-): React.ReactElement => {
-  if (source === 'IMPORT') return <Label isCompact color="purple">{t('history.sourceZipImport')}</Label>;
-  if (source === 'CONVERT') return <Label isCompact color="blue">{t('history.sourceConvert')}</Label>;
-  return <Label isCompact color="grey">{source ?? '—'}</Label>;
 };

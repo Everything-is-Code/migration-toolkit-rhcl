@@ -15,7 +15,8 @@ import {
 } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { ConversionHistory, FailureDetail } from '../../api/types';
-import { formatDate, statusColor, sourceLabel } from './historyUtils';
+import { formatDate, statusColor } from './historyUtils';
+import { sourceLabel } from './historyLabels';
 import styles from './history.module.css';
 
 const PER_PAGE_OPTIONS = [
