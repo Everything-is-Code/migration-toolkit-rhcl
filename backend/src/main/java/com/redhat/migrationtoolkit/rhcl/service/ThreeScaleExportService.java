@@ -848,22 +848,10 @@ public class ThreeScaleExportService {
     List<ApplicationPlan> fetchApplicationPlans(ThreeScaleClient client, String url,
                                                 String serviceId, String accessToken) {
         try {
-            List<Map<String, Object>> planList = new ArrayList<>();
-            for (int page = 1; page <= MAX_SUBRESOURCE_PAGES; page++) {
-                Map<String, Object> resp = client.getApplicationPlans(serviceId, accessToken, page, pageSize);
-                List<Map<String, Object>> items = extractList(resp, "plans");
-                if (items.isEmpty()) {
-                    items = extractList(resp, "application_plans");
-                }
-                planList.addAll(items);
-                if (items.size() < pageSize) {
-                    break;
-                }
-                if (page == MAX_SUBRESOURCE_PAGES) {
-                    LOG.warnf("Possible truncation fetching application plans for service %s after %d full pages",
-                            serviceId, MAX_SUBRESOURCE_PAGES);
-                }
-            }
+            List<Map<String, Object>> planList = accumulatePagedMaps(
+                    (page, perPage) -> client.getApplicationPlans(serviceId, accessToken, page, perPage),
+                    new String[]{"plans", "application_plans"},
+                    "application plans for " + serviceId);
             List<ApplicationPlan> plans = new ArrayList<>();
             for (Map<String, Object> wrapper : planList) {
                 Map<String, Object> planMap = wrapper;
@@ -982,7 +970,7 @@ public class ThreeScaleExportService {
     }
 
     @FunctionalInterface
-    private interface PagedMapFetcher {
+    interface PagedMapFetcher {
         Map<String, Object> fetch(int page, int perPage);
     }
 
@@ -991,10 +979,22 @@ public class ThreeScaleExportService {
      * {@link #MAX_SUBRESOURCE_PAGES}.
      */
     List<Map<String, Object>> accumulatePagedMaps(PagedMapFetcher fetcher, String listKey, String label) {
+        return accumulatePagedMaps(fetcher, new String[]{listKey}, label);
+    }
+
+    /**
+     * Like {@link #accumulatePagedMaps(PagedMapFetcher, String, String)}, but each page uses the
+     * first list key whose extracted list is non-empty (e.g. {@code plans} then
+     * {@code application_plans}).
+     */
+    List<Map<String, Object>> accumulatePagedMaps(PagedMapFetcher fetcher, String[] listKeys, String label) {
+        if (listKeys == null || listKeys.length == 0) {
+            throw new IllegalArgumentException("listKeys must not be empty");
+        }
         List<Map<String, Object>> all = new ArrayList<>();
         for (int page = 1; page <= MAX_SUBRESOURCE_PAGES; page++) {
             Map<String, Object> resp = fetcher.fetch(page, pageSize);
-            List<Map<String, Object>> items = extractList(resp, listKey);
+            List<Map<String, Object>> items = extractListWithFallback(resp, listKeys);
             all.addAll(items);
             if (items.size() < pageSize) {
                 return all;
@@ -1003,6 +1003,19 @@ public class ThreeScaleExportService {
         LOG.warnf("Possible truncation fetching %s after %d full pages (per_page=%d)",
                 label, MAX_SUBRESOURCE_PAGES, pageSize);
         return all;
+    }
+
+    private List<Map<String, Object>> extractListWithFallback(Map<String, Object> resp, String[] listKeys) {
+        for (String key : listKeys) {
+            if (key == null) {
+                continue;
+            }
+            List<Map<String, Object>> items = extractList(resp, key);
+            if (!items.isEmpty()) {
+                return items;
+            }
+        }
+        return Collections.emptyList();
     }
 
     List<Map<String, Object>> fetchAllBackendUsages(ThreeScaleClient client, String serviceId, String accessToken) {
