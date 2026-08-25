@@ -17,12 +17,12 @@ Short map for automated agents and humans working in this repository.
 | `scripts/` | Seed / helper scripts |
 | `testdata/` | Sample payloads for local demos |
 
+This repo is the **consolidated** 3scale → Connectivity Link (Kuadrant) migration tool: one Quarkus backend + one React frontend doing export, compatibility check, and YAML conversion/apply in a single app. The sibling `rhcl-ai` program docs still describe an older split architecture (`3scaleextract` Go export tool + `apishift` Java/Angular migration tool) that predates this repo (first commit 2026-06-29) — treat `rhcl-ai/AGENTS.md`'s architecture/PO-priorities sections as stale until a maintainer reconciles them with this repo.
+
 ## Git / branches
 
 - Feature work: `feature/<issue>-short-description` from `main` — **do not commit implementation on `main`**
 - OpenSpec `/opsx-apply` edits this repo; create the feature branch before the first implementation commit (see sibling `migration-toolkit-sdd/docs/base-standards.md`)
-
-This repo is the **consolidated** 3scale → Connectivity Link (Kuadrant) migration tool: one Quarkus backend + one React frontend doing export, compatibility check, and YAML conversion/apply in a single app. The sibling `rhcl-ai` program docs still describe an older split architecture (`3scaleextract` Go export tool + `apishift` Java/Angular migration tool) that predates this repo (first commit 2026-06-29) — treat `rhcl-ai/AGENTS.md`'s architecture/PO-priorities sections as stale until a maintainer reconciles them with this repo.
 
 ## Policy conversion architecture
 
