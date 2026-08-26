@@ -42,7 +42,7 @@ class ApiExceptionTest {
   }
 
   @Test
-  void constructor_withDetailsAndNullDetailsMap_usesEmptyMap() {
+  void constructor_withDetails_preservesDetailsMap() {
     var details = Map.<String, Object>of("key", "value");
     var ex = new TestApiException("TEST_CODE", 400, "with details", details, null);
     assertEquals(details, ex.getDetails());

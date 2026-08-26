@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @QuarkusTest
-@QuarkusTestResource(WireMockThreeScaleResource.class)
+@QuarkusTestResource(value = WireMockThreeScaleResource.class, restrictToAnnotatedClass = true)
 class ThreeScaleClientTest {
 
   private static final String ACCESS_TOKEN = "test-token";
