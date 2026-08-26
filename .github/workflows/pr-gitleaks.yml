@@ -14,7 +14,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
+      - name: Run Gitleaks
+        # gitleaks-action@v2 requires a paid license for org repos; use OSS CLI via Docker.
+        run: |
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/repo" \
+            -w /repo \
+            zricethezav/gitleaks:v8.24.2 \
+            detect \
+            --source /repo \
+            --config /repo/.gitleaks.toml \
+            --redact \
+            --verbose
