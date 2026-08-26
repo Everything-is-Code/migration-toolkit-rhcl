@@ -15,9 +15,14 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run Gitleaks
-        # gitleaks-action@v2 requires a paid license for org repos; use OSS CLI via Docker.
+        # Scan only commits in this PR (not full repo history).
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           docker run --rm \
+            -e BASE_SHA="${BASE_SHA}" \
+            -e HEAD_SHA="${HEAD_SHA}" \
             -v "${GITHUB_WORKSPACE}:/repo" \
             -w /repo \
             zricethezav/gitleaks:v8.24.2 \
@@ -25,4 +30,5 @@ jobs:
             --source /repo \
             --config /repo/.gitleaks.toml \
             --redact \
-            --verbose
+            --verbose \
+            --log-opts="${BASE_SHA}...${HEAD_SHA}"
