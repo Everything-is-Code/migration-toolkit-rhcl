@@ -88,4 +88,12 @@ describe('DEFAULT_SUPPORTED_POLICIES', () => {
     expect(DEFAULT_SUPPORTED_POLICIES).toContain('Upstream');
     expect(withDefaultSupportedPolicies([])).toContain('Upstream');
   });
+
+  it('includes Routing for compatibility SUPPORTED scoring', async () => {
+    const { DEFAULT_SUPPORTED_POLICIES, withDefaultSupportedPolicies } = await import(
+      './supportedPolicies'
+    );
+    expect(DEFAULT_SUPPORTED_POLICIES).toContain('Routing');
+    expect(withDefaultSupportedPolicies([])).toContain('Routing');
+  });
 });

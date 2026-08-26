@@ -55,6 +55,7 @@ export const DEFAULT_SUPPORTED_POLICIES = [
   'RH-SSO/Keycloak Role Check',
   'Maintenance Mode',
   'Upstream',
+  'Routing',
 ];
 
 export const SETTINGS_KEY = 'supportedPolicies';

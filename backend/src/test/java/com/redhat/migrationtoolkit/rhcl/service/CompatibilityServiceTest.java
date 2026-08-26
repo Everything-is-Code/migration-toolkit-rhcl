@@ -790,6 +790,57 @@ class CompatibilityServiceTest {
                 && "Upstream".equals(i.name)));
     }
 
+    @Test
+    void check_routing_headerOnly_supportedWhenInList() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy routing = enabledPolicy("routing");
+        routing.configuration = Map.of(
+                "rules", List.of(Map.of(
+                        "url", "https://route.example.com",
+                        "condition", Map.of(
+                                "combine_op", "and",
+                                "operations", List.of(Map.of(
+                                        "match", "header",
+                                        "header_name", "X-Route",
+                                        "op", "==",
+                                        "value", "yes"))))));
+        svc.policies = List.of(routing);
+
+        CompatibilityResult result = service.check(svc, Set.of("Routing"));
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Routing".equals(i.name)));
+    }
+
+    @Test
+    void check_routing_jwtClaim_warningEvenIfInList() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy routing = enabledPolicy("routing");
+        routing.configuration = Map.of(
+                "rules", List.of(Map.of(
+                        "url", "https://route.example.com",
+                        "condition", Map.of(
+                                "combine_op", "and",
+                                "operations", List.of(
+                                        Map.of(
+                                                "match", "jwt_claim",
+                                                "jwt_claim_name", "role",
+                                                "op", "==",
+                                                "value", "admin"),
+                                        Map.of(
+                                                "match", "header",
+                                                "header_name", "X-Route",
+                                                "op", "==",
+                                                "value", "yes"))))));
+        svc.policies = List.of(routing);
+
+        CompatibilityResult result = service.check(svc, Set.of("Routing"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "Routing".equals(i.name)
+                && i.message != null && i.message.toLowerCase().contains("jwt")));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService() {
