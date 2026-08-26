@@ -55,6 +55,10 @@ final class ManualResourceGeneratorFactory {
         urlRewriting.bindManual(policyFinder, yamlSupport);
         generators.add(urlRewriting);
 
+        MaintenanceModeEnvoyFilterGenerator maintenanceMode = new MaintenanceModeEnvoyFilterGenerator();
+        maintenanceMode.bindManual(policyFinder);
+        generators.add(maintenanceMode);
+
         ContentLimitsEnvoyFilterGenerator contentLimits = new ContentLimitsEnvoyFilterGenerator();
         contentLimits.bindManual(policyFinder, policyConfigSupport);
         generators.add(contentLimits);
