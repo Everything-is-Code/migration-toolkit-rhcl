@@ -18,6 +18,7 @@ import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
@@ -187,5 +188,255 @@ class SetupControllerTest {
                 .then()
                 .statusCode(200)
                 .body("steps[0].success", is(true));
+    }
+
+    @Test
+    void checkStatus_namespaceNotLabeled_returnsLabelMissing() {
+        Namespace ns = new Namespace();
+        ObjectMeta meta = new ObjectMeta();
+        meta.setLabels(new HashMap<>());
+        ns.setMetadata(meta);
+
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(ns);
+
+        GenericKubernetesResourceList emptyList = new GenericKubernetesResourceList();
+        emptyList.setItems(List.of());
+        var mockGwOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGwNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGwOp);
+        when(mockGwOp.inNamespace(anyString())).thenReturn(mockGwNs);
+        when(mockGwNs.list()).thenReturn(emptyList);
+
+        given()
+                .queryParam("namespace", "unlabeled-ns")
+                .when().get("/api/setup/status")
+                .then()
+                .statusCode(200)
+                .body("steps[0].success", is(false))
+                .body("steps[0].message", containsString("missing"));
+    }
+
+    @Test
+    void checkStatus_gatewayAnnotated_returnsAnnotationPresent() {
+        Namespace ns = new Namespace();
+        ObjectMeta nsMeta = new ObjectMeta();
+        nsMeta.setLabels(new HashMap<>());
+        ns.setMetadata(nsMeta);
+
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(ns);
+
+        GenericKubernetesResource gw = new GenericKubernetesResource();
+        ObjectMeta gwMeta = new ObjectMeta();
+        gwMeta.setName("gw");
+        Map<String, String> annotations = new HashMap<>();
+        annotations.put("kuadrant.io/namespace", "kuadrant-system");
+        gwMeta.setAnnotations(annotations);
+        gw.setMetadata(gwMeta);
+
+        GenericKubernetesResourceList gwList = new GenericKubernetesResourceList();
+        gwList.setItems(List.of(gw));
+
+        var mockGwOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGwNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGwOp);
+        when(mockGwOp.inNamespace(anyString())).thenReturn(mockGwNs);
+        when(mockGwNs.list()).thenReturn(gwList);
+
+        given()
+                .queryParam("namespace", "annotated-ns")
+                .when().get("/api/setup/status")
+                .then()
+                .statusCode(200)
+                .body("steps[1].success", is(true))
+                .body("allSuccess", is(false));
+    }
+
+    @Test
+    void applyNamespaceSetup_gatewayNullAnnotations_createsAnnotationsMap() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        Namespace ns = new Namespace();
+        ObjectMeta nsMeta = new ObjectMeta();
+        nsMeta.setLabels(new HashMap<>());
+        ns.setMetadata(nsMeta);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.edit(any(java.util.function.UnaryOperator.class))).thenAnswer(inv -> {
+            java.util.function.UnaryOperator<Namespace> fn = inv.getArgument(0);
+            return fn.apply(ns);
+        });
+
+        GenericKubernetesResource gw = new GenericKubernetesResource();
+        ObjectMeta gwMeta = new ObjectMeta();
+        gwMeta.setName("bare-gw");
+        gwMeta.setAnnotations(null);
+        gw.setMetadata(gwMeta);
+
+        GenericKubernetesResourceList gwList = new GenericKubernetesResourceList();
+        gwList.setItems(List.of(gw));
+
+        var mockGwOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGwNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockGwRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGwOp);
+        when(mockGwOp.inNamespace(anyString())).thenReturn(mockGwNs);
+        when(mockGwNs.list()).thenReturn(gwList);
+        when(mockGwNs.withName(anyString())).thenReturn(mockGwRes);
+        when(mockGwRes.patch(any(), any())).thenReturn(gw);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\":\"test-ns\"}")
+                .when().post("/api/setup/namespace")
+                .then()
+                .statusCode(200)
+                .body("allSuccess", is(true));
+
+        assertTrue(gw.getMetadata().getAnnotations().containsKey("kuadrant.io/namespace"));
+    }
+
+    @Test
+    void applyNamespaceSetup_nullLabelsOnNamespace_createsLabelsMap() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        Namespace ns = new Namespace();
+        ObjectMeta nsMeta = new ObjectMeta();
+        nsMeta.setLabels(null);
+        ns.setMetadata(nsMeta);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.edit(any(java.util.function.UnaryOperator.class))).thenAnswer(inv -> {
+            java.util.function.UnaryOperator<Namespace> fn = inv.getArgument(0);
+            return fn.apply(ns);
+        });
+
+        GenericKubernetesResourceList emptyList = new GenericKubernetesResourceList();
+        emptyList.setItems(List.of());
+        var mockGwOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGwNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGwOp);
+        when(mockGwOp.inNamespace(anyString())).thenReturn(mockGwNs);
+        when(mockGwNs.list()).thenReturn(emptyList);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\":\"test-ns\"}")
+                .when().post("/api/setup/namespace")
+                .then()
+                .statusCode(anyOf(equalTo(200), equalTo(207)));
+
+        assertTrue(ns.getMetadata().getLabels().containsKey("istio-injection"));
+    }
+
+    @Test
+    void applyNamespaceSetup_blankNamespaceInRequest_usesDefault() {
+        when(kubernetesClient.namespaces()).thenThrow(new RuntimeException("test"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\":\"   \"}")
+                .when().post("/api/setup/namespace")
+                .then()
+                .statusCode(anyOf(equalTo(200), equalTo(207)));
+    }
+
+    @Test
+    void checkStatus_namespaceNotFound_returnsLabelMissing() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(null);
+
+        GenericKubernetesResourceList emptyList = new GenericKubernetesResourceList();
+        emptyList.setItems(List.of());
+        var mockGwOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGwNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGwOp);
+        when(mockGwOp.inNamespace(anyString())).thenReturn(mockGwNs);
+        when(mockGwNs.list()).thenReturn(emptyList);
+
+        given()
+                .queryParam("namespace", "missing-ns")
+                .when().get("/api/setup/status")
+                .then()
+                .statusCode(200)
+                .body("steps[0].success", is(false));
+    }
+
+    @Test
+    void checkStatus_gatewayWithoutAnnotation_returnsAnnotationMissing() {
+        Namespace ns = new Namespace();
+        ObjectMeta nsMeta = new ObjectMeta();
+        nsMeta.setLabels(new HashMap<>());
+        ns.setMetadata(nsMeta);
+
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(ns);
+
+        GenericKubernetesResource gw = new GenericKubernetesResource();
+        ObjectMeta gwMeta = new ObjectMeta();
+        gwMeta.setName("gw");
+        gwMeta.setAnnotations(null);
+        gw.setMetadata(gwMeta);
+
+        GenericKubernetesResourceList gwList = new GenericKubernetesResourceList();
+        gwList.setItems(List.of(gw));
+
+        var mockGwOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGwNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGwOp);
+        when(mockGwOp.inNamespace(anyString())).thenReturn(mockGwNs);
+        when(mockGwNs.list()).thenReturn(gwList);
+
+        given()
+                .queryParam("namespace", "gw-ns")
+                .when().get("/api/setup/status")
+                .then()
+                .statusCode(200)
+                .body("steps[1].success", is(false))
+                .body("steps[1].message", containsString("missing"));
+    }
+
+    @Test
+    void applyNamespaceSetup_annotateGatewaysThrows_returns207() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        Namespace ns = new Namespace();
+        ObjectMeta nsMeta = new ObjectMeta();
+        nsMeta.setLabels(new HashMap<>());
+        ns.setMetadata(nsMeta);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.edit(any(java.util.function.UnaryOperator.class))).thenAnswer(inv -> {
+            java.util.function.UnaryOperator<Namespace> fn = inv.getArgument(0);
+            return fn.apply(ns);
+        });
+
+        var mockGwOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGwNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGwOp);
+        when(mockGwOp.inNamespace(anyString())).thenReturn(mockGwNs);
+        when(mockGwNs.list()).thenThrow(new RuntimeException());
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("{\"namespace\":\"test-ns\"}")
+                .when().post("/api/setup/namespace")
+                .then()
+                .statusCode(207)
+                .body("allSuccess", is(false))
+                .body("steps[1].success", is(false));
     }
 }

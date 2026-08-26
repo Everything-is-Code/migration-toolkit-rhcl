@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
@@ -22,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -247,5 +249,83 @@ class ExportControllerTest {
                 .when().options("/api/services")
                 .then()
                 .header("Access-Control-Allow-Origin", nullValue());
+    }
+
+    @Test
+    void getServices_blankUrl_returns400() {
+        given()
+                .header("Authorization", "Bearer token123")
+                .queryParam("url", "   ")
+                .when().get("/api/services")
+                .then()
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
+    }
+
+    @Test
+    void getServices_bearerTokenEmpty_returns400() {
+        given()
+                .header("Authorization", "Bearer   ")
+                .queryParam("url", "https://3scale.example.com")
+                .when().get("/api/services")
+                .then()
+                .statusCode(400);
+    }
+
+    @Test
+    void checkCompatibility_withSupportedPolicies_passesToService() {
+        ApiService svc = new ApiService();
+        svc.id = "42";
+        svc.name = "My API";
+        Authentication auth = new Authentication();
+        auth.type = "jwt";
+        svc.authentication = auth;
+
+        CompatibilityResult result = new CompatibilityResult();
+        result.serviceId = "42";
+        result.score = 75;
+        result.level = "MEDIUM";
+        result.items = List.of();
+
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(result);
+
+        given()
+                .header("Authorization", "Bearer token123")
+                .queryParam("url", "https://3scale.example.com")
+                .queryParam("supportedPolicies", "cors|jwt")
+                .when().get("/api/services/42/compatibility")
+                .then()
+                .statusCode(200)
+                .body("score", equalTo(75));
+
+        verify(compatibilityService).check(eq(svc), eq(Set.of("cors", "jwt")),
+                org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class));
+    }
+
+    @Test
+    void checkCompatibility_nullClusterVersions_stillReturns200() {
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(null);
+
+        ApiService svc = new ApiService();
+        svc.id = "42";
+        svc.name = "My API";
+        CompatibilityResult result = new CompatibilityResult();
+        result.serviceId = "42";
+        result.score = 60;
+        result.level = "LOW";
+        result.items = List.of();
+
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), isNull())).thenReturn(result);
+
+        given()
+                .header("Authorization", "Bearer token123")
+                .queryParam("url", "https://3scale.example.com")
+                .when().get("/api/services/42/compatibility")
+                .then()
+                .statusCode(200)
+                .body("score", equalTo(60));
     }
 }

@@ -86,4 +86,14 @@ class ConnectionControllerTest {
                 .statusCode(400)
                 .body("error.code", equalTo("VALIDATION_FAILED"));
     }
+
+    @Test
+    void testConnection_nullBody_returns400() {
+        given()
+                .contentType(ContentType.JSON)
+                .when().post("/api/connection/test")
+                .then()
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
+    }
 }

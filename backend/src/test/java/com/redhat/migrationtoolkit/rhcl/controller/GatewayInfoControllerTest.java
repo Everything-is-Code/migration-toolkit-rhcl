@@ -153,4 +153,78 @@ class GatewayInfoControllerTest {
                 .body("ready", is(false))
                 .body("hostname", equalTo(""));
     }
+
+    @Test
+    void getGatewayInfo_resolvableIpAddress_dnsReadyTrue() {
+        GenericKubernetesResource gw = new GenericKubernetesResource();
+        ObjectMeta meta = new ObjectMeta();
+        meta.setName("my-gateway");
+        gw.setMetadata(meta);
+        Map<String, Object> props = new HashMap<>();
+        props.put("status", Map.of(
+                "addresses", List.of(Map.of("type", "IPAddress", "value", "127.0.0.1"))
+        ));
+        gw.setAdditionalProperties(props);
+
+        var mockResources = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockNamespaced = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockResource = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockResources);
+        when(mockResources.inNamespace(anyString())).thenReturn(mockNamespaced);
+        when(mockNamespaced.withName(anyString())).thenReturn(mockResource);
+        when(mockResource.get()).thenReturn(gw);
+
+        given()
+                .queryParam("namespace", "test-ns")
+                .queryParam("name", "my-gateway")
+                .when().get("/api/gateway/info")
+                .then()
+                .statusCode(200)
+                .body("hostname", equalTo("127.0.0.1"))
+                .body("ready", is(true))
+                .body("dnsReady", is(true));
+    }
+
+    @Test
+    void getGatewayInfo_unresolvableHostname_dnsReadyFalse() {
+        GenericKubernetesResource gw = new GenericKubernetesResource();
+        ObjectMeta meta = new ObjectMeta();
+        meta.setName("my-gateway");
+        gw.setMetadata(meta);
+        Map<String, Object> props = new HashMap<>();
+        props.put("status", Map.of(
+                "addresses", List.of(Map.of("type", "Hostname", "value", "definitely-invalid-hostname-xyz.invalid"))
+        ));
+        gw.setAdditionalProperties(props);
+
+        var mockResources = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockNamespaced = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockResource = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockResources);
+        when(mockResources.inNamespace(anyString())).thenReturn(mockNamespaced);
+        when(mockNamespaced.withName(anyString())).thenReturn(mockResource);
+        when(mockResource.get()).thenReturn(gw);
+
+        given()
+                .queryParam("namespace", "test-ns")
+                .queryParam("name", "my-gateway")
+                .when().get("/api/gateway/info")
+                .then()
+                .statusCode(200)
+                .body("ready", is(true))
+                .body("dnsReady", is(false));
+    }
+
+    @Test
+    void getGatewayInfo_blankNamespace_returns400() {
+        given()
+                .queryParam("namespace", "   ")
+                .queryParam("name", "my-gateway")
+                .when().get("/api/gateway/info")
+                .then()
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
+    }
 }
