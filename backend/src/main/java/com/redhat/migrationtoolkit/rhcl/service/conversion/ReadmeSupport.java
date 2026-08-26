@@ -2,7 +2,6 @@ package com.redhat.migrationtoolkit.rhcl.service.conversion;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
-import com.redhat.migrationtoolkit.rhcl.service.ConversionService;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RateLimitSupport.PlanCeiling;
 
@@ -18,12 +17,12 @@ public final class ReadmeSupport {
     }
 
     public static String build(ConversionContext ctx,
-                               ConversionService.ReadmeNotes notes,
+                               ReadmeNotes notes,
                                PolicyFinder policyFinder,
                                PolicyConfigSupport policyConfigSupport,
                                RateLimitSupport rateLimitSupport) {
         if (notes == null) {
-            notes = new ConversionService.ReadmeNotes();
+            notes = new ReadmeNotes();
         }
         ApiService service = ctx.service;
         String name = ctx.serviceKebabName;

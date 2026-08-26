@@ -8,7 +8,7 @@ import {
   HelperTextItem,
   Form,
 } from '@patternfly/react-core';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import styles from '../../styles/shared.module.css';
 
 interface Props {
@@ -67,8 +67,8 @@ const ConversionBackendSettings: React.FC<Props> = ({
                 {t('conversion.externalNote', 'The following resources will be additionally generated for external services:')}
               </div>
               <ul style={{ margin: 0, paddingLeft: '18px', lineHeight: '1.8' }}>
-                <li dangerouslySetInnerHTML={{ __html: t('conversion.externalNoteEnvoy') }} />
-                <li dangerouslySetInnerHTML={{ __html: t('conversion.externalNoteRoute') }} />
+                <li><Trans i18nKey="conversion.externalNoteEnvoy" components={{ code: <code /> }} /></li>
+                <li><Trans i18nKey="conversion.externalNoteRoute" components={{ code: <code /> }} /></li>
               </ul>
             </div>
           </>

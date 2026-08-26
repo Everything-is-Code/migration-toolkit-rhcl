@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, ModalVariant, Button } from '@patternfly/react-core';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 
 interface Props {
   isOpen: boolean;
@@ -34,7 +34,7 @@ const HistoryDeleteModal: React.FC<Props> = ({
         </Button>,
       ]}
     >
-      <span dangerouslySetInnerHTML={{ __html: t('history.deleteConfirm', { count: selectedCount }) }} />
+      <span><Trans i18nKey="history.deleteConfirm" values={{ count: selectedCount }} components={{ strong: <strong /> }} /></span>
       {' '}{t('history.deleteWarn')}
     </Modal>
   );
