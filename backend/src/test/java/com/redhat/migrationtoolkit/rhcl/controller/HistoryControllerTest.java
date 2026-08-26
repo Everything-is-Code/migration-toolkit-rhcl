@@ -115,7 +115,8 @@ class HistoryControllerTest {
         given()
                 .when().get("/api/history/999999")
                 .then()
-                .statusCode(404);
+                .statusCode(404)
+                .body("error.code", equalTo("HISTORY_NOT_FOUND"));
     }
 
     @Test
@@ -162,7 +163,8 @@ class HistoryControllerTest {
         given()
                 .when().get("/api/history/999999/download")
                 .then()
-                .statusCode(404);
+                .statusCode(404)
+                .body("error.code", equalTo("HISTORY_NOT_FOUND"));
     }
 
     @Test
@@ -175,6 +177,17 @@ class HistoryControllerTest {
                 .then()
                 .statusCode(200)
                 .header("Content-Disposition", containsString(".zip"));
+    }
+
+    @Test
+    void downloadYaml_corruptExportedYaml_returns500Envelope() {
+        Long id = createHistoryWithExportedYaml("svc-corrupt", "Corrupt", "COMPLETED", "{not-valid-json");
+
+        given()
+                .when().get("/api/history/" + id + "/download")
+                .then()
+                .statusCode(500)
+                .body("error.code", equalTo("HISTORY_DOWNLOAD_FAILED"));
     }
 
     @Test
@@ -197,7 +210,7 @@ class HistoryControllerTest {
                 .when().delete("/api/history")
                 .then()
                 .statusCode(400)
-                .body("error", notNullValue());
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -299,6 +312,23 @@ class HistoryControllerTest {
         h.serviceName = serviceName;
         h.status = status;
         h.yamlContent = yamlContent;
+        h.persist();
+        return h.id;
+    }
+
+    @Transactional
+    Long createHistoryWithExportedYaml(String serviceId, String serviceName, String status, String exportedYaml) {
+        ProjectEntity project = new ProjectEntity();
+        project.name = "Test-Project-" + serviceId;
+        project.threescaleUrl = "https://3scale.example.com";
+        project.persist();
+
+        ConversionHistoryEntity h = new ConversionHistoryEntity();
+        h.project = project;
+        h.serviceId = serviceId;
+        h.serviceName = serviceName;
+        h.status = status;
+        h.exportedYaml = exportedYaml;
         h.persist();
         return h.id;
     }

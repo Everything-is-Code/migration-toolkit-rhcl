@@ -1,9 +1,10 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ConnectionRequest;
+import com.redhat.migrationtoolkit.rhcl.exception.ThreeScaleClientException;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 import com.redhat.migrationtoolkit.rhcl.service.ThreeScaleExportService;
 import jakarta.inject.Inject;
-import jakarta.validation.Valid;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -27,15 +28,21 @@ public class ConnectionController {
     @POST
     @Path("/test")
     @Operation(summary = "Test connection to 3scale")
-    public Response testConnection(@Valid ConnectionRequest request) {
+    public Response testConnection(ConnectionRequest request) {
+        if (request == null) {
+            throw new ValidationException("url and accessToken are required");
+        }
+        if (request.url == null || request.url.isBlank()) {
+            throw new ValidationException("url is required");
+        }
+        if (request.accessToken == null || request.accessToken.isBlank()) {
+            throw new ValidationException("accessToken is required");
+        }
         boolean connected = exportService.testConnection(request);
         if (connected) {
             return Response.ok(Map.of("success", true, "message", "Successfully connected to 3scale")).build();
-        } else {
-            return Response.status(Response.Status.BAD_GATEWAY)
-                    .entity(Map.of("success", false,
-                            "message", "Failed to connect to 3scale. Check URL and access token."))
-                    .build();
         }
+        throw new ThreeScaleClientException("CONNECTION_TEST_FAILED",
+                "Failed to connect to 3scale. Check URL and access token.");
     }
 }

@@ -33,7 +33,8 @@ class GatewayInfoControllerTest {
                 .when().get("/api/gateway/info")
                 .then()
                 .statusCode(400)
-                .body("error", notNullValue());
+                .body("error.code", equalTo("VALIDATION_FAILED"))
+                .body("error.message", notNullValue());
     }
 
     @Test
@@ -43,7 +44,8 @@ class GatewayInfoControllerTest {
                 .when().get("/api/gateway/info")
                 .then()
                 .statusCode(400)
-                .body("error", notNullValue());
+                .body("error.code", equalTo("VALIDATION_FAILED"))
+                .body("error.message", notNullValue());
     }
 
     @Test
@@ -55,7 +57,7 @@ class GatewayInfoControllerTest {
     }
 
     @Test
-    void getGatewayInfo_clientError_returns500() {
+    void getGatewayInfo_clientError_returns500WithEnvelope() {
         when(kubernetesClient.genericKubernetesResources(any()))
                 .thenThrow(new RuntimeException("Connection refused"));
 
@@ -65,7 +67,8 @@ class GatewayInfoControllerTest {
                 .when().get("/api/gateway/info")
                 .then()
                 .statusCode(500)
-                .body("ready", is(false));
+                .body("error.code", equalTo("INTERNAL_ERROR"))
+                .body("error.message", notNullValue());
     }
 
     @Test
@@ -88,7 +91,8 @@ class GatewayInfoControllerTest {
                 .when().get("/api/gateway/info")
                 .then()
                 .statusCode(404)
-                .body("ready", is(false));
+                .body("error.code", equalTo("GATEWAY_NOT_FOUND"))
+                .body("error.message", notNullValue());
     }
 
     @Test

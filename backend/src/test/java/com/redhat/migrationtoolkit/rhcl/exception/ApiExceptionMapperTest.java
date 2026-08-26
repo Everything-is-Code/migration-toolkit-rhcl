@@ -101,6 +101,17 @@ class ApiExceptionMapperTest {
     }
 
     @Test
+    void mapApiException_notFoundException_returns404WithEnvelope() {
+        given()
+                .when().get("/test-exceptions/not-found")
+                .then()
+                .statusCode(404)
+                .body("error.code", equalTo("HISTORY_NOT_FOUND"))
+                .body("error.message", equalTo("History entry 999 not found"))
+                .body("error.details", notNullValue());
+    }
+
+    @Test
     void webApplicationException_passThrough_returns404() {
         given()
                 .when().get("/test-exceptions/nonexistent-path")

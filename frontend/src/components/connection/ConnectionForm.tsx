@@ -27,7 +27,7 @@ import { connectionApi, clusterApi, defaultsApi } from '../../api/client';
 import { useAppState } from '../AppStateContext';
 import { useNavigate } from 'react-router-dom';
 import { clearPersistedConnection } from '../../utils/appStateStorage';
-import { apiErrorMessage } from '../../utils/apiError';
+import { apiErrorI18nMessage } from '../../utils/apiError';
 import { PF_SPACER_MD } from '../../styles/pfTokens';
 
 interface Props {
@@ -108,7 +108,7 @@ const ConnectionForm: React.FC<Props> = ({ onConnected }) => {
         setDomainError(t('connection.domainNotFound'));
       }
     } catch (e: unknown) {
-      const detail = apiErrorMessage(e, '');
+      const detail = apiErrorI18nMessage(e, t, '');
       setDomainError(`${t('connection.domainError')}: ${detail}`);
     } finally {
       setFetchingDomain(false);
@@ -129,7 +129,7 @@ const ConnectionForm: React.FC<Props> = ({ onConnected }) => {
       }));
       onConnected();
     } catch (e: unknown) {
-      setError(apiErrorMessage(e, t('connection.errorDefault')));
+      setError(apiErrorI18nMessage(e, t, t('connection.errorDefault')));
       // I-3: clear persisted connection on connect failure / disconnect.
       clearPersistedConnection();
       setAppState(prev => ({

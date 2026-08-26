@@ -100,6 +100,7 @@
     "btnBack": "Back",
     "btnNext": "Next: Compatibility Check",
     "errorFetch": "Failed to fetch APIs: {{message}}",
+    "errorFetchFallback": "Failed to load services",
     "policyCount": "Policies: {{count}}"
   },
   "compatibility": {
@@ -134,6 +135,7 @@
     "ariaResult": "Conversion results",
     "btnNext": "Next: YAML Preview",
     "errorConvert": "Conversion failed: {{message}}",
+    "errorConvertFallback": "Conversion failed",
     "errorDnsHostnameRequired": "Gateway hostname is required when DNSPolicy generation is enabled.",
     "backendType": "Backend Configuration",
     "externalBackend": "Backend is an external service (AWS ECS / external HTTPS endpoint)",
@@ -203,7 +205,8 @@
     "btnRun": "Run Validation",
     "btnRunning": "Validating...",
     "btnBack": "Back",
-    "btnNext": "Next: Download"
+    "btnNext": "Next: Download",
+    "errorFallback": "Validation failed"
   },
   "download": {
     "title": "Download",
@@ -222,7 +225,8 @@
     "step4": "Apply resources with <code>oc apply -f ./</code>",
     "step5": "Verify in the Connectivity Link console",
     "btnBack": "Back",
-    "errorDownload": "Download failed: {{message}}"
+    "errorDownload": "Download failed: {{message}}",
+    "errorDownloadFallback": "Download failed"
   },
   "import": {
     "title": "ZIP Import / CL Config",
@@ -267,8 +271,11 @@
     "step3Term": "3. Apply to OpenShift",
     "errorZipOnly": "Only ZIP files can be uploaded",
     "errorUpload": "Upload failed: {{message}}",
+    "errorUploadFallback": "Upload failed",
     "errorDownload": "Download failed: {{message}}",
+    "errorDownloadFallback": "Download failed",
     "errorApply": "Error during apply: {{message}}",
+    "errorApplyFallback": "Apply failed",
     "errorNoYaml": "No YAML files found in ZIP",
     "errorTitle": "An error occurred",
     "btnRetry": "Retry",
@@ -348,9 +355,12 @@
     "deleteWarn": "Saved YAML files will also be deleted. This action cannot be undone.",
     "downloadError": "Download failed: {{message}}",
     "downloadError2": "Download error: {{message}}",
+    "downloadErrorFallback": "Download failed",
     "deleteSuccess": "Deleted {{count}} entries",
     "deleteError": "Delete error: {{message}}",
+    "deleteErrorFallback": "Delete failed",
     "loadError": "Failed to load history: {{message}}",
+    "errorLoadFallback": "Failed to load history",
     "scoreUnit": "%",
     "totalCount": "{{count}} entries",
     "sourceZipImport": "ZIP Import",
@@ -368,14 +378,6 @@
     "btnReset": "Reset to defaults",
     "saved": "Settings saved",
     "saveError": "Failed to save settings"
-  },
-  "error": {
-    "validationFailed": "Validation failed. Please check your input.",
-    "threescaleClient": "Unable to connect to 3scale. Please verify your connection settings.",
-    "applyFailed": "Failed to apply resources to the cluster.",
-    "importParse": "Failed to parse the imported file. Please check the file format.",
-    "importNoYaml": "No YAML files found in the uploaded archive.",
-    "internal": "An unexpected error occurred. Please try again later."
   },
   "settings": {
     "title": "Settings",
@@ -396,5 +398,21 @@
       "America/New_York": "US Eastern Time",
       "America/Los_Angeles": "US Pacific Time"
     }
+  },
+  "error": {
+    "validationFailed": "Validation failed. Please check your input.",
+    "threescaleClient": "Unable to reach 3scale. Check the URL and access token.",
+    "applyFailed": "Failed to apply resources to the cluster.",
+    "importParse": "Failed to parse the uploaded file.",
+    "importNoYaml": "No YAML files found in the uploaded archive.",
+    "internal": "An unexpected error occurred. Please try again.",
+    "connectionTestFailed": "Failed to connect to 3scale. Check URL and access token.",
+    "historyNotFound": "History entry not found.",
+    "historyDownloadFailed": "Failed to download history entry.",
+    "clusterRouteNotFound": "Backend route not found in the cluster.",
+    "clusterRouteHostPending": "Route host not assigned yet — waiting for Route to be ready.",
+    "clusterDomainExtractFailed": "Cannot determine cluster domain from route host.",
+    "gatewayNotFound": "Gateway not found in the cluster.",
+    "settingsNotFound": "Setting not found."
   }
 }

@@ -1,6 +1,7 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
 import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
+import io.fabric8.kubernetes.api.model.GenericKubernetesResourceList;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.quarkus.test.InjectMock;
@@ -88,6 +89,70 @@ class ClusterControllerTest {
         // Second call served from TTL cache — allow-list get only once on cold miss path
         verify(mockRes, times(1)).get();
         assertEquals(0, clusterController.clusterWideListInvocations);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void getDomain_routeNotFound_returns404Envelope() {
+        var mockOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        var mockAnyNs = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        GenericKubernetesResourceList emptyList = new GenericKubernetesResourceList();
+        emptyList.setItems(java.util.List.of());
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockOp);
+        when(mockOp.inNamespace(anyString())).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockRes);
+        when(mockRes.get()).thenReturn(null);
+        when(mockOp.inAnyNamespace()).thenReturn(mockAnyNs);
+        when(mockAnyNs.list()).thenReturn(emptyList);
+
+        given()
+                .when().get("/api/cluster/domain")
+                .then()
+                .statusCode(404)
+                .body("error.code", equalTo("CLUSTER_ROUTE_NOT_FOUND"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void getDomain_routeHostPending_returns404Envelope() {
+        GenericKubernetesResource route = backendRoute("migration-toolkit", "");
+
+        var mockOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockOp);
+        when(mockOp.inNamespace(eq("migration-toolkit"))).thenReturn(mockNsOp);
+        when(mockNsOp.withName(eq(ClusterController.BACKEND_ROUTE_NAME))).thenReturn(mockRes);
+        when(mockRes.get()).thenReturn(route);
+
+        given()
+                .when().get("/api/cluster/domain")
+                .then()
+                .statusCode(404)
+                .body("error.code", equalTo("CLUSTER_ROUTE_HOST_PENDING"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void getDomain_domainExtractFailed_returns404Envelope() {
+        GenericKubernetesResource route = backendRoute("migration-toolkit",
+                "migration-tool-backend-migration-toolkit.example.com");
+
+        var mockOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockOp);
+        when(mockOp.inNamespace(eq("migration-toolkit"))).thenReturn(mockNsOp);
+        when(mockNsOp.withName(eq(ClusterController.BACKEND_ROUTE_NAME))).thenReturn(mockRes);
+        when(mockRes.get()).thenReturn(route);
+
+        given()
+                .when().get("/api/cluster/domain")
+                .then()
+                .statusCode(404)
+                .body("error.code", equalTo("CLUSTER_DOMAIN_EXTRACT_FAILED"));
     }
 
     private static GenericKubernetesResource backendRoute(String ns, String host) {

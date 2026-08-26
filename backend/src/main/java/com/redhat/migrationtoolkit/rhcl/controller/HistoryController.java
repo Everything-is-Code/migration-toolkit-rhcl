@@ -20,6 +20,10 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
+import com.redhat.migrationtoolkit.rhcl.exception.ClusterApplyException;
+import com.redhat.migrationtoolkit.rhcl.exception.NotFoundException;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
+
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -72,7 +76,7 @@ public class HistoryController {
     public Response getHistoryById(@PathParam("id") Long id) {
         ConversionHistoryEntity history = ConversionHistoryEntity.findById(id);
         if (history == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            throw new NotFoundException("HISTORY_NOT_FOUND", "History entry " + id + " not found");
         }
         return Response.ok(history).build();
     }
@@ -106,7 +110,7 @@ public class HistoryController {
     public Response downloadYaml(@PathParam("id") Long id) {
         ConversionHistoryEntity entity = ConversionHistoryEntity.findById(id);
         if (entity == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            throw new NotFoundException("HISTORY_NOT_FOUND", "History entry " + id + " not found");
         }
 
         try {
@@ -137,7 +141,8 @@ public class HistoryController {
                     .build();
         } catch (Exception e) {
             LOG.warnf("Download failed for id=%d: %s", id, e.getMessage());
-            return Response.serverError().entity(Map.of("error", e.getMessage())).build();
+            throw new ClusterApplyException("HISTORY_DOWNLOAD_FAILED",
+                    "Failed to create download archive");
         }
     }
 
@@ -148,8 +153,7 @@ public class HistoryController {
     @Operation(summary = "Delete history entries by IDs")
     public Response deleteByIds(List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", "No IDs provided")).build();
+            throw new ValidationException("No IDs provided");
         }
         long deleted = ConversionHistoryEntity.delete("id IN ?1", ids);
         LOG.infof("Deleted %d history entries: %s", deleted, ids);

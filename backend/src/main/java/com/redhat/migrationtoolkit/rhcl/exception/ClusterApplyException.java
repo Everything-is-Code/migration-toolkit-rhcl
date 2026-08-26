@@ -15,4 +15,8 @@ public class ClusterApplyException extends ApiException {
     public ClusterApplyException(String message, Throwable cause, Map<String, Object> details) {
         super("APPLY_FAILED", 500, message, details, cause);
     }
+
+    public ClusterApplyException(String code, String message) {
+        super(code, 500, message);
+    }
 }

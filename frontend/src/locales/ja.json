@@ -100,6 +100,7 @@
     "btnBack": "戻る",
     "btnNext": "次へ: 互換性チェック",
     "errorFetch": "APIの取得に失敗しました: {{message}}",
+    "errorFetchFallback": "サービスの取得に失敗しました",
     "policyCount": "ポリシー: {{count}} 件"
   },
   "compatibility": {
@@ -134,6 +135,7 @@
     "ariaResult": "変換結果",
     "btnNext": "次へ: YAMLプレビュー",
     "errorConvert": "変換処理に失敗しました: {{message}}",
+    "errorConvertFallback": "変換処理に失敗しました",
     "errorDnsHostnameRequired": "DNSPolicy を生成する場合は Gateway hostname が必須です。",
     "backendType": "バックエンド設定",
     "externalBackend": "バックエンドはクラスター外部のサービス (AWS ECS / 外部 HTTPS エンドポイント)",
@@ -203,7 +205,8 @@
     "btnRun": "バリデーション実行",
     "btnRunning": "検証中...",
     "btnBack": "戻る",
-    "btnNext": "次へ: ダウンロード"
+    "btnNext": "次へ: ダウンロード",
+    "errorFallback": "検証に失敗しました"
   },
   "download": {
     "title": "ダウンロード",
@@ -222,7 +225,8 @@
     "step4": "<code>oc apply -f ./</code> でリソースを適用します",
     "step5": "Connectivity Link コンソールからインポートして確認します",
     "btnBack": "戻る",
-    "errorDownload": "ダウンロードに失敗しました: {{message}}"
+    "errorDownload": "ダウンロードに失敗しました: {{message}}",
+    "errorDownloadFallback": "ダウンロードに失敗しました"
   },
   "import": {
     "title": "ZIPインポート / CL設定",
@@ -267,8 +271,11 @@
     "step3Term": "3. OpenShiftに適用",
     "errorZipOnly": "ZIPファイルのみアップロード可能です",
     "errorUpload": "アップロードに失敗しました: {{message}}",
+    "errorUploadFallback": "アップロードに失敗しました",
     "errorDownload": "ダウンロードに失敗しました: {{message}}",
+    "errorDownloadFallback": "ダウンロードに失敗しました",
     "errorApply": "適用中にエラーが発生しました: {{message}}",
+    "errorApplyFallback": "適用に失敗しました",
     "errorNoYaml": "ZIPにYAMLファイルが含まれていません",
     "errorTitle": "エラーが発生しました",
     "btnRetry": "再試行",
@@ -348,9 +355,12 @@
     "deleteWarn": "保存された YAML も削除されます。この操作は元に戻せません。",
     "downloadError": "ダウンロードに失敗しました: {{message}}",
     "downloadError2": "ダウンロードエラー: {{message}}",
+    "downloadErrorFallback": "ダウンロードに失敗しました",
     "deleteSuccess": "{{count}} 件を削除しました",
     "deleteError": "削除エラー: {{message}}",
+    "deleteErrorFallback": "削除に失敗しました",
     "loadError": "履歴の取得に失敗しました: {{message}}",
+    "errorLoadFallback": "履歴の取得に失敗しました",
     "scoreUnit": "%",
     "totalCount": "{{count}} 件",
     "sourceZipImport": "ZIPインポート",
@@ -368,14 +378,6 @@
     "btnReset": "デフォルトに戻す",
     "saved": "設定を保存しました",
     "saveError": "設定の保存に失敗しました"
-  },
-  "error": {
-    "validationFailed": "検証に失敗しました。入力内容を確認してください。",
-    "threescaleClient": "3scaleに接続できません。接続設定を確認してください。",
-    "applyFailed": "クラスターへのリソース適用に失敗しました。",
-    "importParse": "インポートファイルの解析に失敗しました。ファイル形式を確認してください。",
-    "importNoYaml": "アップロードされたアーカイブにYAMLファイルが見つかりませんでした。",
-    "internal": "予期しないエラーが発生しました。後でもう一度お試しください。"
   },
   "settings": {
     "title": "設定",
@@ -396,5 +398,21 @@
       "America/New_York": "米国東部時間 (EST)",
       "America/Los_Angeles": "米国西部時間 (PST)"
     }
+  },
+  "error": {
+    "validationFailed": "入力内容にエラーがあります。確認してください。",
+    "threescaleClient": "3scaleに接続できません。URLとアクセストークンを確認してください。",
+    "applyFailed": "クラスターへのリソース適用に失敗しました。",
+    "importParse": "アップロードされたファイルの解析に失敗しました。",
+    "importNoYaml": "アップロードされたアーカイブにYAMLファイルが見つかりません。",
+    "internal": "予期しないエラーが発生しました。もう一度お試しください。",
+    "connectionTestFailed": "3scaleへの接続に失敗しました。URLとアクセストークンを確認してください。",
+    "historyNotFound": "履歴エントリが見つかりません。",
+    "historyDownloadFailed": "履歴エントリのダウンロードに失敗しました。",
+    "clusterRouteNotFound": "クラスター内にバックエンドルートが見つかりません。",
+    "clusterRouteHostPending": "ルートホストがまだ割り当てられていません。ルートの準備をお待ちください。",
+    "clusterDomainExtractFailed": "ルートホストからクラスタードメインを特定できません。",
+    "gatewayNotFound": "クラスター内にゲートウェイが見つかりません。",
+    "settingsNotFound": "設定が見つかりません。"
   }
 }

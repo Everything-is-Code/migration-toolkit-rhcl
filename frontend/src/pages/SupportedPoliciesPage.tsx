@@ -12,6 +12,7 @@ import {
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import { settingsApi } from '../api/client';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import styles from '../styles/shared.module.css';
 import {
   ALL_POLICIES,
@@ -53,8 +54,8 @@ const SupportedPoliciesPage: React.FC = () => {
       seedSupportedPoliciesCache(withDefaultSupportedPolicies(selected));
       setSaved(true);
       setError(null);
-    } catch {
-      setError(t('supportedPolicies.saveError'));
+    } catch (e: unknown) {
+      setError(apiErrorI18nMessage(e, t, t('supportedPolicies.saveError')));
     }
   };
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import en from './en.json';
 import ja from './ja.json';
+import { ERROR_CODE_I18N } from '../utils/apiError';
 
 const flatKeys = (obj: Record<string, unknown>, prefix = ''): string[] =>
   Object.entries(obj).flatMap(([k, v]) => {
@@ -30,5 +31,14 @@ describe('locales', () => {
     const jaKeys = new Set(flatKeys(ja as Record<string, unknown>));
     const missing = enKeys.filter(k => !jaKeys.has(k));
     expect(missing).toEqual([]);
+  });
+
+  it('ERROR_CODE_I18N keys exist in en and ja locales', () => {
+    const enKeys = new Set(flatKeys(en as Record<string, unknown>));
+    const jaKeys = new Set(flatKeys(ja as Record<string, unknown>));
+    for (const i18nKey of Object.values(ERROR_CODE_I18N)) {
+      expect(enKeys.has(i18nKey), `missing en key ${i18nKey}`).toBe(true);
+      expect(jaKeys.has(i18nKey), `missing ja key ${i18nKey}`).toBe(true);
+    }
   });
 });
