@@ -17,7 +17,9 @@ public final class ErrorSanitizer {
     private ErrorSanitizer() {}
 
     public static String sanitize(String message) {
-        if (message == null) return "An unexpected error occurred";
+        if (message == null) {
+            return "An unexpected error occurred";
+        }
         String result = TOKEN_PATTERN.matcher(message).replaceAll("$1=[REDACTED]");
         result = BEARER_PATTERN.matcher(result).replaceAll("$1 [REDACTED]");
         result = SHA256_PATTERN.matcher(result).replaceAll("[REDACTED]");
