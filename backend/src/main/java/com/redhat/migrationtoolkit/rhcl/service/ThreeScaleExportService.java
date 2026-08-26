@@ -365,7 +365,7 @@ public class ThreeScaleExportService {
                 page++;
             }
         } catch (Exception e) {
-            LOG.warnf(e, "Failed to fetch backend catalog: %s — continuing with empty catalog (per-backend GET fallback)",
+            LOG.warnf(e, "Failed to fetch backend catalog: %s — continuing with empty catalog",
                     e.getMessage());
         }
         if (catalog.isEmpty()) {
@@ -807,7 +807,8 @@ public class ThreeScaleExportService {
 
     @SuppressWarnings("unchecked")
     List<String> fetchApplicationKeys(ThreeScaleClient client, String url, String applicationId, String accessToken) {
-        String cacheKey = credentialCacheKey(url, accessToken) + "|" + (applicationId == null ? "" : applicationId.trim());
+        String appIdPart = applicationId == null ? "" : applicationId.trim();
+        String cacheKey = credentialCacheKey(url, accessToken) + "|" + appIdPart;
         long now = System.currentTimeMillis();
         CachedAppKeys hit = applicationKeysCache.get(cacheKey);
         if (hit != null && hit.expiresAtMs() > now) {

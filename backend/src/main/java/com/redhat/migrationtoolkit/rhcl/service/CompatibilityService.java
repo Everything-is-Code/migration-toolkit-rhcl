@@ -150,7 +150,8 @@ public class CompatibilityService {
                 items.add(new CompatibilityItem(
                         displayName,
                         "WARNING",
-                        "Native Gateway API CORS filter unavailable; ResponseHeaderModifier + OPTIONS fallback will be used",
+                        "Native Gateway API CORS filter unavailable; "
+                                + "ResponseHeaderModifier + OPTIONS fallback will be used",
                         "corsNative",
                         REQUIRED_CORS_NATIVE));
                 continue;
@@ -176,7 +177,8 @@ public class CompatibilityService {
             items.add(new CompatibilityItem(
                     "Kuadrant / RHCL",
                     "WARNING",
-                    "Kuadrant/RHCL operator not detected; AuthPolicy/RateLimitPolicy features may be unavailable — conversion is still allowed",
+                    "Kuadrant/RHCL operator not detected; AuthPolicy/RateLimitPolicy features "
+                            + "may be unavailable — conversion is still allowed",
                     "kuadrantPresent",
                     REQUIRED_KUADRANT));
         }

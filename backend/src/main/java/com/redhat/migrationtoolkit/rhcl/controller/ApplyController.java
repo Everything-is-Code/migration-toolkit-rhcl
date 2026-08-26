@@ -67,7 +67,10 @@ public class ApplyController {
     @ConfigProperty(name = "kuadrant.authorino.deployment")
     String authorinoDeployment;
 
-    /** Authorino operator ServiceAccount name. Override via {@code AUTHORINO_SERVICE_ACCOUNT} for non-default installs. */
+    /**
+     * Authorino operator ServiceAccount name.
+     * Override via {@code AUTHORINO_SERVICE_ACCOUNT} for non-default installs.
+     */
     @ConfigProperty(name = "kuadrant.authorino.service-account")
     String authorinoServiceAccount;
 
