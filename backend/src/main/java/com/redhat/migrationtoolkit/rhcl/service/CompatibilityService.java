@@ -6,6 +6,7 @@ import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityItem;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.UpstreamSupport;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.ArrayList;
@@ -142,6 +143,14 @@ public class CompatibilityService {
                 items.add(new CompatibilityItem(displayName, "WARNING",
                         "JSON log format (json_object_config) will be mapped to Istio Telemetry format.labels"
                         + " — please verify the generated telemetry.yaml"));
+                continue;
+            }
+
+            // Upstream: list membership alone is not enough when any rule fails approximation.
+            if ("upstream".equals(systemName) && !UpstreamSupport.allRulesConvertible(policy)) {
+                items.add(new CompatibilityItem(displayName, "WARNING",
+                        "One or more upstream rules use non-approximable PCRE or invalid URLs"
+                        + " — convertible rules are emitted; review README before apply"));
                 continue;
             }
 

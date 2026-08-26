@@ -80,4 +80,12 @@ describe('DEFAULT_SUPPORTED_POLICIES', () => {
     expect(DEFAULT_SUPPORTED_POLICIES).toContain('Maintenance Mode');
     expect(withDefaultSupportedPolicies([])).toContain('Maintenance Mode');
   });
+
+  it('includes Upstream for compatibility SUPPORTED scoring', async () => {
+    const { DEFAULT_SUPPORTED_POLICIES, withDefaultSupportedPolicies } = await import(
+      './supportedPolicies'
+    );
+    expect(DEFAULT_SUPPORTED_POLICIES).toContain('Upstream');
+    expect(withDefaultSupportedPolicies([])).toContain('Upstream');
+  });
 });

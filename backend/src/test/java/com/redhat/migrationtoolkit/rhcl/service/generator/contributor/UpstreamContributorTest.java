@@ -1,0 +1,85 @@
+package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
+
+import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class UpstreamContributorTest {
+
+    @Test
+    void contribute_globalOverride_setsBackendsAndHostRewrite() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/users"));
+        service.policies.add(upstreamPolicy(Map.of(
+                "rules", List.of(Map.of("regex", ".*", "url", "https://override.example.com")))));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new UpstreamContributor().contribute(builder, ctx);
+        new MappingRulesContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("override.example.com") || yaml.contains("name: demo-api-backend"));
+        assertTrue(yaml.contains("URLRewrite") || yaml.contains("urlRewrite"));
+        assertTrue(yaml.contains("hostname:"));
+        assertTrue(builder.effectiveBackends() != builder.backends());
+    }
+
+    @Test
+    void contribute_pathScoped_prependsTwoRules() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/fallback"));
+        service.policies.add(upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/v1", "url", "https://v1.example.com"),
+                        Map.of("regex", "^/v2/.*", "url", "https://v2.example.com")))));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new UpstreamContributor().contribute(builder, ctx);
+        new MappingRulesContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        int v1 = yaml.indexOf("v1.example.com");
+        int v2 = yaml.indexOf("v2.example.com");
+        int fallback = yaml.indexOf("value: \"/fallback\"");
+        assertTrue(v1 >= 0 && v2 >= 0 && fallback >= 0);
+        assertTrue(v1 < fallback && v2 < fallback);
+        assertTrue(yaml.contains("type: PathPrefix") || yaml.contains("type: RegularExpression"));
+    }
+
+    @Test
+    void contribute_mixedApprox_emitsOnlyConvertible() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/fallback"));
+        service.policies.add(upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/ok", "url", "https://ok.example.com"),
+                        Map.of("regex", "^/api(?=!)", "url", "https://skip.example.com")))));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new UpstreamContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("ok.example.com") || yaml.contains("value: \"/ok\""));
+        assertFalse(yaml.contains("skip.example.com"));
+    }
+
+    private static Policy upstreamPolicy(Map<String, Object> configuration) {
+        Policy policy = new Policy();
+        policy.name = "upstream";
+        policy.enabled = true;
+        policy.configuration = new HashMap<>(configuration);
+        return policy;
+    }
+}

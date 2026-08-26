@@ -186,6 +186,7 @@ Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before a
         notes.add(tokenIntrospectionNotes);
         notes.add(buildRateLimitApproximationNotes(service, policyFinder, rateLimitSupport));
         notes.add(JwtClaimCheckSupport.buildReadmeNotes(service, policyFinder));
+        notes.add(UpstreamSupport.buildReadmeNotes(service, policyFinder));
         notes.add(buildContentLimitsReadmeNotes(service, policyFinder, policyConfigSupport));
         notes.add(buildMaintenanceModeReadmeNotes(hasMaintenance));
         String dynamicNotes = String.join("", notes.all());

@@ -8,6 +8,7 @@ import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.HttpRouteC
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.MappingRulesContributor;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.RetryContributor;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.TimeoutsContributor;
+import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.UpstreamContributor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,6 +25,7 @@ final class ManualHttpRouteContributorFactory {
         contributors.add(new CorsFiltersContributor());
         contributors.add(new TimeoutsContributor());
         contributors.add(new RetryContributor());
+        contributors.add(new UpstreamContributor());
         contributors.add(new MappingRulesContributor());
         contributors.add(new CorsOptionsContributor());
         return contributors;

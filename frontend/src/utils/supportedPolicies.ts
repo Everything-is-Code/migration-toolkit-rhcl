@@ -54,6 +54,7 @@ export const DEFAULT_SUPPORTED_POLICIES = [
   'Retry',
   'RH-SSO/Keycloak Role Check',
   'Maintenance Mode',
+  'Upstream',
 ];
 
 export const SETTINGS_KEY = 'supportedPolicies';
