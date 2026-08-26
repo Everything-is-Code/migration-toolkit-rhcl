@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -757,6 +758,54 @@ class CompatibilityServiceTest {
         assertEquals(legacy.score, withNull.score);
         assertTrue(withNull.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("CORS")));
+    }
+
+    @Test
+    void check_loggingWithJsonObjectConfig_warningsEvenWhenSupported() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy logging = enabledPolicy("logging");
+        logging.configuration = Map.of(
+                "enable_json_logs", true,
+                "json_object_config", List.of(Map.of("key", "value")));
+        svc.policies = List.of(logging);
+
+        CompatibilityResult result = service.check(svc, Set.of("Logging", "3scale APIcast"));
+        CompatibilityItem loggingItem = result.items.stream()
+                .filter(i -> "Logging".equals(i.name))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", loggingItem.status);
+        assertTrue(loggingItem.message.contains("telemetry.yaml"));
+    }
+
+    @Test
+    void check_loggingJsonObjectConfigAsString_nonEmpty_warns() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy logging = enabledPolicy("logging");
+        logging.configuration = Map.of("json_object_config", "[{\"field\":\"value\"}]");
+        svc.policies = List.of(logging);
+
+        CompatibilityResult result = service.check(svc, Set.of("Logging"));
+        assertTrue(result.items.stream().anyMatch(i ->
+                "Logging".equals(i.name) && "WARNING".equals(i.status)));
+    }
+
+    @Test
+    void check_allWarnings_yieldsMediumLevelAtFiftyPercent() {
+        ApiService svc = basicService();
+        svc.authentication = null;
+        svc.mappingRules = null;
+        svc.backends = null;
+        svc.policies = List.of(
+                enabledPolicy("lua"),
+                enabledPolicy("soap"),
+                enabledPolicy("custom_policy"));
+
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES);
+        assertEquals("MEDIUM", result.level);
+        assertEquals(50, result.score);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

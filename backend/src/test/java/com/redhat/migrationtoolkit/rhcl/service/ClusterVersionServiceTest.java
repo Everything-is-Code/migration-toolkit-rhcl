@@ -533,6 +533,34 @@ class ClusterVersionServiceTest {
                 "GAPI < 1.2 and OCP < 4.19 must not claim retriesSupported");
     }
 
+    @Test
+    void ossmCompatibilityTable_returnsOcpOssmMatrix() {
+        Map<String, String> table = service.ossmCompatibilityTable();
+        assertFalse(table.isEmpty());
+        assertEquals("2.6", table.get("4.19"));
+        assertEquals("3.0", table.get("4.21"));
+    }
+
+    @Test
+    void sanitize_redactsSecretsAndHomePaths() {
+        String cleaned = ClusterVersionService.sanitize("access_token=secret123 /Users/me/cluster");
+        assertFalse(cleaned.contains("secret123"));
+        assertTrue(cleaned.contains("[redacted]"));
+        assertTrue(cleaned.contains("[redacted-path]"));
+    }
+
+    @Test
+    void sanitize_nullMessage_returnsGenericError() {
+        assertEquals("detection error", ClusterVersionService.sanitize(null));
+    }
+
+    @Test
+    void compareVersions_equalAndGreater() {
+        assertEquals(0, ClusterVersionService.compareVersions("1.2.3", "1.2.3"));
+        assertTrue(ClusterVersionService.compareVersions("2.0.0", "1.99.0") > 0);
+        assertEquals(0, ClusterVersionService.compareVersions(null, null));
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private enum SmcpMode { EMPTY, FORBIDDEN }
