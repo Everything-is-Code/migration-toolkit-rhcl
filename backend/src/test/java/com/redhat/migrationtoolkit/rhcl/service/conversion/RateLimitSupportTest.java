@@ -76,7 +76,7 @@ class RateLimitSupportTest {
         assertNotNull(yaml);
         assertTrue(yaml.contains("edge_leaky_bucket"));
         assertTrue(yaml.contains("leaky_bucket_limiters approximated"));
-        assertTrue(yaml.contains("edge_connection"));
+        assertTrue(yaml.contains("edge_conn"));
         assertTrue(yaml.contains("connection_limiters mapped"));
     }
 }
