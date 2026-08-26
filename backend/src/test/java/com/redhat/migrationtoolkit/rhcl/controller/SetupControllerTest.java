@@ -41,8 +41,9 @@ class SetupControllerTest {
                         """)
                 .when().post("/api/setup/namespace")
                 .then()
-                .statusCode(anyOf(equalTo(200), equalTo(207)))
-                .body("steps", not(empty()));
+                .statusCode(207)
+                .body("steps", not(empty()))
+                .body("allSuccess", is(false));
     }
 
     @Test
@@ -54,7 +55,9 @@ class SetupControllerTest {
                 .body("{}")
                 .when().post("/api/setup/namespace")
                 .then()
-                .statusCode(anyOf(equalTo(200), equalTo(207)));
+                .statusCode(207)
+                .body("steps[0].step", containsString("(default)"))
+                .body("allSuccess", is(false));
     }
 
     @Test
@@ -332,7 +335,8 @@ class SetupControllerTest {
                 .body("{\"namespace\":\"test-ns\"}")
                 .when().post("/api/setup/namespace")
                 .then()
-                .statusCode(anyOf(equalTo(200), equalTo(207)));
+                .statusCode(207)
+                .body("allSuccess", is(false));
 
         assertTrue(ns.getMetadata().getLabels().containsKey("istio-injection"));
     }
