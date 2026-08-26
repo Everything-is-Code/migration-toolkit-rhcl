@@ -12,6 +12,7 @@ import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.base.PatchContext;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.MockitoConfig;
@@ -21,10 +22,14 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.HashMap;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
@@ -741,7 +746,7 @@ class ApplyControllerTest {
                         """)
                 .when().post("/api/apply")
                 .then()
-                .statusCode(anyOf(equalTo(200), equalTo(422)))
+                .statusCode(200)
                 .body("successCount", equalTo(0))
                 .body("errorCount", equalTo(0));
 
@@ -804,7 +809,9 @@ class ApplyControllerTest {
         when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
         when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
         when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
-        when(mockGkrRes.patch(any(PatchContext.class), any(GenericKubernetesResource.class))).thenReturn(live);
+        ArgumentCaptor<GenericKubernetesResource> patchedCaptor =
+                ArgumentCaptor.forClass(GenericKubernetesResource.class);
+        when(mockGkrRes.patch(any(PatchContext.class), patchedCaptor.capture())).thenReturn(live);
 
         given()
                 .contentType(ContentType.JSON)
@@ -820,6 +827,10 @@ class ApplyControllerTest {
                 .then()
                 .statusCode(200)
                 .body("successCount", equalTo(1));
+
+        String patchedYaml = Serialization.asYaml(patchedCaptor.getValue());
+        assertTrue(patchedYaml.contains("authorizationHeader"));
+        assertFalse(patchedYaml.contains("    credentials:"));
     }
 
     @SuppressWarnings("unchecked")
@@ -845,7 +856,7 @@ class ApplyControllerTest {
                         """)
                 .when().post("/api/apply")
                 .then()
-                .statusCode(anyOf(equalTo(200), equalTo(422)))
+                .statusCode(422)
                 .body("errorCount", greaterThan(0));
     }
 

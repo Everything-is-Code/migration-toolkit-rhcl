@@ -26,6 +26,10 @@ class GatewayInfoControllerTest {
     @MockitoConfig(convertScopes = true)
     KubernetesClient kubernetesClient;
 
+    @InjectMock
+    @MockitoConfig(convertScopes = true)
+    GatewayDnsResolver dnsResolver;
+
     @Test
     void getGatewayInfo_missingNamespace_returns400() {
         given()
@@ -174,6 +178,7 @@ class GatewayInfoControllerTest {
         when(mockResources.inNamespace(anyString())).thenReturn(mockNamespaced);
         when(mockNamespaced.withName(anyString())).thenReturn(mockResource);
         when(mockResource.get()).thenReturn(gw);
+        when(dnsResolver.isResolvable("127.0.0.1")).thenReturn(true);
 
         given()
                 .queryParam("namespace", "test-ns")
@@ -206,6 +211,7 @@ class GatewayInfoControllerTest {
         when(mockResources.inNamespace(anyString())).thenReturn(mockNamespaced);
         when(mockNamespaced.withName(anyString())).thenReturn(mockResource);
         when(mockResource.get()).thenReturn(gw);
+        when(dnsResolver.isResolvable("definitely-invalid-hostname-xyz.invalid")).thenReturn(false);
 
         given()
                 .queryParam("namespace", "test-ns")

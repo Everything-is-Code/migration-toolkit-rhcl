@@ -17,7 +17,6 @@ import org.jboss.logging.Logger;
 import com.redhat.migrationtoolkit.rhcl.exception.NotFoundException;
 import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 
-import java.net.InetAddress;
 import java.util.List;
 import java.util.Map;
 
@@ -29,6 +28,9 @@ public class GatewayInfoController {
 
     @Inject
     KubernetesClient client;
+
+    @Inject
+    GatewayDnsResolver dnsResolver;
 
     /**
      * Returns the external access URL (LoadBalancer hostname / IP) of a Gateway.
@@ -68,7 +70,7 @@ public class GatewayInfoController {
 
             String hostname = extractHostname(gw);
             boolean lbReady  = hostname != null && !hostname.isBlank();
-            boolean dnsReady = lbReady && isDnsResolvable(hostname);
+            boolean dnsReady = lbReady && dnsResolver.isResolvable(hostname);
 
             return Response.ok(Map.of(
                     "hostname", hostname != null ? hostname : "",
@@ -83,17 +85,6 @@ public class GatewayInfoController {
         } catch (Exception e) {
             LOG.warnf("Failed to get Gateway info for %s/%s: %s", namespace, gatewayName, e.getMessage());
             throw new RuntimeException("Failed to get Gateway info: " + e.getMessage(), e);
-        }
-    }
-
-    /** Check whether the ELB hostname is DNS-resolvable. */
-    private boolean isDnsResolvable(String hostname) {
-        try {
-            InetAddress.getByName(hostname);
-            return true;
-        } catch (Exception e) {
-            LOG.debugf("DNS not yet resolvable for hostname %s: %s", hostname, e.getMessage());
-            return false;
         }
     }
 

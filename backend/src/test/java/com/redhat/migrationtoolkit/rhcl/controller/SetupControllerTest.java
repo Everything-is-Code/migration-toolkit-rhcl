@@ -110,8 +110,9 @@ class SetupControllerTest {
                 .body("{\"namespace\":\"test-ns\"}")
                 .when().post("/api/setup/namespace")
                 .then()
-                .statusCode(anyOf(equalTo(200), equalTo(207)))
-                .body("steps", hasSize(2));
+                .statusCode(207)
+                .body("steps", hasSize(2))
+                .body("allSuccess", is(false));
     }
 
     @Test
@@ -345,7 +346,8 @@ class SetupControllerTest {
                 .body("{\"namespace\":\"   \"}")
                 .when().post("/api/setup/namespace")
                 .then()
-                .statusCode(anyOf(equalTo(200), equalTo(207)));
+                .statusCode(207)
+                .body("steps[0].step", containsString("(default)"));
     }
 
     @Test
