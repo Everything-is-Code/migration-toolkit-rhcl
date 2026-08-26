@@ -37,6 +37,23 @@ class AuthCachingContributorTest {
     }
 
     @Test
+    void contribute_withApiKeyAuth_interpolatesCacheBlockInBuiltYaml() {
+        ApiService service = ContributorTestFixtures.apiServiceWithAuth("apiKey");
+        service.policies.add(ContributorTestFixtures.policy("caching", true,
+                Map.of("caching_type", "allow")));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        AuthPolicyBuilder builder = ContributorTestFixtures.authPolicyBuilder(ctx);
+
+        new AuthCachingContributor().contribute(builder, ctx);
+        new ApiKeyAuthenticationContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("api-key-auth:"));
+        assertTrue(yaml.contains("cache:"));
+        assertTrue(yaml.contains("ttl: 300"));
+    }
+
+    @Test
     void contribute_cachingPolicy_setsBlockOnBuilder() {
         ApiService service = ContributorTestFixtures.apiService();
         service.policies.add(ContributorTestFixtures.policy("3scale_auth_caching", true,
