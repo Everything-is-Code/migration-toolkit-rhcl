@@ -13,6 +13,11 @@ paths = [
   '''frontend/build/.*''',
   '''frontend/node_modules/.*''',
   '''backend/target/.*''',
+  '''(^|.*/)src/test/.*''',
+  '''(^|.*/)test/.*''',
+  '''\.test\.(ts|tsx|js)$''',
+  '''helm/.*/README\.md$''',
+  '''testdata/.*''',
 ]
 
 [[rules]]
@@ -34,4 +39,7 @@ tags = ["secret", "generic"]
 regexes = [
   '''(?i)(dummy|example|placeholder|changeme|xxx|test|\$\{|REPLACE_ME)''',
   '''\$\{''',
+  '''(?i)^token\d+$''',
+  '''(?i)^tok$''',
+  '''(?i)^(my-)?token-[\w-]+$''',
 ]
