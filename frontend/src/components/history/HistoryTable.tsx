@@ -15,15 +15,9 @@ import {
 } from '@patternfly/react-icons';
 import { useTranslation } from 'react-i18next';
 import { ConversionHistory, FailureDetail } from '../../api/types';
-import { formatDate, statusColor } from './historyUtils';
+import { formatDate, statusColor, PER_PAGE_OPTIONS } from './historyUtils';
 import { sourceLabel } from './historyLabels';
 import styles from './history.module.css';
-
-const PER_PAGE_OPTIONS = [
-  { title: '20', value: 20 },
-  { title: '50', value: 50 },
-  { title: '100', value: 100 },
-];
 
 const parseFailures = (json?: string): FailureDetail[] => {
   if (!json) return [];

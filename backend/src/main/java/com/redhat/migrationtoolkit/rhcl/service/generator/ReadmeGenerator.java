@@ -1,10 +1,10 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
-import com.redhat.migrationtoolkit.rhcl.service.ConversionService;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.PolicyConfigSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RateLimitSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeNotes;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeSupport;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -47,7 +47,7 @@ public class ReadmeGenerator implements ResourceGenerator {
 
     @Override
     public String generate(ConversionContext ctx) {
-        ConversionService.ReadmeNotes readmeNotes = new ConversionService.ReadmeNotes();
+        ReadmeNotes readmeNotes = new ReadmeNotes();
         return ReadmeSupport.build(
                 ctx,
                 readmeNotes,

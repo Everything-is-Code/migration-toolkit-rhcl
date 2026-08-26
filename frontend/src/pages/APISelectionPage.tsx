@@ -147,7 +147,6 @@ const APISelectionPage: React.FC = () => {
             <ServiceList
               loading={loading}
               filtered={filtered}
-              services={services}
               selectedId={selectedService?.id ?? null}
               enabledPoliciesById={enabledPoliciesById}
               onSelect={handleSelect}

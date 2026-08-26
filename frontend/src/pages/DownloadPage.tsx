@@ -18,7 +18,7 @@ import {
   StackItem,
 } from '@patternfly/react-core';
 import { DownloadIcon } from '@patternfly/react-icons';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import { downloadApi } from '../api/client';
 import { useAppState } from '../components/AppStateContext';
 import { useNavigate } from 'react-router-dom';
@@ -145,9 +145,9 @@ const DownloadPage: React.FC = () => {
                 <Title headingLevel="h3" size="lg">{t('download.nextStepsTitle')}</Title>
                 <ol style={{ marginTop: '12px', paddingLeft: '20px', lineHeight: '2' }}>
                   <li>{t('download.step1')}</li>
-                  <li dangerouslySetInnerHTML={{ __html: t('download.step2') }} />
+                  <li><Trans i18nKey="download.step2" components={{ code: <code /> }} /></li>
                   <li>{t('download.step3')}</li>
-                  <li dangerouslySetInnerHTML={{ __html: t('download.step4') }} />
+                  <li><Trans i18nKey="download.step4" components={{ code: <code /> }} /></li>
                   <li>{t('download.step5')}</li>
                 </ol>
               </CardBody>
