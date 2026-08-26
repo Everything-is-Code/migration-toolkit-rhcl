@@ -35,6 +35,8 @@ class SecretGeneratorTest {
         assertTrue(yaml.contains("kind: Secret"));
         assertTrue(yaml.contains("namespace: " + GeneratorTestSupport.NAMESPACE));
         assertTrue(yaml.contains("type: Opaque"));
-        assertTrue(yaml.contains("stringData:") || yaml.contains("data:"));
+        assertTrue(yaml.contains("name: secret-api-credentials"));
+        assertTrue(yaml.contains("stringData:"));
+        assertTrue(yaml.contains("REPLACE_ME"));
     }
 }

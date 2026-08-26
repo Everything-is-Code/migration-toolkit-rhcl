@@ -39,5 +39,8 @@ class HttpRouteGeneratorTest {
         assertTrue(yaml.contains("name: route-api-gateway"));
         assertTrue(yaml.contains("rules:"));
         assertTrue(yaml.contains("backendRefs:"));
+        assertTrue(yaml.contains("type: PathPrefix"));
+        assertTrue(yaml.contains("value: \"/api/v1\""));
+        assertTrue(yaml.contains("method: GET"));
     }
 }

@@ -73,5 +73,9 @@ class RateLimitPolicyGeneratorTest {
         assertTrue(yaml.contains("kind: RateLimitPolicy"));
         assertTrue(yaml.contains("name: limited-api-ratelimit"));
         assertTrue(yaml.contains("namespace: " + GeneratorTestSupport.NAMESPACE));
+        assertTrue(yaml.contains("targetRef:"));
+        assertTrue(yaml.contains("name: limited-api-route"));
+        assertTrue(yaml.contains("limit: 10"));
+        assertTrue(yaml.contains("window: 60s"));
     }
 }
