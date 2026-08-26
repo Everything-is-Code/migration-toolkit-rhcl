@@ -64,6 +64,32 @@ public class ExceptionTestResource {
                 new RuntimeException("kube error"));
     }
 
+    @GET
+    @Path("/cluster-apply-details")
+    public String throwClusterApplyWithDetails() {
+        throw new ClusterApplyException("Apply operation failed",
+                new RuntimeException("kube error"),
+                Map.of("resource", "gateway.yaml"));
+    }
+
+    @GET
+    @Path("/cluster-apply-custom-code")
+    public String throwClusterApplyCustomCode() {
+        throw new ClusterApplyException("PARTIAL_APPLY", "Some resources failed to apply");
+    }
+
+    @GET
+    @Path("/threescale-custom-code")
+    public String throwThreeScaleCustomCode() {
+        throw new ThreeScaleClientException("THREESCALE_AUTH_FAILED", "Invalid access token");
+    }
+
+    @GET
+    @Path("/sensitive-message")
+    public String throwSensitiveMessage() {
+        throw new ValidationException("Request failed: access_token=secret-token-value");
+    }
+
     public record ConstraintBean(@NotBlank String name) {}
 
     @GET

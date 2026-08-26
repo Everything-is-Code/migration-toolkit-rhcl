@@ -100,4 +100,29 @@ class ErrorSanitizerTest {
         String result = ErrorSanitizer.sanitizeExceptionMessage(new RuntimeException());
         assertEquals("RuntimeException", result);
     }
+
+    @Test
+    void sanitizeExceptionMessage_nullException_returnsGenericMessage() {
+        String result = ErrorSanitizer.sanitizeExceptionMessage(null);
+        assertEquals("An unexpected error occurred", result);
+    }
+
+    @Test
+    void sanitizeExceptionMessage_sanitizesSensitiveMessage() {
+        String result = ErrorSanitizer.sanitizeExceptionMessage(
+                new RuntimeException("Failed with access_token=leaked-value"));
+        assertEquals("Failed with access_token=[REDACTED]", result);
+    }
+
+    @Test
+    void sanitize_colonSeparator_redacted() {
+        String result = ErrorSanitizer.sanitize("secret: hidden-value");
+        assertEquals("secret=[REDACTED]", result);
+    }
+
+    @Test
+    void sanitize_apikeyField_redacted() {
+        String result = ErrorSanitizer.sanitize("apikey=inline-key");
+        assertEquals("apikey=[REDACTED]", result);
+    }
 }

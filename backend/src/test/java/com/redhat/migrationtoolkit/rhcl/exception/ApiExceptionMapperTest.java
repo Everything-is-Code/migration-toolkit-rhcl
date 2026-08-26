@@ -118,4 +118,43 @@ class ApiExceptionMapperTest {
                 .then()
                 .statusCode(404);
     }
+
+    @Test
+    void mapApiException_clusterApplyExceptionWithDetails_returns500WithDetails() {
+        given()
+                .when().get("/test-exceptions/cluster-apply-details")
+                .then()
+                .statusCode(500)
+                .body("error.code", equalTo("APPLY_FAILED"))
+                .body("error.details.resource", equalTo("gateway.yaml"));
+    }
+
+    @Test
+    void mapApiException_clusterApplyExceptionCustomCode_returns500WithCode() {
+        given()
+                .when().get("/test-exceptions/cluster-apply-custom-code")
+                .then()
+                .statusCode(500)
+                .body("error.code", equalTo("PARTIAL_APPLY"))
+                .body("error.message", equalTo("Some resources failed to apply"));
+    }
+
+    @Test
+    void mapApiException_threeScaleClientExceptionCustomCode_returns502WithCode() {
+        given()
+                .when().get("/test-exceptions/threescale-custom-code")
+                .then()
+                .statusCode(502)
+                .body("error.code", equalTo("THREESCALE_AUTH_FAILED"))
+                .body("error.message", equalTo("Invalid access token"));
+    }
+
+    @Test
+    void mapApiException_sanitizesSensitiveMessageInEnvelope() {
+        given()
+                .when().get("/test-exceptions/sensitive-message")
+                .then()
+                .statusCode(400)
+                .body("error.message", equalTo("Request failed: access_token=[REDACTED]"));
+    }
 }
