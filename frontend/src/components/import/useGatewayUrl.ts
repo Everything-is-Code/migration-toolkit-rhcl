@@ -2,6 +2,11 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isAxiosError } from 'axios';
 import { gatewayApi } from '../../api/client';
+import { apiErrorI18nMessage } from '../../utils/apiError';
+
+export function isNonRetryable(e: unknown): boolean {
+  return isAxiosError(e) && (e.response?.status === 400 || e.response?.status === 404);
+}
 
 interface GatewayUrlState {
   url: string | null;
@@ -52,6 +57,7 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
     setPhase('lb');
 
     let hostname = '';
+    let lastLbError: unknown = null;
     for (let i = 0; i < 12; i++) {
       if (signal.aborted) return;
       try {
@@ -60,8 +66,14 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
           hostname = res.data.hostname;
           break;
         }
-      } catch (e) {
+      } catch (e: unknown) {
         if (isAbortError(e)) return;
+        lastLbError = e;
+        if (isNonRetryable(e)) {
+          setError(apiErrorI18nMessage(e, t, t('import.testPanel.gwNotReady')));
+          setLoading(false);
+          return;
+        }
       }
       if (i < 11) {
         try {
@@ -74,7 +86,7 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
 
     if (signal.aborted) return;
     if (!hostname) {
-      setError(t('import.testPanel.gwNotReady'));
+      setError(apiErrorI18nMessage(lastLbError, t, t('import.testPanel.gwNotReady')));
       setLoading(false);
       return;
     }
@@ -90,8 +102,13 @@ export function useGatewayUrl(gatewayName: string | undefined, namespace: string
           setLoading(false);
           return;
         }
-      } catch (e) {
+      } catch (e: unknown) {
         if (isAbortError(e)) return;
+        if (isNonRetryable(e)) {
+          setError(apiErrorI18nMessage(e, t, t('import.testPanel.gwNotReady')));
+          setLoading(false);
+          return;
+        }
       }
       if (i < 29) {
         try {

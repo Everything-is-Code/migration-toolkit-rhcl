@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import { conversionApi } from '../api/client';
 import { corsConversionHintKey } from '../utils/clusterCapabilityUi';
 import { loadSupportedPolicies } from '../utils/supportedPolicies';
-import { apiErrorMessage } from '../utils/apiError';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import { useAppState } from '../components/AppStateContext';
 import ConversionForm from '../components/conversion/ConversionForm';
 import ConversionResults from '../components/conversion/ConversionResults';
@@ -74,7 +74,7 @@ const ConversionPage: React.FC = () => {
       setProgress(100);
       setAppState(prev => ({ ...prev, conversionResults: resp.data.results }));
     } catch (e: unknown) {
-      setError(t('conversion.errorConvert', { message: apiErrorMessage(e, 'Conversion failed') }));
+      setError(t('conversion.errorConvert', { message: apiErrorI18nMessage(e, t, t('conversion.errorConvertFallback')) }));
     } finally {
       setLoading(false);
     }

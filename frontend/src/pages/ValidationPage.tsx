@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { apiErrorMessage } from '../utils/apiError';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import {
   PageSection,
   PageSectionVariants,
@@ -55,7 +55,7 @@ const ValidationPage: React.FC = () => {
           service: convResult.serviceName,
           result: {
             valid: false,
-            items: [{ check: 'API Error', status: 'ERROR', message: apiErrorMessage(e, 'Validation failed') }],
+            items: [{ check: 'API Error', status: 'ERROR', message: apiErrorI18nMessage(e, t, t('validation.errorFallback')) }],
           },
         });
       }

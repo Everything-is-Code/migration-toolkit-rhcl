@@ -25,6 +25,7 @@ import { useAppState } from '../components/AppStateContext';
 import { useNavigate } from 'react-router-dom';
 import { loadSupportedPolicies } from '../utils/supportedPolicies';
 import { runCompatibilityChecks } from './compatibilityChecks';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import {
   PF_DANGER,
   PF_SPACER_MD,
@@ -79,7 +80,7 @@ const CompatibilityPage: React.FC = () => {
       {
         loadSupportedPolicies,
         checkCompatibility: servicesApi.checkCompatibility,
-        errorMessage: t('compatibility.errorCheck'),
+        formatApiError: (e) => apiErrorI18nMessage(e, t, t('compatibility.errorCheck')),
       },
     );
     setResults(nextResults);

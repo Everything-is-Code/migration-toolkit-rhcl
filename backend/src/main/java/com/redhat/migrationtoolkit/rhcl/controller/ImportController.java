@@ -1,17 +1,16 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
-import com.redhat.migrationtoolkit.rhcl.util.Messages;
-import jakarta.inject.Inject;
+import com.redhat.migrationtoolkit.rhcl.exception.ImportParseException;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
+import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.multipart.FileUpload;
 import org.jboss.resteasy.reactive.RestForm;
 
@@ -19,7 +18,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -28,11 +26,7 @@ import java.util.zip.ZipInputStream;
 @Tag(name = "Import", description = "Import ZIP packages")
 public class ImportController {
 
-    @Inject
-    Messages messages;
-
-    @Context
-    HttpHeaders httpHeaders;
+    private static final Logger LOG = Logger.getLogger(ImportController.class);
 
     @POST
     @Path("/zip")
@@ -40,13 +34,9 @@ public class ImportController {
     @Produces(MediaType.APPLICATION_JSON)
     @Operation(summary = "Upload and extract a ZIP file, returning YAML contents")
     public Response uploadZip(@RestForm("file") FileUpload fileUpload) {
-        Locale locale = Messages.resolveLocale(
-                httpHeaders != null ? httpHeaders.getHeaderString("Accept-Language") : null);
-
         if (fileUpload == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("import.error.noFile", locale)))
-                    .build();
+            LOG.warnf("Import rejected: no file uploaded");
+            throw new ValidationException("File upload is required");
         }
 
         Map<String, String> yamlFiles = new HashMap<>();
@@ -68,17 +58,15 @@ public class ImportController {
             }
 
         } catch (IOException e) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("import.error.parseZip", locale, e.getMessage())))
-                    .build();
+            LOG.warnf(e, "Failed to parse ZIP file: %s", e.getMessage());
+            throw new ImportParseException("Failed to parse ZIP file", e);
         }
 
         boolean hasYaml = yamlFiles.keySet().stream()
                 .anyMatch(k -> k.endsWith(".yaml") || k.endsWith(".yml"));
         if (!hasYaml) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("import.error.noYaml", locale)))
-                    .build();
+            LOG.warnf("Import rejected: no YAML files found in ZIP");
+            throw ImportParseException.noYaml();
         }
 
         return Response.ok(Map.of(

@@ -33,7 +33,7 @@ class ConnectionControllerTest {
     }
 
     @Test
-    void testConnection_failure_returns502() {
+    void testConnection_failure_returns502Envelope() {
         when(exportService.testConnection(any())).thenReturn(false);
 
         given()
@@ -44,7 +44,8 @@ class ConnectionControllerTest {
                 .when().post("/api/connection/test")
                 .then()
                 .statusCode(502)
-                .body("success", is(false));
+                .body("error.code", equalTo("CONNECTION_TEST_FAILED"))
+                .body("error.message", notNullValue());
     }
 
     @Test
@@ -57,7 +58,7 @@ class ConnectionControllerTest {
                 .when().post("/api/connection/test")
                 .then()
                 .statusCode(400)
-                .body("violations", is(not(empty())));
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -70,7 +71,7 @@ class ConnectionControllerTest {
                 .when().post("/api/connection/test")
                 .then()
                 .statusCode(400)
-                .body("violations", is(not(empty())));
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test
@@ -83,6 +84,6 @@ class ConnectionControllerTest {
                 .when().post("/api/connection/test")
                 .then()
                 .statusCode(400)
-                .body("violations", is(not(empty())));
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 }

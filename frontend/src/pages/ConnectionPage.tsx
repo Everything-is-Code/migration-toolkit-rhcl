@@ -9,7 +9,7 @@ import { clusterApi } from '../api/client';
 import { ClusterVersionsResponse } from '../api/types';
 import { useAppState } from '../components/AppStateContext';
 import { shouldShowClusterVersionsCard } from '../utils/clusterCapabilityUi';
-import { apiErrorMessage } from '../utils/apiError';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import ConnectionForm from '../components/connection/ConnectionForm';
 import ClusterVersionsPanel from '../components/connection/ClusterVersionsPanel';
 import shared from '../styles/shared.module.css';
@@ -36,7 +36,7 @@ const ConnectionPage: React.FC = () => {
       const res = await clusterApi.getVersions(refresh);
       applyVersions(res.data);
     } catch (e: unknown) {
-      setVersionsError(apiErrorMessage(e, 'Failed to load cluster versions'));
+      setVersionsError(apiErrorI18nMessage(e, t, t('connection.versionsError')));
     } finally {
       setVersionsLoading(false);
     }

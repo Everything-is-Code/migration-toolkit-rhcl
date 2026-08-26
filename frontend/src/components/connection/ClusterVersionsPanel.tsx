@@ -24,7 +24,7 @@ import { settingsApi } from '../../api/client';
 import { ClusterProfile } from '../../api/types';
 import { useAppState } from '../AppStateContext';
 import { clusterProfileI18nKey } from '../../utils/clusterCapabilityUi';
-import { apiErrorMessage } from '../../utils/apiError';
+import { apiErrorI18nMessage } from '../../utils/apiError';
 import {
   PF_FONT_SIZE_SM,
   PF_SPACER_MD,
@@ -74,7 +74,7 @@ const ClusterVersionsPanel: React.FC<Props> = ({
       setAppState(prev => ({ ...prev, clusterProfile: profile }));
       await onLoadVersions(true);
     } catch (e: unknown) {
-      onVersionsErrorChange(apiErrorMessage(e, t('connection.profileSaveError')));
+      onVersionsErrorChange(apiErrorI18nMessage(e, t, t('connection.profileSaveError')));
     } finally {
       onProfileSavingChange(false);
     }

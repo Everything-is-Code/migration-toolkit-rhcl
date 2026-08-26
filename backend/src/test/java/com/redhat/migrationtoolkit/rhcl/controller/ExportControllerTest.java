@@ -55,7 +55,8 @@ class ExportControllerTest {
         given()
                 .when().get("/api/services")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     @Test

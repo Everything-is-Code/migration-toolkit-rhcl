@@ -19,6 +19,8 @@ describe('runCompatibilityChecks', () => {
       data: resultFor(id, `Service ${id}`),
     }));
 
+    const formatApiError = (e: unknown) => (e instanceof Error ? e.message : 'check failed');
+
     const { results, error } = await runCompatibilityChecks(
       [
         { id: '1', name: 'One' },
@@ -29,7 +31,7 @@ describe('runCompatibilityChecks', () => {
       {
         loadSupportedPolicies,
         checkCompatibility,
-        errorMessage: 'check failed',
+        formatApiError,
       },
     );
 
@@ -59,6 +61,8 @@ describe('runCompatibilityChecks', () => {
       .mockResolvedValueOnce({ data: resultFor('1', 'One') })
       .mockRejectedValueOnce(new Error('boom'));
 
+    const formatApiError = (e: unknown) => (e instanceof Error ? e.message : 'check failed');
+
     const { results, error } = await runCompatibilityChecks(
       [
         { id: '1', name: 'One' },
@@ -68,7 +72,7 @@ describe('runCompatibilityChecks', () => {
       {
         loadSupportedPolicies,
         checkCompatibility,
-        errorMessage: 'check failed',
+        formatApiError,
       },
     );
 
@@ -76,7 +80,7 @@ describe('runCompatibilityChecks', () => {
     expect(loadSupportedPolicies).toHaveBeenCalledTimes(1);
     expect(results[0].score).toBe(90);
     expect(results[1].score).toBe(0);
-    expect(results[1].items[0].message).toBe('check failed');
+    expect(results[1].items[0].message).toBe('boom');
   });
 
   it('retries loadSupportedPolicies once before failing', async () => {
@@ -87,13 +91,15 @@ describe('runCompatibilityChecks', () => {
       data: resultFor(id, `Service ${id}`),
     }));
 
+    const formatApiError = (e: unknown) => (e instanceof Error ? e.message : 'check failed');
+
     const { results, error } = await runCompatibilityChecks(
       [{ id: '1', name: 'One' }],
       { url: 'https://3scale.example', accessToken: 'tok' },
       {
         loadSupportedPolicies,
         checkCompatibility,
-        errorMessage: 'check failed',
+        formatApiError,
       },
     );
 
@@ -107,13 +113,15 @@ describe('runCompatibilityChecks', () => {
     const loadSupportedPolicies = vi.fn().mockRejectedValue(new Error('policies down'));
     const checkCompatibility = vi.fn();
 
+    const formatApiError = (e: unknown) => (e instanceof Error ? e.message : 'check failed');
+
     const { results, error } = await runCompatibilityChecks(
       [{ id: '1', name: 'One' }],
       { url: 'https://3scale.example', accessToken: 'tok' },
       {
         loadSupportedPolicies,
         checkCompatibility,
-        errorMessage: 'check failed',
+        formatApiError,
       },
     );
 

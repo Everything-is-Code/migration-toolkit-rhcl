@@ -18,6 +18,8 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
+import com.redhat.migrationtoolkit.rhcl.exception.NotFoundException;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,8 +101,8 @@ public class ClusterController {
 
             if (backendRoute == null) {
                 LOG.warnf("Route '%s' not found", BACKEND_ROUTE_NAME);
-                return Response.status(404).entity(Map.of(
-                        "error", "Route '" + BACKEND_ROUTE_NAME + "' not found")).build();
+                throw new NotFoundException("CLUSTER_ROUTE_NOT_FOUND",
+                        "Route '" + BACKEND_ROUTE_NAME + "' not found");
             }
 
             String routeNamespace = backendRoute.getMetadata().getNamespace();
@@ -108,8 +110,8 @@ public class ClusterController {
 
             if (routeHost == null || routeHost.isBlank()) {
                 LOG.warnf("Route '%s' has no host assigned yet", BACKEND_ROUTE_NAME);
-                return Response.status(404).entity(Map.of(
-                        "error", "Route host not assigned yet — wait for Route to be ready")).build();
+                throw new NotFoundException("CLUSTER_ROUTE_HOST_PENDING",
+                        "Route host not assigned yet — wait for Route to be ready");
             }
 
             LOG.debugf("Backend route host: %s (namespace: %s)", routeHost, routeNamespace);
@@ -117,8 +119,8 @@ public class ClusterController {
             int appsIdx = routeHost.indexOf(".apps.");
             if (appsIdx < 0) {
                 LOG.warnf("Cannot extract cluster domain from route host: %s", routeHost);
-                return Response.status(404).entity(Map.of(
-                        "error", "Cannot extract cluster domain from route host: " + routeHost)).build();
+                throw new NotFoundException("CLUSTER_DOMAIN_EXTRACT_FAILED",
+                        "Cannot extract cluster domain from route host: " + routeHost);
             }
 
             String domain = routeHost.substring(appsIdx + 1);
@@ -133,9 +135,11 @@ public class ClusterController {
             domainCacheAt = nowMs();
             return Response.ok(result).build();
 
+        } catch (com.redhat.migrationtoolkit.rhcl.exception.ApiException e) {
+            throw e;
         } catch (Exception e) {
             LOG.warnf("Failed to get cluster domain: %s", e.getMessage());
-            return Response.status(500).entity(Map.of("error", e.getMessage())).build();
+            throw new RuntimeException("Failed to get cluster domain: " + e.getMessage(), e);
         }
     }
 

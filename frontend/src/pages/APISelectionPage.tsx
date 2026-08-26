@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { apiErrorMessage } from '../utils/apiError';
+import { apiErrorI18nMessage } from '../utils/apiError';
 import {
   PageSection,
   PageSectionVariants,
@@ -68,7 +68,7 @@ const APISelectionPage: React.FC = () => {
       setPage(data.page ?? pageNum);
       setPerPage(data.perPage ?? pageSize);
     } catch (e: unknown) {
-      setError(t('apiSelection.errorFetch', { message: apiErrorMessage(e, 'Failed to load services') }));
+      setError(t('apiSelection.errorFetch', { message: apiErrorI18nMessage(e, t, t('apiSelection.errorFetchFallback')) }));
     } finally {
       setLoading(false);
     }

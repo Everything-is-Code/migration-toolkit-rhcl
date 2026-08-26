@@ -30,12 +30,14 @@ class ArchitectureTest {
             .layer("Entity").definedBy("com.redhat.migrationtoolkit.rhcl.entity..")
             .layer("DTO").definedBy("com.redhat.migrationtoolkit.rhcl.dto..")
             .layer("Util").definedBy("com.redhat.migrationtoolkit.rhcl.util..")
+            .layer("Exception").definedBy("com.redhat.migrationtoolkit.rhcl.exception..")
             .whereLayer("Controller").mayNotBeAccessedByAnyLayer()
             .whereLayer("Service").mayOnlyBeAccessedByLayers("Controller")
             .whereLayer("Client").mayOnlyBeAccessedByLayers("Service")
             .whereLayer("Entity").mayOnlyBeAccessedByLayers("Controller", "Service")
             .whereLayer("DTO").mayOnlyBeAccessedByLayers("Controller", "Service")
             .whereLayer("Util").mayOnlyBeAccessedByLayers("Controller", "Service")
+            .whereLayer("Exception").mayOnlyBeAccessedByLayers("Controller", "Service", "Exception")
             .whereLayer("Model").mayOnlyBeAccessedByLayers("Controller", "Service", "Client", "DTO");
 
     // ── Controller rules ──────────────────────────────────────────────────────
@@ -157,6 +159,23 @@ class ArchitectureTest {
     static final ArchRule contributors_doNotDependOnConversionService = noClasses()
             .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.service.generator.contributor..")
             .should().dependOnClassesThat().areAssignableTo(ConversionService.class);
+
+    // ── Exception rules ───────────────────────────────────────────────────────
+
+    @ArchTest
+    static final ArchRule exception_doesNotDependOnController = noClasses()
+            .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.exception..")
+            .should().dependOnClassesThat()
+            .resideInAPackage("com.redhat.migrationtoolkit.rhcl.controller..");
+
+    @ArchTest
+    static final ArchRule controllerAndService_mayDependOnException = classes()
+            .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.exception..")
+            .should().onlyBeAccessed()
+            .byClassesThat().resideInAnyPackage(
+                    "com.redhat.migrationtoolkit.rhcl.controller..",
+                    "com.redhat.migrationtoolkit.rhcl.service..",
+                    "com.redhat.migrationtoolkit.rhcl.exception..");
 
     // ── General code quality rules ────────────────────────────────────────────
 

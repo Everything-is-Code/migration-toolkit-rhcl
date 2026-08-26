@@ -4,6 +4,9 @@ import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionRequest;
+import com.redhat.migrationtoolkit.rhcl.exception.ApiException;
+import com.redhat.migrationtoolkit.rhcl.exception.ErrorSanitizer;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
 import com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
@@ -72,100 +75,105 @@ public class ConversionController {
 
         if (Boolean.TRUE.equals(request.includeDnsPolicy)
                 && (request.dnsHostname == null || request.dnsHostname.isBlank())) {
-            return Response.status(400).entity(Map.of(
-                    "error", "dnsHostname is required when includeDnsPolicy is true"
+            throw new ValidationException("dnsHostname is required when includeDnsPolicy is true");
+        }
+
+        try {
+            ProjectEntity project = new ProjectEntity();
+            project.name = "Migration-" + System.currentTimeMillis();
+            project.threescaleUrl = request.threescaleUrl;
+            project.tenant = request.tenant;
+            project.persist();
+
+            ClusterCapabilities caps = resolveCapabilities();
+
+            Map<String, PrefetchedExport> exports = prefetchExports(
+                    request.threescaleUrl, request.accessToken, request.serviceIds);
+
+            List<Map<String, Object>> results = new ArrayList<>();
+
+            for (String serviceId : request.serviceIds) {
+                if (serviceId == null || serviceId.isBlank()) {
+                    results.add(Map.of(
+                            "serviceId", serviceId == null ? "" : serviceId,
+                            "status", "FAILED",
+                            "error", "serviceId must not be blank"
+                    ));
+                    continue;
+                }
+                try {
+                    ApiService service = requirePrefetchedService(exports.get(serviceId), serviceId);
+                    Set<String> supportedPolicies = (request.supportedPolicies != null)
+                            ? new HashSet<>(request.supportedPolicies)
+                            : Set.of();
+                    CompatibilityResult compatibility = compatibilityService.check(
+                            service, supportedPolicies, caps);
+                    ConversionOptions opts = new ConversionOptions();
+                    opts.loggingTarget = "workload".equals(request.loggingTarget) ? "workload" : "gateway";
+                    opts.anonymousTarget = "gateway".equals(request.anonymousTarget) ? "gateway" : "httproute";
+                    opts.includeMigratedFromLabel = !Boolean.FALSE.equals(request.includeMigratedFromLabel);
+                    opts.ipCheckMode = "authPolicyOpa".equals(request.ipCheckMode)
+                            ? "authPolicyOpa" : "authorizationPolicy";
+                    opts.corsNative = caps != null && caps.corsNative;
+                    opts.retriesSupported = caps != null && caps.retriesSupported;
+                    opts.includeTlsPolicy = Boolean.TRUE.equals(request.includeTlsPolicy);
+                    opts.tlsIssuerKind = request.tlsIssuerKind;
+                    opts.tlsIssuerName = request.tlsIssuerName;
+                    opts.includeDnsPolicy = Boolean.TRUE.equals(request.includeDnsPolicy);
+                    opts.dnsHostname = request.dnsHostname;
+                    opts.dnsProviderSecretName = request.dnsProviderSecretName;
+                    Map<String, String> yamlFiles = conversionService.convert(
+                            service, namespace, request.externalBackendUrl, opts);
+
+                    String name = service.systemName != null ? service.systemName : service.name;
+                    name = name.toLowerCase().replaceAll("[^a-z0-9]+", "-");
+
+                    String yamlContent = String.join("\n---\n", yamlFiles.values());
+                    ConversionHistoryEntity history = new ConversionHistoryEntity();
+                    history.project = project;
+                    history.serviceId = serviceId;
+                    history.serviceName = service.name;
+                    history.status = "COMPLETED";
+                    history.compatibilityScore = compatibility.score;
+                    history.yamlContent = yamlContent;
+                    history.persist();
+
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("serviceId", serviceId);
+                    result.put("serviceName", service.name);
+                    result.put("packageName", name);
+                    result.put("historyId", history.id);
+                    result.put("compatibilityScore", compatibility.score);
+                    result.put("files", new ArrayList<>(yamlFiles.keySet()));
+                    result.put("yamlFiles", yamlFiles);
+                    results.add(result);
+
+                } catch (Exception e) {
+                    LOG.warnf(e, "Conversion FAILED for service %s: %s", serviceId, e.getMessage());
+                    ConversionHistoryEntity history = new ConversionHistoryEntity();
+                    history.project = project;
+                    history.serviceId = serviceId;
+                    history.status = "FAILED";
+                    history.persist();
+
+                    results.add(Map.of(
+                            "serviceId", serviceId,
+                            "status", "FAILED",
+                            "error", ErrorSanitizer.sanitizeExceptionMessage(e)
+                    ));
+                }
+            }
+
+            return Response.ok(Map.of(
+                    "projectId", project.id,
+                    "results", results
             )).build();
+        } catch (ApiException ex) {
+            throw ex;
+        } catch (Exception e) {
+            LOG.warnf(e, "Global conversion failure: %s", ErrorSanitizer.sanitize(e.getMessage()));
+            throw e;
         }
-
-        ProjectEntity project = new ProjectEntity();
-        project.name = "Migration-" + System.currentTimeMillis();
-        project.threescaleUrl = request.threescaleUrl;
-        project.tenant = request.tenant;
-        project.persist();
-
-        ClusterCapabilities caps = resolveCapabilities();
-
-        Map<String, PrefetchedExport> exports = prefetchExports(
-                request.threescaleUrl, request.accessToken, request.serviceIds);
-
-        List<Map<String, Object>> results = new ArrayList<>();
-
-        for (String serviceId : request.serviceIds) {
-            if (serviceId == null || serviceId.isBlank()) {
-                results.add(Map.of(
-                        "serviceId", serviceId == null ? "" : serviceId,
-                        "status", "FAILED",
-                        "error", "serviceId must not be blank"
-                ));
-                continue;
-            }
-            try {
-                ApiService service = requirePrefetchedService(exports.get(serviceId), serviceId);
-                Set<String> supportedPolicies = (request.supportedPolicies != null)
-                        ? new HashSet<>(request.supportedPolicies)
-                        : Set.of();
-                CompatibilityResult compatibility = compatibilityService.check(
-                        service, supportedPolicies, caps);
-                ConversionOptions opts = new ConversionOptions();
-                opts.loggingTarget = "workload".equals(request.loggingTarget) ? "workload" : "gateway";
-                opts.anonymousTarget = "gateway".equals(request.anonymousTarget) ? "gateway" : "httproute";
-                opts.includeMigratedFromLabel = !Boolean.FALSE.equals(request.includeMigratedFromLabel);
-                opts.ipCheckMode = "authPolicyOpa".equals(request.ipCheckMode)
-                        ? "authPolicyOpa" : "authorizationPolicy";
-                opts.corsNative = caps != null && caps.corsNative;
-                opts.retriesSupported = caps != null && caps.retriesSupported;
-                opts.includeTlsPolicy = Boolean.TRUE.equals(request.includeTlsPolicy);
-                opts.tlsIssuerKind = request.tlsIssuerKind;
-                opts.tlsIssuerName = request.tlsIssuerName;
-                opts.includeDnsPolicy = Boolean.TRUE.equals(request.includeDnsPolicy);
-                opts.dnsHostname = request.dnsHostname;
-                opts.dnsProviderSecretName = request.dnsProviderSecretName;
-                Map<String, String> yamlFiles = conversionService.convert(
-                        service, namespace, request.externalBackendUrl, opts);
-
-                String name = service.systemName != null ? service.systemName : service.name;
-                name = name.toLowerCase().replaceAll("[^a-z0-9]+", "-");
-
-                String yamlContent = String.join("\n---\n", yamlFiles.values());
-                ConversionHistoryEntity history = new ConversionHistoryEntity();
-                history.project = project;
-                history.serviceId = serviceId;
-                history.serviceName = service.name;
-                history.status = "COMPLETED";
-                history.compatibilityScore = compatibility.score;
-                history.yamlContent = yamlContent;
-                history.persist();
-
-                Map<String, Object> result = new HashMap<>();
-                result.put("serviceId", serviceId);
-                result.put("serviceName", service.name);
-                result.put("packageName", name);
-                result.put("historyId", history.id);
-                result.put("compatibilityScore", compatibility.score);
-                result.put("files", new ArrayList<>(yamlFiles.keySet()));
-                result.put("yamlFiles", yamlFiles);
-                results.add(result);
-
-            } catch (Exception e) {
-                LOG.warnf(e, "Conversion FAILED for service %s: %s", serviceId, e.getMessage());
-                ConversionHistoryEntity history = new ConversionHistoryEntity();
-                history.project = project;
-                history.serviceId = serviceId;
-                history.status = "FAILED";
-                history.persist();
-
-                results.add(Map.of(
-                        "serviceId", serviceId,
-                        "status", "FAILED",
-                        "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()
-                ));
-            }
-        }
-
-        return Response.ok(Map.of(
-                "projectId", project.id,
-                "results", results
-        )).build();
     }
 
     /**

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { apiErrorMessage } from '../utils/apiError';
+import { apiErrorI18nMessage, apiErrorI18nMessageAsync } from '../utils/apiError';
 import { PageSection, PageSectionVariants, Title, Card, CardBody, Button, Alert, Stack, StackItem } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import { importApi, downloadApi, applyApi } from '../api/client';
@@ -58,7 +58,7 @@ const ImportPage: React.FC = () => {
       setFiles(loaded); setEdits(derived);
       if (detectExternalBackend(derived)) setPortFixNotice('portFixExternal');
     } catch (e: unknown) {
-      setError(t('import.errorUpload', { message: apiErrorMessage(e, 'Upload failed') }));
+      setError(t('import.errorUpload', { message: apiErrorI18nMessage(e, t, t('import.errorUploadFallback')) }));
     } finally { setLoading(false); }
   };
 
@@ -96,7 +96,10 @@ const ImportPage: React.FC = () => {
       const a = document.createElement('a');
       a.href = url; a.download = `${packageName}.zip`; a.click(); URL.revokeObjectURL(url);
       setDownloaded(true);
-    } catch (e: unknown) { setError(t('import.errorDownload', { message: apiErrorMessage(e, 'Download failed') })); }
+    } catch (e: unknown) {
+      const message = await apiErrorI18nMessageAsync(e, t, t('import.errorDownloadFallback'));
+      setError(t('import.errorDownload', { message }));
+    }
   };
 
   const handleApply = async () => {
@@ -117,7 +120,7 @@ const ImportPage: React.FC = () => {
         setApplyResults(data.results);
         if (data.results.some((r: ApplyResult) => r.success)) setTestInfo(parseTestInfo(edits));
       } else {
-        setError(t('import.errorApply', { message: apiErrorMessage(e, 'Apply failed') }));
+        setError(t('import.errorApply', { message: apiErrorI18nMessage(e, t, t('import.errorApplyFallback')) }));
       }
     } finally { setApplying(false); }
   };

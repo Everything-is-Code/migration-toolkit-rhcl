@@ -14,6 +14,9 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
+import com.redhat.migrationtoolkit.rhcl.exception.NotFoundException;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
+
 import java.util.Map;
 
 @Path("/api/download")
@@ -34,9 +37,7 @@ public class PackageController {
         String packageName = (String) request.getOrDefault("packageName", "migration-package");
 
         if (yamlFiles == null || yamlFiles.isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity("yamlFiles are required")
-                    .build();
+            throw new ValidationException("yamlFiles are required");
         }
 
         byte[] zipBytes = packageService.createZip(packageName, yamlFiles);
@@ -54,7 +55,7 @@ public class PackageController {
     public Response downloadFromHistory(@PathParam("historyId") Long historyId) {
         ConversionHistoryEntity history = ConversionHistoryEntity.findById(historyId);
         if (history == null) {
-            return Response.status(Response.Status.NOT_FOUND).build();
+            throw new NotFoundException("HISTORY_NOT_FOUND", "History entry " + historyId + " not found");
         }
 
         String packageName = history.serviceName != null

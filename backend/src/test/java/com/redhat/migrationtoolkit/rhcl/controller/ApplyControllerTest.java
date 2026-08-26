@@ -64,7 +64,8 @@ class ApplyControllerTest {
                 .when().post("/api/apply")
                 .then()
                 .statusCode(400)
-                .body("error", notNullValue());
+                .body("error.code", equalTo("VALIDATION_FAILED"))
+                .body("error.message", notNullValue());
     }
 
     @Test
@@ -74,7 +75,8 @@ class ApplyControllerTest {
                 .body("{}")
                 .when().post("/api/apply")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
     }
 
     // ── all-fail path ────────────────────────────────────────────────────────

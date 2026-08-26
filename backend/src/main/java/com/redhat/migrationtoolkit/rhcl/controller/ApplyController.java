@@ -1,6 +1,9 @@
 package com.redhat.migrationtoolkit.rhcl.controller;
 
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
+import com.redhat.migrationtoolkit.rhcl.exception.ClusterApplyException;
+import com.redhat.migrationtoolkit.rhcl.exception.ErrorSanitizer;
+import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 import com.redhat.migrationtoolkit.rhcl.util.Messages;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -92,9 +95,7 @@ public class ApplyController {
                 httpHeaders != null ? httpHeaders.getHeaderString("Accept-Language") : null);
 
         if (request == null || request.files() == null || request.files().isEmpty()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", messages.get("apply.error.noFiles", locale)))
-                    .build();
+            throw new ValidationException("No files provided for apply");
         }
 
         String namespace = (request.namespace() != null && !request.namespace().isBlank())
@@ -102,116 +103,123 @@ public class ApplyController {
         String source = (request.source() != null && !request.source().isBlank())
                 ? request.source() : "CONVERT";
 
-        ensureNamespace(namespace);
-        ensureRbac(namespace);
+        try {
+            ensureNamespace(namespace);
+            ensureRbac(namespace);
 
-        PatchContext ctx = new PatchContext.Builder()
-                .withPatchType(PatchType.SERVER_SIDE_APPLY)
-                .withFieldManager("migration-toolkit")
-                .withForce(true)
-                .build();
+            PatchContext ctx = new PatchContext.Builder()
+                    .withPatchType(PatchType.SERVER_SIDE_APPLY)
+                    .withFieldManager("migration-toolkit")
+                    .withForce(true)
+                    .build();
 
-        List<ApplyResult> fileResults = new ArrayList<>();
-        List<ResourceResult> resourceResults = new ArrayList<>();
-        Map<String, String> exportedYamls = new LinkedHashMap<>();
+            List<ApplyResult> fileResults = new ArrayList<>();
+            List<ResourceResult> resourceResults = new ArrayList<>();
+            Map<String, String> exportedYamls = new LinkedHashMap<>();
 
-        for (Map.Entry<String, String> entry : request.files().entrySet()) {
-            String fileName = entry.getKey();
-            String lower = fileName.toLowerCase();
-            if (!lower.endsWith(".yaml") && !lower.endsWith(".yml")) {
-                exportedYamls.put(fileName, entry.getValue());
-                continue;
-            }
-            String yaml = entry.getValue();
-            try {
-                List<GenericKubernetesResource> items = splitYamlDocs(normalizeApiVersion(yaml)).stream()
-                        .filter(doc -> !doc.isBlank())
-                        .map(doc -> Serialization.unmarshal(doc, GenericKubernetesResource.class))
-                        .filter(gkr -> gkr != null && gkr.getKind() != null)
-                        .toList();
+            for (Map.Entry<String, String> entry : request.files().entrySet()) {
+                String fileName = entry.getKey();
+                String lower = fileName.toLowerCase();
+                if (!lower.endsWith(".yaml") && !lower.endsWith(".yml")) {
+                    exportedYamls.put(fileName, entry.getValue());
+                    continue;
+                }
+                String yaml = entry.getValue();
+                try {
+                    List<GenericKubernetesResource> items = splitYamlDocs(normalizeApiVersion(yaml)).stream()
+                            .filter(doc -> !doc.isBlank())
+                            .map(doc -> Serialization.unmarshal(doc, GenericKubernetesResource.class))
+                            .filter(gkr -> gkr != null && gkr.getKind() != null)
+                            .toList();
 
-                List<String> errors = new ArrayList<>();
-                StringBuilder exportedSb = new StringBuilder();
+                    List<String> errors = new ArrayList<>();
+                    StringBuilder exportedSb = new StringBuilder();
 
-                for (GenericKubernetesResource gkr : items) {
-                    String kind = gkr.getKind();
-                    String name = gkr.getMetadata() != null ? gkr.getMetadata().getName() : "unknown";
-                    // Always override with the request namespace (handles stale/missing namespace in YAML)
-                    String ns = namespace;
-                    if (gkr.getMetadata() != null) {
-                        gkr.getMetadata().setNamespace(ns);
-                    }
-                    try {
-                        ResourceDefinitionContext rdc = buildRdc(gkr.getApiVersion(), kind);
-                        GenericKubernetesResource patched = client.genericKubernetesResources(rdc)
-                                .inNamespace(ns).withName(name).patch(ctx, gkr);
-                        LOG.infof("Applied %s/%s to namespace %s", kind, name, ns);
-                        resourceResults.add(new ResourceResult(fileName, kind, name, ns, true, null));
-
-                        // Prefer SSA patch return for live YAML; fall back to GET when null.
-                        try {
-                            GenericKubernetesResource live = patched;
-                            if (live == null) {
-                                live = client.genericKubernetesResources(rdc)
-                                        .inNamespace(ns).withName(name).get();
-                            }
-                            if (live != null) {
-                                if (exportedSb.length() > 0) {
-                                    exportedSb.append("\n---\n");
-                                }
-                                exportedSb.append(Serialization.asYaml(live));
-                            }
-                        } catch (Exception ex2) {
-                            LOG.warnf("Export failed for %s/%s: %s", kind, name, ex2.getMessage());
+                    for (GenericKubernetesResource gkr : items) {
+                        String kind = gkr.getKind();
+                        String name = gkr.getMetadata() != null ? gkr.getMetadata().getName() : "unknown";
+                        // Always override with the request namespace (handles stale/missing namespace in YAML)
+                        String ns = namespace;
+                        if (gkr.getMetadata() != null) {
+                            gkr.getMetadata().setNamespace(ns);
                         }
-                    } catch (Exception ex) {
-                        String itemMsg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-                        LOG.warnf("Failed to apply %s/%s: %s", kind, name, itemMsg);
-                        errors.add(kind + "/" + name + ": " + itemMsg);
-                        resourceResults.add(new ResourceResult(fileName, kind, name, ns, false, itemMsg));
+                        try {
+                            ResourceDefinitionContext rdc = buildRdc(gkr.getApiVersion(), kind);
+                            GenericKubernetesResource patched = client.genericKubernetesResources(rdc)
+                                    .inNamespace(ns).withName(name).patch(ctx, gkr);
+                            LOG.infof("Applied %s/%s to namespace %s", kind, name, ns);
+                            resourceResults.add(new ResourceResult(fileName, kind, name, ns, true, null));
+
+                            // Prefer SSA patch return for live YAML; fall back to GET when null.
+                            try {
+                                GenericKubernetesResource live = patched;
+                                if (live == null) {
+                                    live = client.genericKubernetesResources(rdc)
+                                            .inNamespace(ns).withName(name).get();
+                                }
+                                if (live != null) {
+                                    if (exportedSb.length() > 0) {
+                                        exportedSb.append("\n---\n");
+                                    }
+                                    exportedSb.append(Serialization.asYaml(live));
+                                }
+                            } catch (Exception ex2) {
+                                LOG.warnf("Export failed for %s/%s: %s", kind, name, ex2.getMessage());
+                            }
+                        } catch (Exception ex) {
+                            String itemMsg = ErrorSanitizer.sanitizeExceptionMessage(ex);
+                            LOG.warnf("Failed to apply %s/%s: %s", kind, name, itemMsg);
+                            errors.add(kind + "/" + name + ": " + itemMsg);
+                            resourceResults.add(new ResourceResult(fileName, kind, name, ns, false, itemMsg));
+                        }
                     }
-                }
 
-                if (exportedSb.length() > 0) {
-                    exportedYamls.put(fileName, exportedSb.toString());
-                }
+                    if (exportedSb.length() > 0) {
+                        exportedYamls.put(fileName, exportedSb.toString());
+                    }
 
-                if (errors.isEmpty()) {
-                    fileResults.add(new ApplyResult(fileName, true, messages.get("apply.success", locale)));
-                } else {
-                    fileResults.add(new ApplyResult(fileName, false, String.join("; ", errors)));
+                    if (errors.isEmpty()) {
+                        fileResults.add(new ApplyResult(fileName, true, messages.get("apply.success", locale)));
+                    } else {
+                        fileResults.add(new ApplyResult(fileName, false, String.join("; ", errors)));
+                    }
+                } catch (Exception e) {
+                    String msg = ErrorSanitizer.sanitizeExceptionMessage(e);
+                    LOG.warnf("Failed to apply %s: %s", fileName, msg);
+                    fileResults.add(new ApplyResult(fileName, false, msg));
+                    resourceResults.add(new ResourceResult(fileName, "?", "?", namespace, false, msg));
                 }
-            } catch (Exception e) {
-                String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                LOG.warnf("Failed to apply %s: %s", fileName, msg);
-                fileResults.add(new ApplyResult(fileName, false, msg));
-                resourceResults.add(new ResourceResult(fileName, "?", "?", namespace, false, msg));
             }
+
+            long successCount = resourceResults.stream().filter(ResourceResult::success).count();
+            long failureCount = resourceResults.stream().filter(r -> !r.success()).count();
+
+            // If a Secret was applied, restart Authorino to pick up the new API key
+            boolean secretApplied = resourceResults.stream()
+                    .anyMatch(r -> r.success() && "Secret".equals(r.kind()));
+            if (secretApplied) {
+                restartAuthorino();
+            }
+
+            saveHistory(source, namespace, request.packageName(),
+                    resourceResults, exportedYamls, successCount, failureCount);
+
+            boolean anySuccess = fileResults.stream().anyMatch(ApplyResult::success);
+            boolean anyError   = fileResults.stream().anyMatch(r -> !r.success());
+            int status = anyError && !anySuccess ? 422 : 200;
+
+            return Response.status(status).entity(Map.of(
+                    "results", fileResults,
+                    "namespace", namespace,
+                    "successCount", successCount,
+                    "errorCount", failureCount
+            )).build();
+        } catch (ClusterApplyException cae) {
+            throw cae;
+        } catch (Exception e) {
+            LOG.warnf(e, "Apply operation failed: %s", e.getMessage());
+            throw new ClusterApplyException("Apply operation failed", e);
         }
-
-        long successCount = resourceResults.stream().filter(ResourceResult::success).count();
-        long failureCount = resourceResults.stream().filter(r -> !r.success()).count();
-
-        // If a Secret was applied, restart Authorino to pick up the new API key
-        boolean secretApplied = resourceResults.stream()
-                .anyMatch(r -> r.success() && "Secret".equals(r.kind()));
-        if (secretApplied) {
-            restartAuthorino();
-        }
-
-        saveHistory(source, namespace, request.packageName(),
-                resourceResults, exportedYamls, successCount, failureCount);
-
-        boolean anySuccess = fileResults.stream().anyMatch(ApplyResult::success);
-        boolean anyError   = fileResults.stream().anyMatch(r -> !r.success());
-        int status = anyError && !anySuccess ? 422 : 200;
-
-        return Response.status(status).entity(Map.of(
-                "results", fileResults,
-                "namespace", namespace,
-                "successCount", successCount,
-                "errorCount", failureCount
-        )).build();
     }
 
     private void saveHistory(String source, String namespace, String packageName,
