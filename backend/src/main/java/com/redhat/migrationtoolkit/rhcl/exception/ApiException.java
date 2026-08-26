@@ -23,7 +23,15 @@ public abstract class ApiException extends RuntimeException {
         this.details = details != null ? details : Collections.emptyMap();
     }
 
-    public String getCode() { return code; }
-    public int getStatus() { return status; }
-    public Map<String, Object> getDetails() { return details; }
+    public String getCode() {
+        return code;
+    }
+
+    public int getStatus() {
+        return status;
+    }
+
+    public Map<String, Object> getDetails() {
+        return details;
+    }
 }
