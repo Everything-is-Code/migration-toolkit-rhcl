@@ -39,7 +39,8 @@ public class KeycloakRoleCheckContributor implements AuthPolicyContributor {
         }
         String authType = ctx.service.authentication != null ? ctx.service.authentication.type : "none";
         if (!"jwt".equals(authType)) {
-            LOG.warnf("keycloak_role_check enabled but authentication is '%s' (not jwt) — skipping AuthPolicy role rule",
+            LOG.warnf(
+                    "keycloak_role_check enabled but authentication is '%s' (not jwt) — skipping role rule",
                     authType);
             return;
         }

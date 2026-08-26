@@ -1,0 +1,45 @@
+# Gitleaks configuration for migration-toolkit-rhcl CI and local scans.
+# Canonical copy for repository-root tooling; backend generate-report.sh may reference this path.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Project-specific allowlist paths"
+paths = [
+  '''target/.*''',
+  '''\.mvn/.*''',
+  '''node_modules/.*''',
+  '''frontend/build/.*''',
+  '''frontend/node_modules/.*''',
+  '''backend/target/.*''',
+  '''(^|.*/)src/test/.*''',
+  '''(^|.*/)test/.*''',
+  '''\.test\.(ts|tsx|js)$''',
+  '''helm/.*/README\.md$''',
+  '''testdata/.*''',
+]
+
+[[rules]]
+description = "Generic API Key"
+id = "generic-api-key"
+regex = '''(?i)(api[_-]?key|apikey)\s*[:=]\s*['"]?([A-Za-z0-9_\-]{20,})['"]?'''
+secretGroup = 2
+severity = "HIGH"
+tags = ["api", "generic"]
+
+[[rules]]
+description = "Generic Secret"
+id = "generic-secret"
+regex = '''(?i)(secret|password|passwd|token)\s*[:=]\s*['"]([^'"]{8,})['"]'''
+secretGroup = 2
+severity = "HIGH"
+tags = ["secret", "generic"]
+[rules.allowlist]
+regexes = [
+  '''(?i)(dummy|example|placeholder|changeme|xxx|test|\$\{|REPLACE_ME)''',
+  '''\$\{''',
+  '''(?i)^token\d+$''',
+  '''(?i)^tok$''',
+  '''(?i)^(my-)?token-[\w-]+$''',
+]

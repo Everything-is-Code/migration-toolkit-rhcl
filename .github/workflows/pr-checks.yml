@@ -2,59 +2,146 @@ name: PR checks
 
 on:
   pull_request:
+  push:
+    branches:
+      - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  backend:
-    name: Backend tests
+  backend-style:
+    name: Backend style (Checkstyle)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
+      - name: Checkstyle
+        run: mvn -B checkstyle:check
 
-      - name: Run backend tests
-        # Exclude PlaywrightE2EIT: needs browser download/system libs; not suited to PR gate time.
-        # ArchitectureTest + unit/IT suite still run under mvn test.
-        run: mvn -B -Dtest='!PlaywrightE2EIT' test
-
-  frontend:
-    name: Frontend typecheck and lint
+  backend-static:
+    name: Backend static (PMD)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: PMD
+        run: mvn -B pmd:check
+
+  backend-tests-cov:
+    name: Backend tests & coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: Verify tests and coverage report
+        # Exclude PlaywrightE2EIT: browser + cluster deps; not suited to PR gate time.
+        # Coverage regression gate: Codecov status checks (codecov.yml), not JaCoCo check.
+        run: mvn -B -Dtest='!PlaywrightE2EIT' verify
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-merged-report
+          path: backend/target/jacoco-merged-report/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v5
+        with:
+          # GitHub App + OIDC (org install). Falls back to CODECOV_TOKEN if OIDC unavailable.
+          use_oidc: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: backend/target/jacoco-merged-report/jacoco.xml
+          flags: backend
+          name: backend
+          fail_ci_if_error: true
+          verbose: true
+
+  frontend-quality:
+    name: Frontend quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
 
-      - name: Install dependencies
-        run: npm ci
+  quality-summary:
+    name: PR quality summary
+    needs:
+      - backend-style
+      - backend-static
+      - backend-tests-cov
+      - frontend-quality
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summarize gates
+        run: |
+          gate_ok() {
+            case "$1" in success|skipped) return 0 ;;
+            *) return 1 ;;
+            esac
+          }
 
-      - name: Typecheck
-        run: npm run typecheck
+          echo "### PR Quality Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Gate | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| backend-style | ${{ needs.backend-style.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| backend-static | ${{ needs.backend-static.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| backend-tests-cov | ${{ needs.backend-tests-cov.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| frontend-quality | ${{ needs.frontend-quality.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Lint
-        run: npm run lint
+          if ! gate_ok "${{ needs.backend-style.result }}" || \
+             ! gate_ok "${{ needs.backend-static.result }}" || \
+             ! gate_ok "${{ needs.backend-tests-cov.result }}" || \
+             ! gate_ok "${{ needs.frontend-quality.result }}"; then
+            echo "**Result:** FAILED — one or more PR quality checks did not pass." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
-      - name: Unit tests
-        run: npm test
+          echo "**Result:** PASSED — all PR quality checks passed." >> "$GITHUB_STEP_SUMMARY"

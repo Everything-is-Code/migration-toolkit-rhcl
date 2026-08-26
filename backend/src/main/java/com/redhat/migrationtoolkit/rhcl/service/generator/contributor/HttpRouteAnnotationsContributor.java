@@ -49,6 +49,7 @@ public class HttpRouteAnnotationsContributor implements HttpRouteContributor {
         if (service.policies == null) {
             return "";
         }
+        Object sendTimeout = null;
         for (Policy p : service.policies) {
             if (!"upstream_connection".equals(p.name)) {
                 continue;
@@ -60,13 +61,16 @@ public class HttpRouteAnnotationsContributor implements HttpRouteContributor {
                 continue;
             }
             Object sendRaw = p.configuration.get("send_timeout");
-            if (sendRaw == null) {
-                return "";
+            if (sendRaw != null) {
+                sendTimeout = sendRaw;
+                break;
             }
-            return """
-    3scale-migration/upstream-send-timeout: "%ss"
-""".formatted(sendRaw);
         }
-        return "";
+        if (sendTimeout == null) {
+            return "";
+        }
+        return """
+    3scale-migration/upstream-send-timeout: "%ss"
+""".formatted(sendTimeout);
     }
 }

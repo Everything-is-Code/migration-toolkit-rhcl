@@ -3,7 +3,6 @@ package com.redhat.migrationtoolkit.rhcl.service.conversion;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
-import com.redhat.migrationtoolkit.rhcl.service.conversion.HttpRouteSupport;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,15 +40,21 @@ public final class JwtClaimCheckSupport {
             Map<String, Object> rule = (Map<String, Object>) ruleMap;
             String combineOp = String.valueOf(rule.getOrDefault("combine_op", "and")).trim().toLowerCase(Locale.ROOT);
             if ("or".equals(combineOp)) {
-                gapNotes.add("combine_op=or is not supported — Authorino authorization rules are AND across patterns; OR rule skipped");
+                gapNotes.add(
+                        "combine_op=or is not supported — Authorino rules are AND; OR rule skipped");
                 continue;
             }
-            String resourceType = String.valueOf(rule.getOrDefault("resource_type", "plain")).trim().toLowerCase(Locale.ROOT);
+            String resourceType = String.valueOf(rule.getOrDefault("resource_type", "plain"))
+                    .trim().toLowerCase(Locale.ROOT);
             if ("liquid".equals(resourceType)) {
-                gapNotes.add("resource_type=liquid is not converted — path gating ignored; claim patterns may still apply globally");
+                gapNotes.add(
+                        "resource_type=liquid is not converted — path gating ignored; "
+                                + "claim patterns may still apply globally");
             }
             if (!isCatchAllResource(rule)) {
-                gapNotes.add("path/method-gated jwt_claim_check rules are applied globally in AuthPolicy (no Authorino when/path scoping in P1)");
+                gapNotes.add(
+                        "path/method-gated jwt_claim_check rules are applied globally in AuthPolicy "
+                                + "(no Authorino when/path scoping in P1)");
             }
             Object opsRaw = rule.get("operations");
             if (!(opsRaw instanceof List<?> ops)) {
@@ -60,8 +65,10 @@ public final class JwtClaimCheckSupport {
                     continue;
                 }
                 Map<String, Object> op = (Map<String, Object>) opMap;
-                String claimType = String.valueOf(op.getOrDefault("jwt_claim_type", "plain")).trim().toLowerCase(Locale.ROOT);
-                String valueType = String.valueOf(op.getOrDefault("value_type", "plain")).trim().toLowerCase(Locale.ROOT);
+                String claimType = String.valueOf(op.getOrDefault("jwt_claim_type", "plain"))
+                        .trim().toLowerCase(Locale.ROOT);
+                String valueType = String.valueOf(op.getOrDefault("value_type", "plain"))
+                        .trim().toLowerCase(Locale.ROOT);
                 if ("liquid".equals(claimType) || "liquid".equals(valueType)) {
                     gapNotes.add("liquid jwt_claim/value is not converted — operation skipped");
                     continue;
