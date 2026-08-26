@@ -12,6 +12,7 @@ import io.fabric8.kubernetes.api.model.GenericKubernetesResource;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.Resource;
 import io.fabric8.kubernetes.client.dsl.base.PatchContext;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import io.quarkus.test.InjectMock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.MockitoConfig;
@@ -21,10 +22,14 @@ import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 import java.util.HashMap;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.*;
@@ -586,6 +591,273 @@ class ApplyControllerTest {
                 .when().post("/api/apply")
                 .then()
                 .statusCode(anyOf(equalTo(200), equalTo(422)));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void applyFiles_allFail_returns422() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(new Namespace());
+
+        mockRbacFullSuccess();
+
+        var mockGkrOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGkrNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockGkrRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
+        when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
+        when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
+        when(mockGkrRes.patch(any(PatchContext.class), any(GenericKubernetesResource.class)))
+                .thenThrow(new RuntimeException("apply failed"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "gateway.yaml": "apiVersion: gateway.networking.k8s.io/v1\\nkind: Gateway\\nmetadata:\\n  name: gw",
+                            "route.yaml": "apiVersion: gateway.networking.k8s.io/v1\\nkind: HTTPRoute\\nmetadata:\\n  name: rt"
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(422)
+                .body("successCount", equalTo(0))
+                .body("errorCount", greaterThan(0));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void applyFiles_partialSuccess_returns200() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(new Namespace());
+
+        mockRbacFullSuccess();
+
+        GenericKubernetesResource live = new GenericKubernetesResource();
+        live.setMetadata(new ObjectMeta());
+        var mockGkrOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGkrNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockGkrRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
+        when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
+        when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
+        when(mockGkrRes.patch(any(PatchContext.class), any(GenericKubernetesResource.class)))
+                .thenReturn(live)
+                .thenThrow(new RuntimeException("second resource failed"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "gateway.yaml": "apiVersion: gateway.networking.k8s.io/v1\\nkind: Gateway\\nmetadata:\\n  name: gw",
+                            "route.yaml": "apiVersion: gateway.networking.k8s.io/v1\\nkind: HTTPRoute\\nmetadata:\\n  name: rt"
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(200)
+                .body("successCount", equalTo(1))
+                .body("errorCount", equalTo(1));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void applyFiles_secretApplied_authorinoNullAnnotations_createsAnnotationsMap() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(new Namespace());
+
+        mockRbacFullSuccess();
+
+        GenericKubernetesResource live = new GenericKubernetesResource();
+        live.setMetadata(new ObjectMeta());
+        var mockGkrOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGkrNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockGkrRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
+        when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
+        when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
+        when(mockGkrRes.patch(any(PatchContext.class), any(GenericKubernetesResource.class))).thenReturn(live);
+        when(mockGkrRes.get()).thenReturn(live);
+
+        Deployment deployment = buildMockDeployment();
+        deployment.getSpec().getTemplate().getMetadata().setAnnotations(null);
+
+        var mockApps = Mockito.mock(io.fabric8.kubernetes.client.dsl.AppsAPIGroupDSL.class);
+        var mockDeployments = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockDeployNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockDeployRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.RollableScalableResource.class);
+        when(kubernetesClient.apps()).thenReturn(mockApps);
+        when(mockApps.deployments()).thenReturn(mockDeployments);
+        when(mockDeployments.inNamespace("kuadrant-system")).thenReturn(mockDeployNsOp);
+        when(mockDeployNsOp.withName("authorino")).thenReturn(mockDeployRes);
+        when(mockDeployRes.get()).thenReturn(deployment);
+        when(mockDeployRes.edit(any(java.util.function.UnaryOperator.class))).thenAnswer(inv -> {
+            java.util.function.UnaryOperator<Deployment> fn = inv.getArgument(0);
+            return fn.apply(deployment);
+        });
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "secret.yaml": "apiVersion: v1\\nkind: Secret\\nmetadata:\\n  name: api-secret"
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(200)
+                .body("successCount", equalTo(1));
+
+        verify(mockDeployRes).edit(any(java.util.function.UnaryOperator.class));
+    }
+
+    @Test
+    void applyFiles_nonYamlFile_skippedFromApply() {
+        when(kubernetesClient.namespaces()).thenThrow(new RuntimeException("ns"));
+        when(kubernetesClient.rbac()).thenThrow(new RuntimeException("rbac"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "README.md": "# notes only"
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(200)
+                .body("successCount", equalTo(0))
+                .body("errorCount", equalTo(0));
+
+        verify(kubernetesClient, never()).genericKubernetesResources(any());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void applyFiles_ymlExtension_accepted() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(new Namespace());
+
+        mockRbacFullSuccess();
+
+        GenericKubernetesResource live = new GenericKubernetesResource();
+        live.setMetadata(new ObjectMeta());
+        var mockGkrOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGkrNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockGkrRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
+        when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
+        when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
+        when(mockGkrRes.patch(any(PatchContext.class), any(GenericKubernetesResource.class))).thenReturn(live);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "gateway.yml": "apiVersion: gateway.networking.k8s.io/v1\\nkind: Gateway\\nmetadata:\\n  name: gw"
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(200)
+                .body("successCount", equalTo(1));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void applyFiles_moveCredentialsOutOfApiKey_appliesAuthPolicy() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(new Namespace());
+
+        mockRbacFullSuccess();
+
+        GenericKubernetesResource live = new GenericKubernetesResource();
+        live.setMetadata(new ObjectMeta());
+        var mockGkrOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.MixedOperation.class);
+        var mockGkrNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockGkrRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.genericKubernetesResources(any())).thenReturn(mockGkrOp);
+        when(mockGkrOp.inNamespace(anyString())).thenReturn(mockGkrNsOp);
+        when(mockGkrNsOp.withName(anyString())).thenReturn(mockGkrRes);
+        ArgumentCaptor<GenericKubernetesResource> patchedCaptor =
+                ArgumentCaptor.forClass(GenericKubernetesResource.class);
+        when(mockGkrRes.patch(any(PatchContext.class), patchedCaptor.capture())).thenReturn(live);
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "policy.yaml": "apiVersion: kuadrant.io/v1\\nkind: AuthPolicy\\nmetadata:\\n  name: ap\\nspec:\\n  apiKey:\\n    labelSelectors:\\n      gateway: {}\\n    credentials:\\n      in:\\n        authorizationHeader:\\n          prefix: Secret"
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(200)
+                .body("successCount", equalTo(1));
+
+        String patchedYaml = Serialization.asYaml(patchedCaptor.getValue());
+        assertTrue(patchedYaml.contains("authorizationHeader"));
+        assertFalse(patchedYaml.contains("    credentials:"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void applyFiles_invalidYaml_entireFileMarkedFailed() {
+        var mockNsOp = Mockito.mock(io.fabric8.kubernetes.client.dsl.NonNamespaceOperation.class);
+        var mockNsRes = Mockito.mock(io.fabric8.kubernetes.client.dsl.Resource.class);
+        when(kubernetesClient.namespaces()).thenReturn(mockNsOp);
+        when(mockNsOp.withName(anyString())).thenReturn(mockNsRes);
+        when(mockNsRes.get()).thenReturn(new Namespace());
+
+        mockRbacFullSuccess();
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "namespace": "test-ns",
+                          "files": {
+                            "bad.yaml": "not: valid: yaml: [[["
+                          }
+                        }
+                        """)
+                .when().post("/api/apply")
+                .then()
+                .statusCode(422)
+                .body("errorCount", greaterThan(0));
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

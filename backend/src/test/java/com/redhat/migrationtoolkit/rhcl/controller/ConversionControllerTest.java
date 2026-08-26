@@ -24,6 +24,7 @@ import org.mockito.InOrder;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -707,6 +708,269 @@ class ConversionControllerTest {
         ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
         verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
         assertEquals(true, optsCaptor.getValue().corsNative);
+    }
+
+    @Test
+    void convert_includeMigratedFromLabelFalse_passedToOptions() {
+        ApiService svc = buildService("svc-1", "Label API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok",
+                          "includeMigratedFromLabel": false
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals(false, optsCaptor.getValue().includeMigratedFromLabel);
+    }
+
+    @Test
+    void convert_loggingTargetWorkload_passedToOptions() {
+        ApiService svc = buildService("svc-1", "Log API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok",
+                          "loggingTarget": "workload"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals("workload", optsCaptor.getValue().loggingTarget);
+    }
+
+    @Test
+    void convert_anonymousTargetGateway_passedToOptions() {
+        ApiService svc = buildService("svc-1", "Anon API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok",
+                          "anonymousTarget": "gateway"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals("gateway", optsCaptor.getValue().anonymousTarget);
+    }
+
+    @Test
+    void convert_nullSystemName_usesServiceNameForPackage() {
+        ApiService svc = buildService("svc-1", "My Cool API", "jwt");
+        svc.systemName = null;
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200)
+                .body("results[0].packageName", equalTo("my-cool-api"));
+    }
+
+    @Test
+    void convert_withSupportedPolicies_passesToCompatibilityCheck() {
+        ApiService svc = buildService("svc-1", "Policy API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 88, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok",
+                          "supportedPolicies": ["cors", "jwt"]
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        verify(compatibilityService).check(eq(svc), eq(Set.of("cors", "jwt")),
+                org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class));
+    }
+
+    @Test
+    void convert_retriesSupportedFromCapabilities() {
+        ClusterVersionsResponse versions = new ClusterVersionsResponse();
+        versions.capabilities = new ClusterCapabilities();
+        versions.capabilities.retriesSupported = true;
+        versions.capabilities.corsNative = false;
+        versions.source = "default";
+        versions.profile = "auto";
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(versions);
+
+        ApiService svc = buildService("svc-1", "Retry API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), org.mockito.ArgumentMatchers.nullable(ClusterCapabilities.class)))
+                .thenReturn(buildCompat("svc-1", 90, "HIGH"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals(true, optsCaptor.getValue().retriesSupported);
+    }
+
+    @Test
+    void convert_nullCapabilities_flagsFalse() {
+        ClusterVersionsResponse versions = new ClusterVersionsResponse();
+        versions.capabilities = null;
+        versions.source = "default";
+        versions.profile = "auto";
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(versions);
+
+        ApiService svc = buildService("svc-1", "No Caps API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), isNull()))
+                .thenReturn(buildCompat("svc-1", 70, "MEDIUM"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        ArgumentCaptor<ConversionOptions> optsCaptor = ArgumentCaptor.forClass(ConversionOptions.class);
+        verify(conversionService).convert(any(), anyString(), isNull(), optsCaptor.capture());
+        assertEquals(false, optsCaptor.getValue().corsNative);
+        assertEquals(false, optsCaptor.getValue().retriesSupported);
+    }
+
+    @Test
+    void convert_dnsPolicyWithWhitespaceHostname_returns400() {
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok",
+                          "includeDnsPolicy": true,
+                          "dnsHostname": "   "
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(400)
+                .body("error.message", containsString("dnsHostname"));
+    }
+
+    @Test
+    void convert_nullVersionsResponse_capabilitiesNull() {
+        when(clusterVersionService.resolveFromSettings(org.mockito.ArgumentMatchers.anyBoolean()))
+                .thenReturn(null);
+
+        ApiService svc = buildService("svc-1", "Null Versions API", "jwt");
+        when(exportService.exportService(anyString(), anyString(), anyString())).thenReturn(svc);
+        when(compatibilityService.check(any(), any(), isNull()))
+                .thenReturn(buildCompat("svc-1", 65, "LOW"));
+        when(conversionService.convert(any(), anyString(), isNull(), any(ConversionOptions.class)))
+                .thenReturn(Map.of("gateway.yaml", "kind: Gateway"));
+
+        given()
+                .contentType(ContentType.JSON)
+                .body("""
+                        {
+                          "serviceIds": ["svc-1"],
+                          "namespace": "ns",
+                          "threescaleUrl": "https://3scale.example.com",
+                          "accessToken": "tok"
+                        }
+                        """)
+                .when().post("/api/convert")
+                .then()
+                .statusCode(200);
+
+        verify(compatibilityService).check(eq(svc), eq(Set.of()), isNull());
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
