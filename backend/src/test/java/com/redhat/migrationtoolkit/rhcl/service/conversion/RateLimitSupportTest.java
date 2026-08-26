@@ -67,4 +67,16 @@ class RateLimitSupportTest {
         assertTrue(yaml.contains("window: 60s"));
         assertTrue(yaml.contains("name: demo-api-ratelimit"));
     }
+
+    @Test
+    void generateRateLimitPolicy_richFixture_emitsLeakyBucketAndConnectionLimiters() {
+        ApiService service = ConversionSupportTestFixtures.richService();
+        String yaml = support.generateRateLimitPolicy("demo-api", "demo-ns", service);
+
+        assertNotNull(yaml);
+        assertTrue(yaml.contains("edge_leaky_bucket"));
+        assertTrue(yaml.contains("leaky_bucket_limiters approximated"));
+        assertTrue(yaml.contains("edge_connection"));
+        assertTrue(yaml.contains("connection_limiters mapped"));
+    }
 }

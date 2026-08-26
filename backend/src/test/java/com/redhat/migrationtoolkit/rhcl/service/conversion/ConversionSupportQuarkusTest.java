@@ -52,6 +52,10 @@ class ConversionSupportQuarkusTest {
                 ConversionSupportTestFixtures.richService(), "demo-ns", null, options);
 
         assertTrue(files.containsKey("ratelimitpolicy.yaml"));
+        assertTrue(files.containsKey("tlspolicy.yaml"));
+        assertTrue(files.containsKey("dnspolicy.yaml"));
+        assertTrue(files.get("tlspolicy.yaml").contains("kind: TLSPolicy"));
+        assertTrue(files.get("dnspolicy.yaml").contains("api.example.com"));
         assertTrue(files.get("README.md").contains("External Backend (External HTTPS Service)"));
         assertTrue(files.get("README.md").contains("Multiple backends (path-first)"));
         assertTrue(files.get("policy.yaml").contains("jwt-claim-check"));
