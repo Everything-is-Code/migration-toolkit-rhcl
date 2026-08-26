@@ -1,4 +1,4 @@
-package com.redhat.migrationtoolkit.rhcl.controller;
+package com.redhat.migrationtoolkit.rhcl.util;
 
 import jakarta.enterprise.context.ApplicationScoped;
 

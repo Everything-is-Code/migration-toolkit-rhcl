@@ -16,6 +16,7 @@ import org.jboss.logging.Logger;
 
 import com.redhat.migrationtoolkit.rhcl.exception.NotFoundException;
 import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
+import com.redhat.migrationtoolkit.rhcl.util.GatewayDnsResolver;
 
 import java.util.List;
 import java.util.Map;
