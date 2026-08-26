@@ -174,7 +174,8 @@ spec:
                 }
                 String limitName = edgeLimiterName(limiter, "edge_conn", idx++);
                 limitBlocks.put(limitName, """
-      # WARNING: 3scale connection_limiters mapped to a per-second rate ceiling; concurrent-connection semantics are not preserved
+      # WARNING: 3scale connection_limiters mapped to per-second rate ceiling;
+      # concurrent-connection semantics are not preserved
       rates:
         - limit: %d
           window: 1s

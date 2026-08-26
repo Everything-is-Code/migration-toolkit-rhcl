@@ -117,7 +117,8 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
 
         boolean hasUrlRewriting = policyFinder.findEnabledExact(service, "url_rewriting") != null;
         String urlRewritingFile = hasUrlRewriting
-                ? "| envoyfilter-url-rewriting.yaml | Reproduces the 3scale URL Rewriting policy via Lua filter (PCRE→Lua pattern conversion is best-effort — verify before use) |\n"
+                ? "| envoyfilter-url-rewriting.yaml | Reproduces 3scale URL Rewriting via Lua "
+                        + "(PCRE→Lua is best-effort — verify before use) |\n"
                 : "";
 
         String tlsFile = includeTlsPolicy
@@ -130,7 +131,8 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
         Integer requestLimit = contentLimits != null
                 ? policyConfigSupport.resolveContentLimitBytes(contentLimits, true) : null;
         String contentLimitsFile = (requestLimit != null && requestLimit > 0)
-                ? "| envoyfilter-content-limits.yaml | Envoy buffer filter enforcing request body byte limit from 3scale content_limits |\n"
+                ? "| envoyfilter-content-limits.yaml | Envoy buffer filter for 3scale content_limits "
+                        + "request body byte limit |\n"
                 : "";
 
         String fileList = loggingFile

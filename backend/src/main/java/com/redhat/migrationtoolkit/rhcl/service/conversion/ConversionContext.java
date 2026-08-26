@@ -67,7 +67,8 @@ public final class ConversionContext {
         boolean overrideIgnored = backendUrl != null && !backendUrl.isBlank() && backendCount > 1;
         if (overrideIgnored) {
             LOG.warnf(
-                    "externalBackendUrl override ignored for service %s: %d backends present; keeping path-based multi-backend routing",
+                    "externalBackendUrl override ignored for service %s: %d backends; "
+                            + "keeping path-based multi-backend routing",
                     serviceKebabName, backendCount);
         }
 
