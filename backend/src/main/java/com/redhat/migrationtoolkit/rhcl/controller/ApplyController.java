@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.controller;
 
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
 import com.redhat.migrationtoolkit.rhcl.exception.ClusterApplyException;
+import com.redhat.migrationtoolkit.rhcl.exception.ErrorSanitizer;
 import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 import com.redhat.migrationtoolkit.rhcl.util.Messages;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -166,7 +167,7 @@ public class ApplyController {
                                 LOG.warnf("Export failed for %s/%s: %s", kind, name, ex2.getMessage());
                             }
                         } catch (Exception ex) {
-                            String itemMsg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+                            String itemMsg = ErrorSanitizer.sanitizeExceptionMessage(ex);
                             LOG.warnf("Failed to apply %s/%s: %s", kind, name, itemMsg);
                             errors.add(kind + "/" + name + ": " + itemMsg);
                             resourceResults.add(new ResourceResult(fileName, kind, name, ns, false, itemMsg));
@@ -183,7 +184,7 @@ public class ApplyController {
                         fileResults.add(new ApplyResult(fileName, false, String.join("; ", errors)));
                     }
                 } catch (Exception e) {
-                    String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    String msg = ErrorSanitizer.sanitizeExceptionMessage(e);
                     LOG.warnf("Failed to apply %s: %s", fileName, msg);
                     fileResults.add(new ApplyResult(fileName, false, msg));
                     resourceResults.add(new ResourceResult(fileName, "?", "?", namespace, false, msg));

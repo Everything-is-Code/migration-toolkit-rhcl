@@ -69,4 +69,35 @@ class ErrorSanitizerTest {
         String result = ErrorSanitizer.sanitize("Failed with sha256~abcdef123456 on cluster");
         assertFalse(result.contains("abcdef123456"), "sha256~ token must not leak");
     }
+
+    @Test
+    void sanitize_jsonQuotedAccessToken_redacted() {
+        String result = ErrorSanitizer.sanitize("Body: {\"access_token\":\"secret-json-token\"}");
+        assertFalse(result.contains("secret-json-token"), "JSON token must not leak");
+        assertEquals("Body: {\"access_token\":\"[REDACTED]\"}", result);
+    }
+
+    @Test
+    void sanitize_authorizationBasic_redacted() {
+        String result = ErrorSanitizer.sanitize("Authorization: Basic dXNlcjpwYXNz");
+        assertFalse(result.contains("dXNlcjpwYXNz"), "Basic auth must not leak");
+    }
+
+    @Test
+    void sanitize_authorizationToken_redacted() {
+        String result = ErrorSanitizer.sanitize("Authorization: Token abc123secret");
+        assertFalse(result.contains("abc123secret"), "Token auth must not leak");
+    }
+
+    @Test
+    void sanitize_xApiKeyHeader_redacted() {
+        String result = ErrorSanitizer.sanitize("X-Api-Key: my-secret-key");
+        assertFalse(result.contains("my-secret-key"), "X-Api-Key must not leak");
+    }
+
+    @Test
+    void sanitizeExceptionMessage_usesClassNameWhenMessageNull() {
+        String result = ErrorSanitizer.sanitizeExceptionMessage(new RuntimeException());
+        assertEquals("RuntimeException", result);
+    }
 }

@@ -4,7 +4,8 @@ import com.redhat.migrationtoolkit.rhcl.dto.ClusterCapabilities;
 import com.redhat.migrationtoolkit.rhcl.dto.ClusterVersionsResponse;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionRequest;
-import com.redhat.migrationtoolkit.rhcl.exception.ThreeScaleClientException;
+import com.redhat.migrationtoolkit.rhcl.exception.ApiException;
+import com.redhat.migrationtoolkit.rhcl.exception.ErrorSanitizer;
 import com.redhat.migrationtoolkit.rhcl.exception.ValidationException;
 import com.redhat.migrationtoolkit.rhcl.entity.ConversionHistoryEntity;
 import com.redhat.migrationtoolkit.rhcl.entity.ProjectEntity;
@@ -158,7 +159,7 @@ public class ConversionController {
                     results.add(Map.of(
                             "serviceId", serviceId,
                             "status", "FAILED",
-                            "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()
+                            "error", ErrorSanitizer.sanitizeExceptionMessage(e)
                     ));
                 }
             }
@@ -167,11 +168,11 @@ public class ConversionController {
                     "projectId", project.id,
                     "results", results
             )).build();
-        } catch (ThreeScaleClientException | ValidationException ex) {
+        } catch (ApiException ex) {
             throw ex;
         } catch (Exception e) {
-            LOG.warnf(e, "Global conversion failure: %s", e.getMessage());
-            throw new ThreeScaleClientException("Conversion failed: " + e.getMessage(), e);
+            LOG.warnf(e, "Global conversion failure: %s", ErrorSanitizer.sanitize(e.getMessage()));
+            throw e;
         }
     }
 
