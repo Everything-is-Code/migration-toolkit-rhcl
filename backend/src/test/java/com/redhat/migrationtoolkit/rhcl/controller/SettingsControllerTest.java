@@ -34,6 +34,16 @@ class SettingsControllerTest {
     }
 
     @Test
+    void put_nullBody_returns400Envelope() {
+        given()
+                .contentType(ContentType.JSON)
+                .when().put("/api/settings/some-key")
+                .then()
+                .statusCode(400)
+                .body("error.code", equalTo("VALIDATION_FAILED"));
+    }
+
+    @Test
     void put_missingValue_returns400Envelope() {
         given()
                 .contentType(ContentType.JSON)

@@ -33,6 +33,9 @@ public class SettingsController {
     @Path("/{key}")
     @Transactional
     public Response put(@PathParam("key") String key, Map<String, String> body) {
+        if (body == null) {
+            throw new ValidationException("value is required");
+        }
         String value = body.get("value");
         if (value == null) {
             throw new ValidationException("value is required");

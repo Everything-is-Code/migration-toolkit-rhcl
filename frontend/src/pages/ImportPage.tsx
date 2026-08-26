@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { apiErrorI18nMessage } from '../utils/apiError';
+import { apiErrorI18nMessage, apiErrorI18nMessageAsync } from '../utils/apiError';
 import { PageSection, PageSectionVariants, Title, Card, CardBody, Button, Alert, Stack, StackItem } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import { importApi, downloadApi, applyApi } from '../api/client';
@@ -96,7 +96,10 @@ const ImportPage: React.FC = () => {
       const a = document.createElement('a');
       a.href = url; a.download = `${packageName}.zip`; a.click(); URL.revokeObjectURL(url);
       setDownloaded(true);
-    } catch (e: unknown) { setError(t('import.errorDownload', { message: apiErrorI18nMessage(e, t, t('import.errorDownloadFallback')) })); }
+    } catch (e: unknown) {
+      const message = await apiErrorI18nMessageAsync(e, t, t('import.errorDownloadFallback'));
+      setError(t('import.errorDownload', { message }));
+    }
   };
 
   const handleApply = async () => {

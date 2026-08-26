@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiErrorI18nMessage } from '../utils/apiError';
+import { apiErrorI18nMessage, apiErrorI18nMessageAsync } from '../utils/apiError';
 import {
   PageSection,
   Card,
@@ -93,7 +93,8 @@ const HistoryPage: React.FC = () => {
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (e: unknown) {
-      showToast(t('history.downloadError2', { message: apiErrorI18nMessage(e, t, t('history.downloadErrorFallback')) }));
+      const message = await apiErrorI18nMessageAsync(e, t, t('history.downloadErrorFallback'));
+      showToast(t('history.downloadError2', { message }));
     } finally {
       setDownloading(prev => ({ ...prev, [entry.id]: false }));
     }
