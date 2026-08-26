@@ -90,7 +90,7 @@ public class IpCheckOpaContributor implements AuthPolicyContributor {
             package ipcheck
             import future.keywords
             cidrs := [%s]
-            # WARNING: peer connection IP under Authorino; for end-client IP allowlists prefer AuthorizationPolicy (remoteIpBlocks).
+            # WARNING: peer IP under Authorino; for client IP use AuthorizationPolicy remoteIpBlocks.
             client_ip := input.source.address
 %s""".formatted(cidrList, allowBody);
     }

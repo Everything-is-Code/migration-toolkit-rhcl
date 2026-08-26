@@ -3,7 +3,6 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
-import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionYamlSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.PolicyConfigSupport;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;

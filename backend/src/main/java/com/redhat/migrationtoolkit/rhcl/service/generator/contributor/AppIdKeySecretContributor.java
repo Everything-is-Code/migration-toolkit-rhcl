@@ -1,5 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
+import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import jakarta.annotation.Priority;
@@ -26,7 +27,7 @@ public class AppIdKeySecretContributor implements SecretContributor {
         builder.setSecretYaml(generateAppIdKeySecret(builder.name(), builder.namespace(), ctx.service));
     }
 
-    static String generateAppIdKeySecret(String name, String namespace, com.redhat.migrationtoolkit.rhcl.model.ApiService service) {
+    static String generateAppIdKeySecret(String name, String namespace, ApiService service) {
         List<Application> apps = service.applications != null ? service.applications : List.of();
         StringBuilder stringData = new StringBuilder();
         String warning;

@@ -19,38 +19,36 @@ public class TimeoutsContributor implements HttpRouteContributor {
         if (service.policies == null) {
             return "";
         }
-        for (Policy p : service.policies) {
-            if (!"upstream_connection".equals(p.name)) {
-                continue;
-            }
-            if (!Boolean.TRUE.equals(p.enabled)) {
-                continue;
-            }
-            if (p.configuration == null) {
-                continue;
-            }
+        return service.policies.stream()
+                .filter(p -> "upstream_connection".equals(p.name))
+                .filter(p -> Boolean.TRUE.equals(p.enabled))
+                .filter(p -> p.configuration != null)
+                .map(TimeoutsContributor::formatTimeoutsBlock)
+                .filter(block -> !block.isEmpty())
+                .findFirst()
+                .orElse("");
+    }
 
-            Object connectRaw = p.configuration.get("connect_timeout");
-            Object sendRaw = p.configuration.get("send_timeout");
-            Object readRaw = p.configuration.get("read_timeout");
+    private static String formatTimeoutsBlock(Policy policy) {
+        Object connectRaw = policy.configuration.get("connect_timeout");
+        Object sendRaw = policy.configuration.get("send_timeout");
+        Object readRaw = policy.configuration.get("read_timeout");
 
-            if (connectRaw == null && sendRaw == null && readRaw == null) {
-                return "";
-            }
-
-            StringBuilder block = new StringBuilder("      timeouts:\n");
-            if (readRaw != null) {
-                block.append(String.format("        request: \"%ss\"  # read_timeout%n", readRaw));
-            }
-            if (connectRaw != null) {
-                block.append(String.format("        backendRequest: \"%ss\"  # connect_timeout%n", connectRaw));
-            }
-            if (sendRaw != null) {
-                block.append(String.format(
-                        "        # send_timeout: %ss  (no direct Gateway API mapping — see annotations)%n", sendRaw));
-            }
-            return block.toString();
+        if (connectRaw == null && sendRaw == null && readRaw == null) {
+            return "";
         }
-        return "";
+
+        StringBuilder block = new StringBuilder("      timeouts:\n");
+        if (readRaw != null) {
+            block.append(String.format("        request: \"%ss\"  # read_timeout%n", readRaw));
+        }
+        if (connectRaw != null) {
+            block.append(String.format("        backendRequest: \"%ss\"  # connect_timeout%n", connectRaw));
+        }
+        if (sendRaw != null) {
+            block.append(String.format(
+                    "        # send_timeout: %ss  (no direct Gateway API mapping — see annotations)%n", sendRaw));
+        }
+        return block.toString();
     }
 }
