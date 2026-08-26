@@ -651,7 +651,7 @@ class ConversionControllerTest {
     }
 
     @Test
-    void convert_globalFailure_returns502WithEnvelope() {
+    void convert_globalFailure_returns500WithEnvelope() {
         when(clusterVersionService.resolveFromSettings(anyBoolean()))
                 .thenThrow(new RuntimeException("Infrastructure failure"));
 
@@ -667,9 +667,9 @@ class ConversionControllerTest {
                         """)
                 .when().post("/api/convert")
                 .then()
-                .statusCode(502)
-                .body("error.code", equalTo("THREESCALE_CLIENT_ERROR"))
-                .body("error.message", notNullValue());
+                .statusCode(500)
+                .body("error.code", equalTo("INTERNAL_ERROR"))
+                .body("error.message", equalTo("An internal error occurred"));
     }
 
     @Test

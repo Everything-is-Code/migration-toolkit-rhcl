@@ -17,7 +17,7 @@ public class ApiExceptionMapperResource {
 
     @ServerExceptionMapper
     public Response mapApiException(ApiException e) {
-        LOG.warnf(e, "%s: %s", e.getCode(), e.getMessage());
+        LOG.warnf(e, "%s: %s", e.getCode(), ErrorSanitizer.sanitize(e.getMessage()));
         return Response.status(e.getStatus())
             .type(MediaType.APPLICATION_JSON_TYPE)
             .entity(envelope(e.getCode(), ErrorSanitizer.sanitize(e.getMessage()), e.getDetails()))
@@ -42,7 +42,7 @@ public class ApiExceptionMapperResource {
         if (e instanceof WebApplicationException wae) {
             return wae.getResponse();
         }
-        LOG.errorf(e, "Unhandled exception: %s", e.getMessage());
+        LOG.errorf(e, "Unhandled exception: %s", ErrorSanitizer.sanitize(e.getMessage()));
         return Response.status(500)
             .type(MediaType.APPLICATION_JSON_TYPE)
             .entity(envelope("INTERNAL_ERROR", "An internal error occurred", Map.of()))
