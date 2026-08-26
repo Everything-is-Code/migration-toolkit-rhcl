@@ -14,8 +14,13 @@ jobs:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
+      # Always run the checker from the PR base branch (main), not the feature
+      # branch — epic/stacked PRs should not need to ship script updates.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base-ref
       - name: Require Closes/Fixes #N in PR body
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: bash scripts/ci/check_pr_traceability.sh
+        run: bash base-ref/scripts/ci/check_pr_traceability.sh
