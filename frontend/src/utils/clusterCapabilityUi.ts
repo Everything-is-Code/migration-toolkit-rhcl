@@ -82,9 +82,10 @@ export function clusterProfileI18nKey(profile: ClusterProfile): string {
  */
 export function corsConversionHintKey(
   hasCorsPolicy: boolean,
+  clusterReachable: boolean,
   corsNative: boolean,
 ): 'conversion.corsNativeHint' | 'conversion.corsFallbackHint' | null {
-  if (!hasCorsPolicy) {
+  if (!hasCorsPolicy || !clusterReachable) {
     return null;
   }
   return corsNative ? 'conversion.corsNativeHint' : 'conversion.corsFallbackHint';

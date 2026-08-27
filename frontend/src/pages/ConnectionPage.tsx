@@ -15,7 +15,7 @@ import ClusterVersionsPanel from '../components/connection/ClusterVersionsPanel'
 import shared from '../styles/shared.module.css';
 
 const ConnectionPage: React.FC = () => {
-  const { appState, setAppState } = useAppState();
+  const { setAppState } = useAppState();
   const { t } = useTranslation();
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionsError, setVersionsError] = useState<string | null>(null);

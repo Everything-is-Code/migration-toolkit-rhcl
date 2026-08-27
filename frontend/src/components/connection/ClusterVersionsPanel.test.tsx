@@ -109,6 +109,7 @@ describe('ClusterVersionsPanel', () => {
 
     expect(screen.getByText('OpenShift cluster not reachable')).toBeTruthy();
     expect(screen.getByText(/Connect to cluster to detect RHCL\/Kuadrant/)).toBeTruthy();
+    expect(screen.queryByText('CORS: ResponseHeaderModifier fallback')).toBeNull();
   });
 
   it('shows cluster connected label when cluster is reachable', () => {

@@ -190,10 +190,12 @@ const ClusterVersionsPanel: React.FC<Props> = ({
               {connectionState === 'reachable' && (
                 <Label color="green">{t('connection.clusterReachableLabel')}</Label>
               )}
-              {versions.capabilities?.corsNative ? (
-                <Label color="green">{t('connection.capCorsNative')}</Label>
-              ) : (
-                <Label color="orange">{t('connection.capCorsFallback')}</Label>
+              {versions.capabilities?.clusterReachable && (
+                versions.capabilities.corsNative ? (
+                  <Label color="green">{t('connection.capCorsNative')}</Label>
+                ) : (
+                  <Label color="orange">{t('connection.capCorsFallback')}</Label>
+                )
               )}
             </div>
             <DescriptionList style={{ marginTop: PF_SPACER_MD }} isHorizontal>

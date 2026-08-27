@@ -746,7 +746,13 @@ class CompatibilityServiceTest {
         caps.timeoutsSupported = true;
 
         CompatibilityResult result = service.check(svc, Set.of("Edge Limiting"), caps);
-        assertTrue(result.items.stream().anyMatch(i -> "clusterReachable".equals(i.capability)));
+        CompatibilityItem connection = result.items.stream()
+                .filter(i -> "clusterReachable".equals(i.capability))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Cluster connection", connection.name);
+        assertEquals("WARNING", connection.status);
+        assertTrue(connection.message.contains("oc login"));
         assertTrue(result.items.stream().noneMatch(i -> "kuadrantPresent".equals(i.capability)));
     }
 

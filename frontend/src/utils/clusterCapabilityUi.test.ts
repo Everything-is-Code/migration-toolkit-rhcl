@@ -72,10 +72,11 @@ describe('clusterCapabilityUi', () => {
   });
 
   it('picks CORS native vs fallback hint keys for Conversion page', () => {
-    expect(corsConversionHintKey(false, false)).toBeNull();
-    expect(corsConversionHintKey(false, true)).toBeNull();
-    expect(corsConversionHintKey(true, false)).toBe('conversion.corsFallbackHint');
-    expect(corsConversionHintKey(true, true)).toBe('conversion.corsNativeHint');
+    expect(corsConversionHintKey(false, false, false)).toBeNull();
+    expect(corsConversionHintKey(false, true, true)).toBeNull();
+    expect(corsConversionHintKey(true, false, false)).toBeNull();
+    expect(corsConversionHintKey(true, true, false)).toBe('conversion.corsFallbackHint');
+    expect(corsConversionHintKey(true, true, true)).toBe('conversion.corsNativeHint');
   });
 
   it('maps every ClusterProfile to a connection.profile.* i18n key (I10)', () => {
