@@ -46,6 +46,13 @@ Run: `cd backend && mvn test` (unit) / `mvn verify` (+ITs, JaCoCo, Checkstyle, P
 
 Run: `cd frontend && npm test` / `npm run typecheck` / `npm run lint`.
 
+### Playwright E2E (`frontend/e2e/`)
+
+- **When:** SDD `/verify` runs `npm run test:e2e` if the change touches `frontend/`.
+- **What:** Live 3scale wizard + YAML tab assertions (`yaml-expectations.ts`).
+- **Lab env:** `THREESCALE_ADMIN_URL`, `THREESCALE_ACCESS_TOKEN`, `E2E_SKIP_WEBSERVER=true`.
+- Run: `npm run test:e2e` / `npm run test:e2e:ui` / `bash scripts/run-e2e-if-configured.sh`.
+
 ## Suggested improvements (not yet implemented)
 
 - Expand RTL coverage beyond utils + smoke tests — [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
