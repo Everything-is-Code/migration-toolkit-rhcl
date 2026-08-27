@@ -768,6 +768,27 @@ class ConversionServiceTest {
                 "workload loggingTarget must not use GATEWAY-only selector");
     }
 
+    @Test
+    void convert_stringOverload_loggingAndAnonymousTargets() {
+        ApiService svc = basicService("Overload API", "overload-api");
+        svc.authentication = auth("none");
+        Map<String, String> files = service.convert(svc, "ns", null, "gateway", "workload");
+        assertNotNull(files.get("gateway.yaml"));
+        assertNotNull(files.get("policy.yaml"));
+    }
+
+    @Test
+    void convert_includeMigratedFromLabel_false_stripsLabelFromYaml() {
+        ApiService svc = basicService("Label API", "label-api");
+        svc.authentication = auth("jwt");
+
+        Map<String, String> withLabel = service.convert(svc, "ns", null, null, null, true);
+        Map<String, String> stripped = service.convert(svc, "ns", null, null, null, false);
+
+        assertTrue(withLabel.get("gateway.yaml").contains("migrated-from: 3scale"));
+        assertFalse(stripped.get("gateway.yaml").contains("migrated-from: 3scale"));
+    }
+
     // ── ip_check → AuthorizationPolicy / AuthPolicy OPA (PR2) ─────────────────
 
     @Test
