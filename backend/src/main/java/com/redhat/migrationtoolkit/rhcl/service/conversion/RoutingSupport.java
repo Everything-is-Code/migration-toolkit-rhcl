@@ -190,7 +190,8 @@ public final class RoutingSupport {
                 if ((op.kind() == MatchKind.HEADER || op.kind() == MatchKind.QUERY_ARG
                         || op.kind() == MatchKind.PATH)
                         && !isEqualityOp(op.op())) {
-                    bullets.add("unsupported routing op `" + op.op() + "` on " + op.kind().name().toLowerCase(Locale.ROOT)
+                    String kind = op.kind().name().toLowerCase(Locale.ROOT);
+                    bullets.add("unsupported routing op `" + op.op() + "` on " + kind
                             + " — match skipped");
                 }
             }
