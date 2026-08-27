@@ -71,3 +71,13 @@ describe('loadSupportedPolicies module cache', () => {
     expect(after).toContain('CORS Request Handling');
   });
 });
+
+describe('DEFAULT_SUPPORTED_POLICIES', () => {
+  it('includes Maintenance Mode for compatibility SUPPORTED scoring', async () => {
+    const { DEFAULT_SUPPORTED_POLICIES, withDefaultSupportedPolicies } = await import(
+      './supportedPolicies'
+    );
+    expect(DEFAULT_SUPPORTED_POLICIES).toContain('Maintenance Mode');
+    expect(withDefaultSupportedPolicies([])).toContain('Maintenance Mode');
+  });
+});

@@ -121,6 +121,14 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
                         + "(PCRE→Lua is best-effort — verify before use) |\n"
                 : "";
 
+        Policy maintenanceMode = policyFinder.findEnabledExact(service, "maintenance_mode");
+        boolean hasMaintenance = maintenanceMode != null
+                && isMaintenanceConfigEnabled(maintenanceMode);
+        String maintenanceFile = hasMaintenance
+                ? "| envoyfilter-maintenance.yaml | Local reply for 3scale Maintenance Mode "
+                        + "(Lua respond overlays the gateway) |\n"
+                : "";
+
         String tlsFile = includeTlsPolicy
                 ? "| tlspolicy.yaml | Kuadrant TLSPolicy (cert-manager issuerRef on Gateway) |\n"
                 : "";
@@ -137,6 +145,7 @@ If a mapping-rule path matches **no** mount, conversion falls back to **all** ba
 
         String fileList = loggingFile
                 + urlRewritingFile
+                + maintenanceFile
                 + tlsFile
                 + dnsFile
                 + contentLimitsFile
@@ -178,6 +187,7 @@ Confirm `secret.yaml` (`%s-oauth2-introspection`) clientID/clientSecret before a
         notes.add(buildRateLimitApproximationNotes(service, policyFinder, rateLimitSupport));
         notes.add(JwtClaimCheckSupport.buildReadmeNotes(service, policyFinder));
         notes.add(buildContentLimitsReadmeNotes(service, policyFinder, policyConfigSupport));
+        notes.add(buildMaintenanceModeReadmeNotes(hasMaintenance));
         String dynamicNotes = String.join("", notes.all());
 
         return """
@@ -310,5 +320,31 @@ annotation `3scale-migration/response-content-limit` but is **not** hard-enforce
 Gateway API / Istio has no portable response-body size filter in this converter — verify manually
 if response size must be capped.
 """.formatted(responseBytes);
+    }
+
+    private static boolean isMaintenanceConfigEnabled(Policy policy) {
+        if (policy == null || policy.configuration == null) {
+            return false;
+        }
+        Object raw = policy.configuration.get("enabled");
+        if (raw == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(raw)
+                || "true".equalsIgnoreCase(String.valueOf(raw).trim());
+    }
+
+    private static String buildMaintenanceModeReadmeNotes(boolean hasMaintenance) {
+        if (!hasMaintenance) {
+            return "";
+        }
+        return """
+
+## Maintenance Mode
+
+`envoyfilter-maintenance.yaml` uses an Istio EnvoyFilter Lua `respond` local reply that overlays the
+gateway and takes precedence over HTTPRoute backends for request termination while maintenance is
+active. A portable Gateway API DirectResponse path is deferred / future-only.
+""";
     }
 }

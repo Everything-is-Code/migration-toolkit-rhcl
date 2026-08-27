@@ -53,6 +53,7 @@ export const DEFAULT_SUPPORTED_POLICIES = [
   'Response/Request Content Limits',
   'Retry',
   'RH-SSO/Keycloak Role Check',
+  'Maintenance Mode',
 ];
 
 export const SETTINGS_KEY = 'supportedPolicies';

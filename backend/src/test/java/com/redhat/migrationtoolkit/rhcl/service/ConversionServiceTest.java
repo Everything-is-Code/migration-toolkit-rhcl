@@ -1499,6 +1499,50 @@ class ConversionServiceTest {
                 "authorizationPolicy mode must not put OPA ip-check in AuthPolicy");
     }
 
+    // ── maintenance_mode → EnvoyFilter local reply (#152) ────────────────────
+
+    @Test
+    void convert_maintenanceMode_enabled_emitsEnvoyFilterWithConfiguredValues() {
+        ApiService svc = basicService("Maint API", "maint-api");
+        svc.policies = List.of(maintenanceModePolicy(Map.of(
+                "enabled", true,
+                "status", 503,
+                "message", "Under maintenance",
+                "message_content_type", "text/plain")));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.containsKey("envoyfilter-maintenance.yaml"),
+                "Must emit envoyfilter-maintenance.yaml when config enabled");
+        String ef = files.get("envoyfilter-maintenance.yaml");
+        assertTrue(ef.contains("503") && ef.contains("Under maintenance") && ef.contains("text/plain"),
+                "EnvoyFilter must encode status/body/content-type");
+        assertTrue(ef.contains("3scale-migration/source: maintenance_mode"));
+        assertTrue(files.containsKey("httproute.yaml"),
+                "HTTPRoute must still be present when maintenance is active");
+    }
+
+    @Test
+    void convert_maintenanceMode_disabled_omitsEnvoyFilter() {
+        ApiService svc = basicService("Maint API", "maint-api");
+        svc.policies = List.of(maintenanceModePolicy(Map.of(
+                "enabled", false,
+                "status", 503,
+                "message", "Under maintenance")));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertFalse(files.containsKey("envoyfilter-maintenance.yaml"),
+                "Must not emit maintenance EnvoyFilter when config enabled=false");
+        assertTrue(files.containsKey("httproute.yaml"));
+    }
+
+    @Test
+    void convert_maintenanceMode_absent_omitsEnvoyFilter() {
+        ApiService svc = basicService("Plain API", "plain-api");
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertFalse(files.containsKey("envoyfilter-maintenance.yaml"));
+    }
+
     // ── content_limits → EnvoyFilter request + response honesty (#22 PR-A) ────
 
     @Test
@@ -2193,6 +2237,14 @@ class ConversionServiceTest {
     private Policy contentLimitsPolicy(Map<String, Object> configuration) {
         Policy p = new Policy();
         p.name = "content_limits";
+        p.enabled = true;
+        p.configuration = new HashMap<>(configuration);
+        return p;
+    }
+
+    private Policy maintenanceModePolicy(Map<String, Object> configuration) {
+        Policy p = new Policy();
+        p.name = "maintenance_mode";
         p.enabled = true;
         p.configuration = new HashMap<>(configuration);
         return p;

@@ -353,6 +353,36 @@ class CompatibilityServiceTest {
     }
 
     /**
+     * After maintenance_mode converter lands (#152), DEFAULT_SUPPORTED includes Maintenance Mode.
+     */
+    @Test
+    void check_maintenanceMode_defaultSupported() {
+        Set<String> defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection",
+                "JWT Claim Check",
+                "Response/Request Content Limits",
+                "Retry",
+                "Maintenance Mode");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("maintenance_mode"));
+        CompatibilityResult result = service.check(svc, defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Maintenance Mode".equals(i.name)));
+    }
+
+    /**
      * After keycloak converter lands (PR-C), DEFAULT_SUPPORTED includes RH-SSO/Keycloak Role Check
      * and KUADRANT_BOUND includes keycloak_role_check.
      */
