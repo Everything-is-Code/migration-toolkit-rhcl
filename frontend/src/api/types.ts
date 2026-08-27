@@ -80,6 +80,8 @@ export interface CompatibilityItem {
 
 /** Capability flags from GET /api/cluster/versions. */
 export interface ClusterCapabilities {
+  /** True when the backend probed OpenShift (detected or profile); false on soft-fail default. */
+  clusterReachable: boolean;
   corsNative: boolean;
   kuadrantPresent: boolean;
   ossmPresent: boolean;

@@ -416,6 +416,7 @@ class CompatibilityServiceTest {
     @Test
     void check_keycloakRoleCheck_withoutKuadrant_warnsKuadrantBound() {
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = true;
         caps.kuadrantPresent = false;
         caps.ossmPresent = true;
@@ -665,6 +666,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("cors"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = false;
         caps.timeoutsSupported = true;
 
@@ -691,6 +693,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("cors"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = false;
         caps.timeoutsSupported = true;
 
@@ -715,6 +718,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("cors"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = true;
         caps.timeoutsSupported = true;
 
@@ -732,6 +736,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("edge_limiting"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.kuadrantPresent = false;
         caps.timeoutsSupported = true;
 
@@ -753,6 +758,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("edge_limiting"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.kuadrantPresent = true;
         caps.timeoutsSupported = true;
 
@@ -761,10 +767,63 @@ class CompatibilityServiceTest {
     }
 
     @Test
+    void check_unreachableCluster_emitsClusterConnectionNotKuadrant() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = false;
+        caps.kuadrantPresent = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("Edge Limiting"), caps);
+        CompatibilityItem connection = result.items.stream()
+                .filter(i -> "clusterReachable".equals(i.capability))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Cluster connection", connection.name);
+        assertEquals("WARNING", connection.status);
+        assertTrue(connection.message.contains("oc login"));
+        assertEquals("OpenShift cluster reachable from backend", connection.requiredVersion);
+        assertTrue(result.items.stream().noneMatch(i -> "kuadrantPresent".equals(i.capability)));
+    }
+
+    @Test
+    void check_unreachableCluster_skipsOssmMismatchWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = false;
+        caps.ossmPresent = true;
+        caps.ossmMatchesOcp = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES, caps);
+        assertTrue(result.items.stream().anyMatch(i -> "clusterReachable".equals(i.capability)));
+        assertTrue(result.items.stream().noneMatch(i -> "ossmMatchesOcp".equals(i.capability)));
+    }
+
+    @Test
+    void check_unreachableCluster_skipsCorsNativeCapabilityWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = false;
+        caps.corsNative = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("CORS Request Handling"), caps);
+        assertTrue(result.items.stream().anyMatch(i -> "clusterReachable".equals(i.capability)));
+        assertTrue(result.items.stream().noneMatch(i -> "corsNative".equals(i.capability)));
+    }
+
+    @Test
     void check_ossmMismatch_warns() {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.ossmPresent = true;
         caps.ossmMatchesOcp = false;
         caps.timeoutsSupported = true;
@@ -788,6 +847,7 @@ class CompatibilityServiceTest {
         assertEquals(legacy.score, withNull.score);
         assertTrue(withNull.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("CORS")));
+        assertTrue(withNull.items.stream().noneMatch(i -> "clusterReachable".equals(i.capability)));
     }
 
     @Test

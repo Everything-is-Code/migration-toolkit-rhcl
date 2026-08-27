@@ -4,6 +4,11 @@ package com.redhat.migrationtoolkit.rhcl.dto;
  * Capability flags derived from resolved OCP / Gateway API / Kuadrant / OSSM versions.
  */
 public class ClusterCapabilities {
+    /**
+     * True when the backend successfully probed the OpenShift cluster ({@code source: detected}
+     * or manual profile). False on soft-fail defaults after auth/timeout/missing client.
+     */
+    public boolean clusterReachable;
     /** True when Gateway API CORS filter (type: CORS) is available (GAPI ≥ 1.3 or OCP ≥ 4.21). */
     public boolean corsNative;
     /** True when a Kuadrant/RHCL operator CSV was found (or profile assumes present). */
