@@ -34,6 +34,9 @@ frontend/.vite/
 .env
 .env.local
 *.env
+frontend/e2e/.env.local
+frontend/playwright-report/
+frontend/test-results/
 
 # Logs
 *.log
