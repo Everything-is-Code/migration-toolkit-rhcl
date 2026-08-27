@@ -124,6 +124,61 @@ class UpstreamSupportTest {
     }
 
     @Test
+    void allRulesConvertible_falseWhenGlobalUrlBlank() {
+        Policy policy = upstreamPolicy(Map.of("url", "  ", "rules", List.of()));
+        assertFalse(UpstreamSupport.allRulesConvertible(policy));
+    }
+
+    @Test
+    void allRulesConvertible_falseWhenRulesEmptyAndNoTopLevelUrl() {
+        Policy policy = upstreamPolicy(Map.of("rules", List.of()));
+        assertFalse(UpstreamSupport.allRulesConvertible(policy));
+    }
+
+    @Test
+    void parseRules_skipsNonMapEntriesAndBlankUrlRules() {
+        Policy policy = upstreamPolicy(Map.of(
+                "rules", List.of(
+                        "not-a-map",
+                        Map.of("regex", "^/v1"),
+                        Map.of("regex", "^/ok", "url", "https://ok.example.com"))));
+        List<UpstreamSupport.UpstreamRule> rules = UpstreamSupport.parseRules(policy);
+        assertEquals(2, rules.size());
+        assertNull(rules.get(0).match());
+        assertNotNull(rules.get(1).match());
+    }
+
+    @Test
+    void approximateRegex_blankRegex_returnsRootPathPrefix() {
+        UpstreamSupport.MatchApproximation match = UpstreamSupport.approximateRegex("   ");
+        assertEquals(UpstreamSupport.MatchType.PATH_PREFIX, match.type());
+        assertEquals("/", match.value());
+    }
+
+    @Test
+    void isCatchAllRegex_acceptsAllowlistedPatterns() {
+        assertTrue(UpstreamSupport.isCatchAllRegex(null));
+        assertTrue(UpstreamSupport.isCatchAllRegex("  "));
+        assertTrue(UpstreamSupport.isCatchAllRegex("^/.*$"));
+        assertTrue(UpstreamSupport.isCatchAllRegex("/"));
+        assertTrue(UpstreamSupport.isCatchAllRegex("^/"));
+        assertFalse(UpstreamSupport.isCatchAllRegex("^/v1"));
+    }
+
+    @Test
+    void buildReadmeNotes_emptyWhenGlobalUrlBlankAndNoGapBullets() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(upstreamPolicy(Map.of("url", " ", "rules", List.of())));
+
+        assertEquals("", UpstreamSupport.buildReadmeNotes(service, new PolicyFinder()));
+    }
+
+    @Test
+    void resolveOverrideBackend_nullForBlankUrl() {
+        assertNull(UpstreamSupport.resolveOverrideBackend("demo-api", "   "));
+    }
+
+    @Test
     void buildReadmeNotes_skippedRegexAndExternalSeAndScheme() {
         ApiService service = ContributorTestFixtures.apiService();
         // product backend is http://api.example.com:8080 (http)
