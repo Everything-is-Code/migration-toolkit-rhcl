@@ -72,10 +72,10 @@ public class UpstreamContributor implements HttpRouteContributor {
     - matches:
         - path:
             type: %s
-            value: "%s"
+            value: %s
 %s%s%s      backendRefs:
-%s""".formatted(matchType, pathValue, filtersBlock, timeoutsBlock, retryBlock,
-                    HttpRouteSupport.formatBackendRefs(selected)));
+%s""".formatted(matchType, HttpRouteSupport.yamlDoubleQuoted(pathValue), filtersBlock,
+                    timeoutsBlock, retryBlock, HttpRouteSupport.formatBackendRefs(selected)));
         }
     }
 }

@@ -75,6 +75,25 @@ class UpstreamContributorTest {
         assertFalse(yaml.contains("skip.example.com"));
     }
 
+    @Test
+    void contribute_pathScoped_regexWithQuotes_usesYamlDoubleQuoted() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/fallback"));
+        // Complex regex (not a simple PathPrefix) containing a double quote
+        service.policies.add(upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/api/\"quoted\".*", "url", "https://quoted.example.com")))));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new UpstreamContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("type: RegularExpression"));
+        assertTrue(yaml.contains("value: \"^/api/\\\"quoted\\\".*\""));
+        assertTrue(yaml.contains("quoted.example.com"));
+    }
+
     private static Policy upstreamPolicy(Map<String, Object> configuration) {
         Policy policy = new Policy();
         policy.name = "upstream";

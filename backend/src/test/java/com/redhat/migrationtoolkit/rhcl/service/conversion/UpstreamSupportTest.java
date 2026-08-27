@@ -66,6 +66,36 @@ class UpstreamSupportTest {
     }
 
     @Test
+    void approximateRegex_nonApproximablePossessive() {
+        assertNull(UpstreamSupport.approximateRegex("^/api[*+?]+"));
+        assertNull(UpstreamSupport.approximateRegex("^/files/.++"));
+    }
+
+    @Test
+    void globalUrl_fromTopLevelWhenRulesEmpty() {
+        Policy policy = upstreamPolicy(Map.of(
+                "url", "https://override.example.com",
+                "rules", List.of()));
+        assertEquals("https://override.example.com", UpstreamSupport.globalUrl(policy));
+    }
+
+    @Test
+    void globalUrl_fromSingleCatchAllRule() {
+        Policy policy = upstreamPolicy(Map.of(
+                "rules", List.of(Map.of("regex", ".*", "url", "https://catch.example.com"))));
+        assertEquals("https://catch.example.com", UpstreamSupport.globalUrl(policy));
+    }
+
+    @Test
+    void globalUrl_nullForPathScopedRules() {
+        Policy policy = upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/v1", "url", "https://v1.example.com"),
+                        Map.of("regex", "^/v2", "url", "https://v2.example.com"))));
+        assertNull(UpstreamSupport.globalUrl(policy));
+    }
+
+    @Test
     void allRulesConvertible_trueWhenAllApprox() {
         Policy policy = upstreamPolicy(Map.of(
                 "rules", List.of(
@@ -109,6 +139,22 @@ class UpstreamSupportTest {
         assertTrue(notes.contains("ServiceEntry"));
         assertTrue(notes.contains("scheme") || notes.contains("HTTP") || notes.contains("HTTPS"));
         assertFalse(notes.contains("serviceentry.yaml"));
+    }
+
+    @Test
+    void buildReadmeNotes_happyPath_whenAllConvertible() {
+        ApiService service = ContributorTestFixtures.apiService();
+        // Internal (no-dot host) + matching http scheme → no gap bullets
+        service.policies.add(upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/v1", "url", "http://upstream-svc:8080"),
+                        Map.of("regex", "^/v2", "url", "http://other-svc:8080")))));
+
+        String notes = UpstreamSupport.buildReadmeNotes(service, new PolicyFinder());
+
+        assertTrue(notes.contains("## Upstream"));
+        assertFalse(notes.contains("## WARNING"));
+        assertTrue(notes.contains("httproute.yaml"));
     }
 
     private static Policy upstreamPolicy(Map<String, Object> configuration) {
