@@ -538,6 +538,14 @@ class ClusterVersionServiceTest {
                 "4.17.0", "1.1.0", null, null, null);
         assertFalse(preRetry.retriesSupported,
                 "GAPI < 1.2 and OCP < 4.19 must not claim retriesSupported");
+
+        assertFalse(low.clusterReachable, "5-arg overload defaults clusterReachable to false");
+        ClusterCapabilities reachable = ClusterVersionService.capabilitiesFrom(
+                "4.21.0", "1.3.0", "1.4.0", "3.0.1", "3.0", true);
+        assertTrue(reachable.clusterReachable);
+        ClusterCapabilities unreachable = ClusterVersionService.capabilitiesFrom(
+                "4.19.0", "1.2.1", null, null, "2.6", false);
+        assertFalse(unreachable.clusterReachable);
     }
 
     @Test
