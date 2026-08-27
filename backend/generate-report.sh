@@ -2,21 +2,21 @@
 # ---------------------------------------------------------------------------
 # Migration Toolkit Backend - Quality Gate & Report Generator
 #
-# 実行内容:
-#   1. Maven Unit Test (Surefire)
+# Steps:
+#   1. Maven unit tests (Surefire) + integration tests (Failsafe)
 #   2. Checkstyle
 #   3. PMD
-#   4. JaCoCo Coverage
+#   4. JaCoCo coverage
 #   5. Semgrep (SAST)
-#   6. Gitleaks (Secret Detection)
-#   7. Trivy (SCA / 脆弱性スキャン)
-#   8. Wapiti (DAST) ※ オプション: --with-wapiti 指定時のみ
-#   9. HTML Report 生成
+#   6. Gitleaks (secret detection)
+#   7. Trivy (SCA / vulnerability scan)
+#   8. Wapiti (DAST) — optional: pass --with-wapiti
+#   9. HTML report generation
 #
-# 使用方法:
+# Usage:
 #   ./generate-report.sh [--with-wapiti] [--wapiti-url <URL>]
 #
-# 必要ツール:
+# Required tools:
 #   mvn, python3, semgrep, gitleaks, trivy, wapiti3 (optional)
 # ---------------------------------------------------------------------------
 
@@ -45,9 +45,9 @@ ok()   { echo "✔ $*"; }
 warn() { echo "⚠ $*"; }
 
 # ---------------------------------------------------------------------------
-# 1. Maven Unit Test + Checkstyle + PMD + JaCoCo
+# 1. Maven unit tests + Checkstyle + PMD + JaCoCo
 # ---------------------------------------------------------------------------
-log "Maven build / Unit Test / Checkstyle / PMD / JaCoCo..."
+log "Maven build / unit tests / Checkstyle / PMD / JaCoCo..."
 cd "$SCRIPT_DIR"
 "$MVN" verify \
   checkstyle:checkstyle \
@@ -78,7 +78,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Gitleaks (Secret Detection)
+# 3. Gitleaks (secret detection)
 # ---------------------------------------------------------------------------
 log "Gitleaks secret detection..."
 if command -v gitleaks &>/dev/null; then
@@ -96,7 +96,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Trivy (SCA: JAR / 依存関係の脆弱性スキャン)
+# 4. Trivy (SCA: dependency vulnerability scan)
 # ---------------------------------------------------------------------------
 log "Trivy SCA scan..."
 if command -v trivy &>/dev/null; then
@@ -114,7 +114,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Wapiti (DAST) ※ オプション
+# 5. Wapiti (DAST) — optional
 # ---------------------------------------------------------------------------
 if $WITH_WAPITI; then
   log "Wapiti DAST scan against $WAPITI_URL ..."
@@ -138,7 +138,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. HTML Report 生成
+# 6. HTML report generation
 # ---------------------------------------------------------------------------
 log "Generating HTML report..."
 python3 "$SCRIPT_DIR/src/test/scripts/generate-report.py" \
@@ -148,7 +148,7 @@ python3 "$SCRIPT_DIR/src/test/scripts/generate-report.py" \
 ok "Report generated → $TARGET/test-report/index.html"
 
 # ---------------------------------------------------------------------------
-# 7. 結果サマリー
+# 7. Summary
 # ---------------------------------------------------------------------------
 echo ""
 echo "========================================="

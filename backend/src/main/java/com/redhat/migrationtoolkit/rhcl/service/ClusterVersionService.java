@@ -262,7 +262,7 @@ public class ClusterVersionService {
             r.kuadrant = null;
             r.ossmExpectedForOcp = expectedOssmForOcp(r.ocp);
             r.ossm = r.ossmExpectedForOcp;
-            r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, "1.0.0", r.ossm, r.ossmExpectedForOcp);
+            r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, "1.0.0", r.ossm, r.ossmExpectedForOcp, true);
             // Profile 4.21 assumes Kuadrant available for matrix purposes when not detecting
             r.capabilities.kuadrantPresent = true;
             r.capabilities.ossmPresent = true;
@@ -273,7 +273,7 @@ public class ClusterVersionService {
             r.kuadrant = null;
             r.ossmExpectedForOcp = expectedOssmForOcp(r.ocp);
             r.ossm = r.ossmExpectedForOcp;
-            r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, null, r.ossm, r.ossmExpectedForOcp);
+            r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, null, r.ossm, r.ossmExpectedForOcp, true);
             r.capabilities.ossmPresent = true;
             r.capabilities.ossmMatchesOcp = true;
         }
@@ -388,7 +388,7 @@ public class ClusterVersionService {
         r.kuadrant = kuadrant;
         r.ossm = ossm;
         r.ossmExpectedForOcp = expected;
-        r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, r.kuadrant, r.ossm, r.ossmExpectedForOcp);
+        r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, r.kuadrant, r.ossm, r.ossmExpectedForOcp, true);
         r.errors = errors;
         return r;
     }
@@ -406,7 +406,7 @@ public class ClusterVersionService {
         r.ossmExpectedForOcp = expectedOssmForOcp(r.ocp);
         // Soft-fail: keep expected for UI guidance, but do not claim OSSM is present.
         r.ossm = null;
-        r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, null, null, r.ossmExpectedForOcp);
+        r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, null, null, r.ossmExpectedForOcp, false);
         r.errors = errors;
         return r;
     }
@@ -639,7 +639,18 @@ public class ClusterVersionService {
             String kuadrant,
             String ossm,
             String ossmExpected) {
+        return capabilitiesFrom(ocp, gatewayApi, kuadrant, ossm, ossmExpected, false);
+    }
+
+    public static ClusterCapabilities capabilitiesFrom(
+            String ocp,
+            String gatewayApi,
+            String kuadrant,
+            String ossm,
+            String ossmExpected,
+            boolean clusterReachable) {
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = clusterReachable;
         boolean gapiNative = gatewayApi != null && compareVersions(stripLeadingV(gatewayApi), "1.3") >= 0;
         boolean ocpNative = ocp != null && compareVersions(majorMinor(ocp), "4.21") >= 0;
         caps.corsNative = gapiNative || ocpNative;
