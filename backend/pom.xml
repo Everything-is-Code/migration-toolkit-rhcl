@@ -135,7 +135,7 @@
 
   <build>
     <plugins>
-      <!-- src/test/e2e を追加テストソースディレクトリとして登録 -->
+      <!-- Register src/test/e2e and src/test/architect as additional test source roots -->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
@@ -192,12 +192,11 @@
           </systemPropertyVariables>
           <includes>
             <include>**/*Test.java</include>
-            <include>**/*IT.java</include>
           </includes>
         </configuration>
       </plugin>
 
-      <!-- maven-failsafe: E2E / IT テスト実行 -->
+      <!-- maven-failsafe: E2E / integration tests (*IT.java) -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
@@ -292,7 +291,9 @@
 
       <!-- Maven Clean -->
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-clean-plugin</artifactId>
+        <version>3.4.0</version>
         <configuration>
           <failOnError>false</failOnError>
         </configuration>
