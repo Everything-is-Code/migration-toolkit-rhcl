@@ -24,6 +24,7 @@ public class CompatibilityService {
     private static final String REQUIRED_CORS_NATIVE = "Gateway API ≥ 1.3 or OCP ≥ 4.21";
     private static final String REQUIRED_KUADRANT = "Kuadrant / RHCL operator";
     private static final String REQUIRED_OSSM_MATCH = "OSSM version matching OCP↔OSSM matrix";
+    private static final String REQUIRED_CLUSTER_REACHABLE = "OpenShift cluster reachable from backend";
 
     // Mapping from 3scale policy system name → display name shown in the UI
     private static final Map<String, String> POLICY_DISPLAY_NAMES = Map.ofEntries(
@@ -95,6 +96,7 @@ public class CompatibilityService {
         checkMappingRules(service, result.items);
         checkBackend(service, result.items);
         checkCapabilityWarnings(service, result.items, capabilities);
+        checkClusterConnectionWarning(result.items, capabilities);
 
         result.score = calculateScore(result.items);
         result.level = scoreToLevel(result.score);
@@ -155,7 +157,8 @@ public class CompatibilityService {
             }
 
             // Capability-tagged CORS fallback WARNING is independent of supportedPolicies membership.
-            if ("cors".equals(systemName) && capabilities != null && !capabilities.corsNative) {
+            if ("cors".equals(systemName) && capabilities != null && capabilities.clusterReachable
+                    && !capabilities.corsNative) {
                 items.add(new CompatibilityItem(
                         displayName,
                         "WARNING",
@@ -178,7 +181,7 @@ public class CompatibilityService {
 
     private void checkCapabilityWarnings(ApiService service, List<CompatibilityItem> items,
                                          ClusterCapabilities capabilities) {
-        if (capabilities == null) {
+        if (capabilities == null || !capabilities.clusterReachable) {
             return;
         }
 
@@ -199,6 +202,20 @@ public class CompatibilityService {
                     "Detected OSSM version does not match the expected OSSM version for the resolved OCP",
                     "ossmMatchesOcp",
                     REQUIRED_OSSM_MATCH));
+        }
+    }
+
+    private void checkClusterConnectionWarning(List<CompatibilityItem> items,
+                                               ClusterCapabilities capabilities) {
+        if (capabilities != null && !capabilities.clusterReachable) {
+            items.add(new CompatibilityItem(
+                    "Cluster connection",
+                    "WARNING",
+                    "OpenShift cluster not detected from this backend. "
+                            + "Run oc login (local dev) or deploy the toolkit in-cluster, "
+                            + "then refresh cluster versions.",
+                    "clusterReachable",
+                    REQUIRED_CLUSTER_REACHABLE));
         }
     }
 

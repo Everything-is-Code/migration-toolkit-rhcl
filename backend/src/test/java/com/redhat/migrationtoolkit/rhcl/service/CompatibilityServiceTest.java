@@ -353,6 +353,36 @@ class CompatibilityServiceTest {
     }
 
     /**
+     * After maintenance_mode converter lands (#152), DEFAULT_SUPPORTED includes Maintenance Mode.
+     */
+    @Test
+    void check_maintenanceMode_defaultSupported() {
+        Set<String> defaults = Set.of(
+                "3scale APIcast",
+                "Header Modification",
+                "Upstream Connection",
+                "Logging",
+                "Anonymous Access",
+                "URL Rewriting",
+                "3scale Auth Caching",
+                "CORS Request Handling",
+                "IP Check",
+                "Edge Limiting",
+                "OAuth 2.0 Token Introspection",
+                "JWT Claim Check",
+                "Response/Request Content Limits",
+                "Retry",
+                "Maintenance Mode");
+
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("maintenance_mode"));
+        CompatibilityResult result = service.check(svc, defaults);
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Maintenance Mode".equals(i.name)));
+    }
+
+    /**
      * After keycloak converter lands (PR-C), DEFAULT_SUPPORTED includes RH-SSO/Keycloak Role Check
      * and KUADRANT_BOUND includes keycloak_role_check.
      */
@@ -386,6 +416,7 @@ class CompatibilityServiceTest {
     @Test
     void check_keycloakRoleCheck_withoutKuadrant_warnsKuadrantBound() {
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = true;
         caps.kuadrantPresent = false;
         caps.ossmPresent = true;
@@ -635,6 +666,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("cors"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = false;
         caps.timeoutsSupported = true;
 
@@ -661,6 +693,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("cors"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = false;
         caps.timeoutsSupported = true;
 
@@ -685,6 +718,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("cors"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.corsNative = true;
         caps.timeoutsSupported = true;
 
@@ -702,6 +736,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("edge_limiting"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.kuadrantPresent = false;
         caps.timeoutsSupported = true;
 
@@ -723,6 +758,7 @@ class CompatibilityServiceTest {
         svc.authentication = auth("jwt");
         svc.policies = List.of(enabledPolicy("edge_limiting"));
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.kuadrantPresent = true;
         caps.timeoutsSupported = true;
 
@@ -731,10 +767,63 @@ class CompatibilityServiceTest {
     }
 
     @Test
+    void check_unreachableCluster_emitsClusterConnectionNotKuadrant() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("edge_limiting"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = false;
+        caps.kuadrantPresent = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("Edge Limiting"), caps);
+        CompatibilityItem connection = result.items.stream()
+                .filter(i -> "clusterReachable".equals(i.capability))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("Cluster connection", connection.name);
+        assertEquals("WARNING", connection.status);
+        assertTrue(connection.message.contains("oc login"));
+        assertEquals("OpenShift cluster reachable from backend", connection.requiredVersion);
+        assertTrue(result.items.stream().noneMatch(i -> "kuadrantPresent".equals(i.capability)));
+    }
+
+    @Test
+    void check_unreachableCluster_skipsOssmMismatchWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = false;
+        caps.ossmPresent = true;
+        caps.ossmMatchesOcp = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES, caps);
+        assertTrue(result.items.stream().anyMatch(i -> "clusterReachable".equals(i.capability)));
+        assertTrue(result.items.stream().noneMatch(i -> "ossmMatchesOcp".equals(i.capability)));
+    }
+
+    @Test
+    void check_unreachableCluster_skipsCorsNativeCapabilityWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        svc.policies = List.of(enabledPolicy("cors"));
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = false;
+        caps.corsNative = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, Set.of("CORS Request Handling"), caps);
+        assertTrue(result.items.stream().anyMatch(i -> "clusterReachable".equals(i.capability)));
+        assertTrue(result.items.stream().noneMatch(i -> "corsNative".equals(i.capability)));
+    }
+
+    @Test
     void check_ossmMismatch_warns() {
         ApiService svc = basicService();
         svc.authentication = auth("jwt");
         ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = true;
         caps.ossmPresent = true;
         caps.ossmMatchesOcp = false;
         caps.timeoutsSupported = true;
@@ -758,6 +847,55 @@ class CompatibilityServiceTest {
         assertEquals(legacy.score, withNull.score);
         assertTrue(withNull.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("CORS")));
+        assertTrue(withNull.items.stream().noneMatch(i -> "clusterReachable".equals(i.capability)));
+    }
+
+    @Test
+    void check_loggingWithJsonObjectConfig_warningsEvenWhenSupported() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy logging = enabledPolicy("logging");
+        logging.configuration = Map.of(
+                "enable_json_logs", true,
+                "json_object_config", List.of(Map.of("key", "value")));
+        svc.policies = List.of(logging);
+
+        CompatibilityResult result = service.check(svc, Set.of("Logging", "3scale APIcast"));
+        CompatibilityItem loggingItem = result.items.stream()
+                .filter(i -> "Logging".equals(i.name))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("WARNING", loggingItem.status);
+        assertTrue(loggingItem.message.contains("telemetry.yaml"));
+    }
+
+    @Test
+    void check_loggingJsonObjectConfigAsString_nonEmpty_warns() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy logging = enabledPolicy("logging");
+        logging.configuration = Map.of("json_object_config", "[{\"field\":\"value\"}]");
+        svc.policies = List.of(logging);
+
+        CompatibilityResult result = service.check(svc, Set.of("Logging"));
+        assertTrue(result.items.stream().anyMatch(i ->
+                "Logging".equals(i.name) && "WARNING".equals(i.status)));
+    }
+
+    @Test
+    void check_allWarnings_yieldsMediumLevelAtFiftyPercent() {
+        ApiService svc = basicService();
+        svc.authentication = null;
+        svc.mappingRules = null;
+        svc.backends = null;
+        svc.policies = List.of(
+                enabledPolicy("lua"),
+                enabledPolicy("soap"),
+                enabledPolicy("custom_policy"));
+
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES);
+        assertEquals("MEDIUM", result.level);
+        assertEquals(50, result.score);
     }
 
     @Test

@@ -101,4 +101,36 @@ class MaintenanceModeEnvoyFilterGeneratorTest {
         // Empty body still passed to respond as ""
         assertTrue(yaml.contains("respond("));
     }
+
+    @Test
+    void isConfigEnabled_nullPolicyOrConfigOrEnabled_isFalse() {
+        assertFalse(MaintenanceModeEnvoyFilterGenerator.isConfigEnabled(null));
+
+        Policy noConfig = new Policy();
+        noConfig.name = "maintenance_mode";
+        noConfig.enabled = true;
+        noConfig.configuration = null;
+        assertFalse(MaintenanceModeEnvoyFilterGenerator.isConfigEnabled(noConfig));
+
+        Policy missingEnabled = GeneratorTestSupport.policyWithConfig("maintenance_mode", new HashMap<>());
+        assertFalse(MaintenanceModeEnvoyFilterGenerator.isConfigEnabled(missingEnabled));
+    }
+
+    @Test
+    void isConfigEnabled_stringTrue_isTrue() {
+        Policy maintenance = GeneratorTestSupport.policyWithConfig("maintenance_mode", Map.of(
+                "enabled", "true"));
+        assertTrue(MaintenanceModeEnvoyFilterGenerator.isConfigEnabled(maintenance));
+    }
+
+    @Test
+    void resolveConfigString_and_escapeLua_nullSafeDefaults() {
+        assertEquals("503", MaintenanceModeEnvoyFilterGenerator.resolveConfigString(null, "503"));
+        assertEquals("503", MaintenanceModeEnvoyFilterGenerator.resolveConfigString("null", "503"));
+        assertEquals("503", MaintenanceModeEnvoyFilterGenerator.resolveConfigString("  ", "503"));
+        assertEquals("418", MaintenanceModeEnvoyFilterGenerator.resolveConfigString("418", "503"));
+
+        assertEquals("", MaintenanceModeEnvoyFilterGenerator.escapeLua(null));
+        assertEquals("a\\\"b\\\\c\\nd", MaintenanceModeEnvoyFilterGenerator.escapeLua("a\"b\\c\nd"));
+    }
 }

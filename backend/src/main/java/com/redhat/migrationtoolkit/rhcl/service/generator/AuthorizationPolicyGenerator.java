@@ -46,10 +46,10 @@ public class AuthorizationPolicyGenerator implements ResourceGenerator {
             if (cidr == null) {
                 continue;
             }
-            remoteIps.append("        - \"").append(cidr).append("\"\n");
+            remoteIps.append("              - \"").append(cidr).append("\"\n");
         }
         if (remoteIps.length() == 0) {
-            remoteIps.append("        - \"0.0.0.0/0\"\n");
+            remoteIps.append("              - \"0.0.0.0/0\"\n");
         }
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;

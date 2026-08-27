@@ -117,6 +117,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.ocp.startsWith("4.19"));
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
+        assertFalse(response.capabilities.clusterReachable);
         assertSoftFailOssmNullButExpected(response);
     }
 
@@ -131,6 +132,7 @@ class ClusterVersionServiceTest {
         assertFalse(response.capabilities.ossmPresent);
         assertEquals("2.6", response.ossmExpectedForOcp);
         assertFalse(response.capabilities.ossmMatchesOcp);
+        assertFalse(response.capabilities.clusterReachable);
     }
 
     // ── 1.2 Missing SMCP RBAC still resolves via CSV or OCP→OSSM map ─────────
@@ -150,6 +152,7 @@ class ClusterVersionServiceTest {
         assertEquals("2.6.5", response.ossm);
         assertFalse(response.ossm.toLowerCase().contains("istio"));
         assertTrue(response.capabilities.ossmPresent);
+        assertTrue(response.capabilities.clusterReachable);
         assertEquals("2.6", response.ossmExpectedForOcp);
         assertTrue(response.capabilities.ossmMatchesOcp);
         // CSV already supplied OSSM — SMCP must not be consulted / must not warn
@@ -184,6 +187,7 @@ class ClusterVersionServiceTest {
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
         assertTrue(response.capabilities.timeoutsSupported);
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     @Test
@@ -197,6 +201,7 @@ class ClusterVersionServiceTest {
         assertTrue(ClusterVersionService.compareVersions(response.gatewayApi, "1.3") >= 0);
         assertNotNull(response.ossmExpectedForOcp);
         assertTrue(response.ossmExpectedForOcp.startsWith("3."));
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     // ── Cache refresh + TTL ──────────────────────────────────────────────────
@@ -348,6 +353,7 @@ class ClusterVersionServiceTest {
                 "Timeout soft-fail must surface a timeout error note: " + response.errors);
         assertTrue(elapsedMs < 5_000L,
                 "Soft-fail path must not wait the production DETECT_TIMEOUT_SECONDS ceiling");
+        assertFalse(response.capabilities.clusterReachable);
         // orTimeout completes the same future exceptionally when the ceiling elapses.
         assertTrue(never.isCompletedExceptionally());
     }
@@ -412,6 +418,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.errors.stream().anyMatch(e -> e.contains("Cluster detect failed")),
                 "Non-timeout failures must soft-fail with a detect-failed note: " + response.errors);
         assertFalse(response.errors.stream().anyMatch(e -> e.contains("timed out")));
+        assertFalse(response.capabilities.clusterReachable);
     }
 
     // ── I-7 unbounded CSV list residual ──────────────────────────────────────
@@ -531,6 +538,42 @@ class ClusterVersionServiceTest {
                 "4.17.0", "1.1.0", null, null, null);
         assertFalse(preRetry.retriesSupported,
                 "GAPI < 1.2 and OCP < 4.19 must not claim retriesSupported");
+
+        assertFalse(low.clusterReachable, "5-arg overload defaults clusterReachable to false");
+        ClusterCapabilities reachable = ClusterVersionService.capabilitiesFrom(
+                "4.21.0", "1.3.0", "1.4.0", "3.0.1", "3.0", true);
+        assertTrue(reachable.clusterReachable);
+        ClusterCapabilities unreachable = ClusterVersionService.capabilitiesFrom(
+                "4.19.0", "1.2.1", null, null, "2.6", false);
+        assertFalse(unreachable.clusterReachable);
+    }
+
+    @Test
+    void ossmCompatibilityTable_returnsOcpOssmMatrix() {
+        Map<String, String> table = service.ossmCompatibilityTable();
+        assertFalse(table.isEmpty());
+        assertEquals("2.6", table.get("4.19"));
+        assertEquals("3.0", table.get("4.21"));
+    }
+
+    @Test
+    void sanitize_redactsSecretsAndHomePaths() {
+        String cleaned = ClusterVersionService.sanitize("access_token=secret123 /Users/me/cluster");
+        assertFalse(cleaned.contains("secret123"));
+        assertTrue(cleaned.contains("[redacted]"));
+        assertTrue(cleaned.contains("[redacted-path]"));
+    }
+
+    @Test
+    void sanitize_nullMessage_returnsGenericError() {
+        assertEquals("detection error", ClusterVersionService.sanitize(null));
+    }
+
+    @Test
+    void compareVersions_equalAndGreater() {
+        assertEquals(0, ClusterVersionService.compareVersions("1.2.3", "1.2.3"));
+        assertTrue(ClusterVersionService.compareVersions("2.0.0", "1.99.0") > 0);
+        assertEquals(0, ClusterVersionService.compareVersions(null, null));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -746,6 +789,7 @@ class ClusterVersionServiceTest {
         assertEquals(ClusterVersionService.PROFILE_OCP_419, response.profile);
         assertEquals("profile", response.source);
         assertTrue(response.ocp.startsWith("4.19"));
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     @Test
@@ -762,6 +806,7 @@ class ClusterVersionServiceTest {
         assertEquals(ClusterVersionService.PROFILE_AUTO, response.profile);
         assertEquals("default", response.source);
         assertSoftFailOssmNullButExpected(response);
+        assertFalse(response.capabilities.clusterReachable);
     }
 
     @Test
@@ -785,6 +830,7 @@ class ClusterVersionServiceTest {
         assertEquals("profile", response.source);
         assertTrue(response.ocp.startsWith("4.21"));
         assertTrue(response.capabilities.corsNative);
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     /** Test double with injectable clock for TTL assertions. */
