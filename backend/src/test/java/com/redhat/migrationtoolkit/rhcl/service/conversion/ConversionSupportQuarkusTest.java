@@ -91,4 +91,45 @@ class ConversionSupportQuarkusTest {
         assertFalse(yaml.contains("migrated-from: 3scale"));
         assertEquals("a\nb", ConversionYamlSupport.normalizeLineEndings("a\r\nb"));
     }
+
+    // ── maintenance_mode → EnvoyFilter / README under quarkus-jacoco (#152 codecov)
+
+    @Test
+    void convert_maintenanceMode_enabled_emitsEnvoyFilterAndReadmeOverlay() {
+        ApiService service = ConversionSupportTestFixtures.apiService("maint-api");
+        service.backends.add(ConversionSupportTestFixtures.backend(
+                "primary", "http://my-svc.demo.svc:8080", "/"));
+        service.policies.add(ConversionSupportTestFixtures.policy("maintenance_mode", true, Map.of(
+                "enabled", true,
+                "status", 503,
+                "message", "Under maintenance",
+                "message_content_type", "text/plain")));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        assertTrue(files.containsKey("envoyfilter-maintenance.yaml"));
+        String ef = files.get("envoyfilter-maintenance.yaml");
+        assertTrue(ef.contains("503") && ef.contains("Under maintenance") && ef.contains("text/plain"));
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("envoyfilter-maintenance.yaml"));
+        assertTrue(readme.contains("## Maintenance Mode"));
+    }
+
+    @Test
+    void convert_maintenanceMode_configDisabled_omitsEnvoyFilter() {
+        ApiService service = ConversionSupportTestFixtures.apiService("maint-api");
+        service.backends.add(ConversionSupportTestFixtures.backend(
+                "primary", "http://my-svc.demo.svc:8080", "/"));
+        service.policies.add(ConversionSupportTestFixtures.policy("maintenance_mode", true, Map.of(
+                "enabled", false,
+                "status", 503,
+                "message", "Under maintenance")));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        assertFalse(files.containsKey("envoyfilter-maintenance.yaml"));
+        assertFalse(files.get("README.md").contains("## Maintenance Mode"));
+    }
 }

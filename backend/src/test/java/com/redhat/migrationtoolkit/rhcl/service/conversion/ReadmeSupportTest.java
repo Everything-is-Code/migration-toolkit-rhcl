@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ReadmeSupportTest {
@@ -74,5 +75,26 @@ class ReadmeSupportTest {
         assertTrue(readme.toLowerCase().contains("directresponse")
                         || readme.toLowerCase().contains("direct response"),
                 "README must note deferred DirectResponse");
+    }
+
+    @Test
+    void build_maintenancePolicyWithoutConfigEnabled_omitsMaintenanceSection() {
+        ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
+        service.backends.add(ConversionSupportTestFixtures.backend(
+                "primary", "http://my-svc.demo.svc:8080", "/"));
+        // Policy enabled at 3scale row level, but config.enabled missing → not active
+        service.policies.add(ConversionSupportTestFixtures.policy(
+                "maintenance_mode", true, new java.util.HashMap<>()));
+        ConversionContext ctx = ConversionSupportTestFixtures.context(service, "demo-ns");
+
+        String readme = ReadmeSupport.build(
+                ctx,
+                new ReadmeNotes(),
+                new PolicyFinder(),
+                new PolicyConfigSupport(),
+                RateLimitSupport.forManual());
+
+        assertFalse(readme.contains("envoyfilter-maintenance.yaml"));
+        assertFalse(readme.contains("## Maintenance Mode"));
     }
 }
