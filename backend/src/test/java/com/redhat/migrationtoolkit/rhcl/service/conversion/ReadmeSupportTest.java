@@ -125,6 +125,27 @@ class ReadmeSupportTest {
     }
 
     @Test
+    void build_upstreamHappyPath_listsUpstreamSection() {
+        ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
+        service.backends.add(ConversionSupportTestFixtures.backend(
+                "primary", "http://upstream-svc:8080", "/"));
+        service.policies.add(ConversionSupportTestFixtures.upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/v1", "url", "http://upstream-svc:8080")))));
+        ConversionContext ctx = ConversionSupportTestFixtures.context(service, "demo-ns");
+
+        String readme = ReadmeSupport.build(
+                ctx,
+                new ReadmeNotes(),
+                new PolicyFinder(),
+                new PolicyConfigSupport(),
+                RateLimitSupport.forManual());
+
+        assertTrue(readme.contains("## Upstream"));
+        assertFalse(readme.contains("## WARNING: Upstream"));
+    }
+
+    @Test
     void build_routingJwtAndExternalOverride_includesWarningNotes() {
         ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
         service.backends.add(ConversionSupportTestFixtures.backend(
