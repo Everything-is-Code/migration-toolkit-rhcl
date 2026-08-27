@@ -15,7 +15,7 @@ import ClusterVersionsPanel from '../components/connection/ClusterVersionsPanel'
 import shared from '../styles/shared.module.css';
 
 const ConnectionPage: React.FC = () => {
-  const { appState, setAppState } = useAppState();
+  const { setAppState } = useAppState();
   const { t } = useTranslation();
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [versionsError, setVersionsError] = useState<string | null>(null);
@@ -42,11 +42,9 @@ const ConnectionPage: React.FC = () => {
     }
   }, [applyVersions]);
 
-  // Only load versions on mount when already connected from a previous session
+  // Load cluster versions on mount (independent of 3scale connection).
   useEffect(() => {
-    if (appState.connection.connected) {
-      loadVersions(false);
-    }
+    loadVersions(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -60,7 +58,7 @@ const ConnectionPage: React.FC = () => {
       <PageSection>
         <ConnectionForm onConnected={() => loadVersions(true)} />
 
-        {shouldShowClusterVersionsCard(appState.connection.connected) && (
+        {shouldShowClusterVersionsCard() && (
           <ClusterVersionsPanel
             versionsLoading={versionsLoading}
             versionsError={versionsError}

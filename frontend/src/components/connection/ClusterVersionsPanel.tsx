@@ -23,7 +23,12 @@ import { useTranslation } from 'react-i18next';
 import { settingsApi } from '../../api/client';
 import { ClusterProfile } from '../../api/types';
 import { useAppState } from '../AppStateContext';
-import { clusterProfileI18nKey } from '../../utils/clusterCapabilityUi';
+import {
+  clusterProfileI18nKey,
+  formatKuadrantDisplay,
+  getClusterConnectionUiState,
+  isFallbackVersionSource,
+} from '../../utils/clusterCapabilityUi';
 import { apiErrorI18nMessage } from '../../utils/apiError';
 import {
   PF_FONT_SIZE_SM,
@@ -58,12 +63,31 @@ const ClusterVersionsPanel: React.FC<Props> = ({
   const { t } = useTranslation();
 
   const versions = appState.clusterVersions;
+  const connectionState = getClusterConnectionUiState(versions);
+  const fallbackSource = isFallbackVersionSource(versions);
   const sourceLabelKey =
     versions?.source === 'profile'
       ? 'connection.sourceProfile'
       : versions?.source === 'default'
         ? 'connection.sourceDefault'
         : 'connection.sourceDetected';
+
+  const formatVersionValue = (value: string | null | undefined) => {
+    const base = displayOrDash(value);
+    if (fallbackSource && base !== '—') {
+      return (
+        <>
+          {base}
+          <span className={shared.mutedText} style={{ marginLeft: PF_SPACER_SM, fontSize: PF_FONT_SIZE_SM }}>
+            {t('connection.versionFallbackDefault')}
+          </span>
+        </>
+      );
+    }
+    return base;
+  };
+
+  const formatKuadrantValue = () => formatKuadrantDisplay(versions, t);
 
   const handleProfileChange = async (_e: React.FormEvent, value: string) => {
     const profile = value as ClusterProfile;
@@ -104,6 +128,28 @@ const ClusterVersionsPanel: React.FC<Props> = ({
           <Alert variant="warning" isInline title={versionsError} style={{ marginTop: PF_SPACER_SM }} />
         )}
 
+        {connectionState === 'unreachable' && versions && !versionsLoading && (
+          <Alert
+            variant="warning"
+            isInline
+            title={t('connection.clusterUnreachableTitle')}
+            style={{ marginTop: PF_SPACER_SM }}
+          >
+            {t('connection.clusterUnreachableBody')}
+          </Alert>
+        )}
+
+        {connectionState === 'profile' && versions && !versionsLoading && (
+          <Alert
+            variant="info"
+            isInline
+            title={t('connection.clusterProfileTitle')}
+            style={{ marginTop: PF_SPACER_SM }}
+          >
+            {t('connection.clusterProfileBody')}
+          </Alert>
+        )}
+
         <FormGroup
           label={t('connection.labelProfile')}
           fieldId="cluster-profile"
@@ -141,29 +187,34 @@ const ClusterVersionsPanel: React.FC<Props> = ({
               <Label color={versions.source === 'detected' ? 'green' : versions.source === 'profile' ? 'blue' : 'orange'}>
                 {t(sourceLabelKey)}
               </Label>
-              {versions.capabilities?.corsNative ? (
-                <Label color="green">{t('connection.capCorsNative')}</Label>
-              ) : (
-                <Label color="orange">{t('connection.capCorsFallback')}</Label>
+              {connectionState === 'reachable' && (
+                <Label color="green">{t('connection.clusterReachableLabel')}</Label>
+              )}
+              {versions.capabilities?.clusterReachable && (
+                versions.capabilities.corsNative ? (
+                  <Label color="green">{t('connection.capCorsNative')}</Label>
+                ) : (
+                  <Label color="orange">{t('connection.capCorsFallback')}</Label>
+                )
               )}
             </div>
             <DescriptionList style={{ marginTop: PF_SPACER_MD }} isHorizontal>
               <DescriptionListGroup>
                 <DescriptionListTerm>{t('connection.labelOcp')}</DescriptionListTerm>
-                <DescriptionListDescription>{displayOrDash(versions.ocp)}</DescriptionListDescription>
+                <DescriptionListDescription>{formatVersionValue(versions.ocp)}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>{t('connection.labelGatewayApi')}</DescriptionListTerm>
-                <DescriptionListDescription>{displayOrDash(versions.gatewayApi)}</DescriptionListDescription>
+                <DescriptionListDescription>{formatVersionValue(versions.gatewayApi)}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>{t('connection.labelKuadrant')}</DescriptionListTerm>
-                <DescriptionListDescription>{displayOrDash(versions.kuadrant)}</DescriptionListDescription>
+                <DescriptionListDescription>{formatKuadrantValue()}</DescriptionListDescription>
               </DescriptionListGroup>
               <DescriptionListGroup>
                 <DescriptionListTerm>{t('connection.labelOssm')}</DescriptionListTerm>
                 <DescriptionListDescription>
-                  {displayOrDash(versions.ossm)}
+                  {formatVersionValue(versions.ossm)}
                   {versions.ossmExpectedForOcp && (
                     <span className={shared.mutedText} style={{ marginLeft: PF_SPACER_SM, fontSize: PF_FONT_SIZE_SM }}>
                       ({t('connection.ossmExpected', { version: versions.ossmExpectedForOcp })})

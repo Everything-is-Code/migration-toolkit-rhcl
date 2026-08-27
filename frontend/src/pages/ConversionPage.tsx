@@ -30,8 +30,9 @@ const ConversionPage: React.FC = () => {
 
   const hasCorsPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'cors'));
+  const clusterReachable = appState.clusterVersions?.capabilities?.clusterReachable === true;
   const corsNative = appState.clusterVersions?.capabilities?.corsNative === true;
-  const corsHintKey = corsConversionHintKey(hasCorsPolicy, corsNative);
+  const corsHintKey = corsConversionHintKey(hasCorsPolicy, clusterReachable, corsNative);
 
   const handleConvert = async (options: ConversionFormOptions) => {
     setLoading(true);
