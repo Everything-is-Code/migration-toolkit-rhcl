@@ -178,4 +178,112 @@ class ConversionSupportQuarkusTest {
         assertTrue(readme.contains("skipped") || readme.contains("^/api(?=!)"));
         assertTrue(readme.contains("ServiceEntry"));
     }
+
+    // ── routing → HTTPRoute / README under quarkus-jacoco (#150 codecov) ─────
+
+    @Test
+    void convert_routing_headerQueryPath_andCombine_emitsMatchesAndHappyReadme() {
+        ApiService service = ConversionSupportTestFixtures.routingConvertService();
+        // Matching product host + equality-only ops → happy ## Routing
+        service.policies.add(ConversionSupportTestFixtures.routingPolicy(List.of(
+                ConversionSupportTestFixtures.routingRule(
+                        "http://api.example.com:8080",
+                        "and",
+                        List.of(
+                                Map.of("match", "header", "header_name", "X-Tenant", "op", "==", "value", "acme"),
+                                Map.of("match", "query_arg", "query_arg_name", "env", "op", "==", "value", "staging"),
+                                Map.of("match", "path", "op", "==", "value", "/special"))))));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("name: X-Tenant") && httproute.contains("value: \"acme\""), httproute);
+        assertTrue(httproute.contains("name: env") && httproute.contains("value: \"staging\""), httproute);
+        assertTrue(httproute.contains("value: \"/special\""), httproute);
+        int routingPath = httproute.indexOf("value: \"/special\"");
+        int fallback = httproute.indexOf("value: \"/fallback\"");
+        assertTrue(routingPath >= 0 && fallback >= 0 && routingPath < fallback,
+                "Routing rule must precede mapping fallthrough: " + httproute);
+        assertTrue(files.get("README.md").contains("## Routing"));
+        assertFalse(files.get("README.md").contains("## WARNING: Routing"));
+    }
+
+    @Test
+    void convert_routing_orCombine_emitsSeparateRules() {
+        ApiService service = ConversionSupportTestFixtures.routingConvertService();
+        service.policies.add(ConversionSupportTestFixtures.routingPolicy(List.of(
+                ConversionSupportTestFixtures.routingRule(
+                        "http://api.example.com:8080",
+                        "or",
+                        List.of(
+                                Map.of("match", "header", "header_name", "X-A", "op", "==", "value", "1"),
+                                Map.of("match", "header", "header_name", "X-B", "op", "==", "value", "2"))))));
+
+        String httproute = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions())
+                .get("httproute.yaml");
+
+        assertTrue(httproute.contains("name: X-A") && httproute.contains("name: X-B"), httproute);
+        // OR multi-emit: each op is its own matches block (not ANDed headers in one rule)
+        int xa = httproute.indexOf("name: X-A");
+        int xb = httproute.indexOf("name: X-B");
+        assertTrue(xa >= 0 && xb >= 0 && xa != xb, httproute);
+        String between = xa < xb ? httproute.substring(xa, xb) : httproute.substring(xb, xa);
+        assertTrue(between.contains("backendRefs") || between.contains("- matches:"),
+                "OR must multi-emit separate rules: " + httproute);
+    }
+
+    @Test
+    void convert_routing_jwtClaim_warnsButConvertsSiblingHeader() {
+        ApiService service = ConversionSupportTestFixtures.routingConvertService();
+        service.policies.add(ConversionSupportTestFixtures.routingPolicy(List.of(
+                ConversionSupportTestFixtures.routingRule(
+                        "http://api.example.com:8080",
+                        "and",
+                        List.of(
+                                Map.of("match", "header", "header_name", "X-Ok", "op", "==", "value", "yes"),
+                                Map.of("match", "jwt_claim", "jwt_claim_name", "role", "op", "==", "value",
+                                        "admin"))))));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("name: X-Ok"), "Sibling header must still convert: " + httproute);
+        assertFalse(httproute.contains("jwt_claim") || httproute.contains("role"),
+                "JWT claim must not appear as HTTPRoute match: " + httproute);
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("WARNING: Routing conversion gaps"));
+        assertTrue(readme.contains("jwt_claim"));
+    }
+
+    @Test
+    void convert_routing_unsupportedOpAndExternalOverride_readmeGaps() {
+        ApiService service = ConversionSupportTestFixtures.routingConvertService();
+        service.policies.add(ConversionSupportTestFixtures.routingPolicy(List.of(
+                ConversionSupportTestFixtures.routingRule(
+                        "https://routing-only.example.com",
+                        "and",
+                        List.of(
+                                Map.of("match", "header", "header_name", "X-Skip", "op", "!=", "value", "1"),
+                                Map.of("match", "header", "header_name", "X-Route", "op", "==", "value",
+                                        "yes"))))));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("name: X-Route") || httproute.contains("routing-only.example.com"),
+                httproute);
+        assertFalse(httproute.contains("name: X-Skip"),
+                "Unsupported != op must be skipped: " + httproute);
+        assertFalse(files.containsKey("serviceentry.yaml")
+                        && files.get("serviceentry.yaml").contains("routing-only.example.com"),
+                "Must not synthesize ServiceEntry solely for routing override");
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("WARNING: Routing conversion gaps"));
+        assertTrue(readme.contains("unsupported routing op") || readme.contains("!="));
+        assertTrue(readme.contains("ServiceEntry") || readme.contains("routing-only.example.com"));
+    }
 }
