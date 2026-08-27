@@ -4,13 +4,18 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class EntityPersistenceTest {
@@ -29,8 +34,6 @@ class EntityPersistenceTest {
     @Test
     @Transactional
     void appSettingsEntity_persistAndUpdate() {
-        OffsetDateTime before = OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(2);
-
         AppSettingsEntity entity = new AppSettingsEntity();
         entity.key = "theme";
         entity.value = "dark";
@@ -41,15 +44,25 @@ class EntityPersistenceTest {
         assertNotNull(loaded);
         assertEquals("dark", loaded.value);
         assertNotNull(loaded.updatedAt);
-        assertTrue(loaded.updatedAt.isAfter(before) || loaded.updatedAt.isEqual(before));
 
-        OffsetDateTime previousUpdatedAt = loaded.updatedAt;
+        OffsetDateTime before = loaded.updatedAt;
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(2))
+                .until(() -> OffsetDateTime.now(ZoneOffset.UTC).isAfter(before));
+
         loaded.value = "light";
+        em.merge(loaded);
         em.flush();
-        em.refresh(loaded);
 
-        assertEquals("light", loaded.value);
-        assertTrue(loaded.updatedAt.isAfter(previousUpdatedAt) || loaded.updatedAt.isEqual(previousUpdatedAt));
+        AppSettingsEntity refreshed = em.find(AppSettingsEntity.class, "theme");
+        assertNotNull(refreshed);
+        assertEquals("light", refreshed.value);
+        assertNotNull(refreshed.updatedAt);
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(2))
+                .until(() -> refreshed.updatedAt.isAfter(before));
+        assertTrue(refreshed.updatedAt.isAfter(before),
+                "updatedAt must advance via @PreUpdate on merge/flush");
     }
 
     @Test
@@ -68,12 +81,24 @@ class EntityPersistenceTest {
         assertNotNull(loaded.createdAt);
         assertNotNull(loaded.updatedAt);
 
-        var previousUpdatedAt = loaded.updatedAt;
-        loaded.name = "Acme APIs (updated)";
-        em.flush();
-        em.refresh(loaded);
+        LocalDateTime before = loaded.updatedAt;
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(2))
+                .until(() -> LocalDateTime.now().isAfter(before));
 
-        assertTrue(loaded.updatedAt.isAfter(previousUpdatedAt) || loaded.updatedAt.isEqual(previousUpdatedAt));
+        loaded.name = "Acme APIs (updated)";
+        em.merge(loaded);
+        em.flush();
+
+        ProjectEntity refreshed = em.find(ProjectEntity.class, project.id);
+        assertNotNull(refreshed);
+        assertEquals("Acme APIs (updated)", refreshed.name);
+        assertNotNull(refreshed.updatedAt);
+        Awaitility.await()
+                .atMost(Duration.ofSeconds(2))
+                .until(() -> refreshed.updatedAt.isAfter(before));
+        assertTrue(refreshed.updatedAt.isAfter(before),
+                "updatedAt must advance via @PreUpdate on merge/flush");
     }
 
     @Test
