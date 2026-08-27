@@ -1,9 +1,13 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendType;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,5 +52,23 @@ class MappingRulesContributorTest {
         assertTrue(yaml.contains("method: POST"));
         assertTrue(yaml.contains("backendRefs:"));
         assertTrue(builder.pathsForOptions().contains("/items"));
+    }
+
+    @Test
+    void contribute_usesOverrideBackendsWhenSet() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/users"));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+        builder.setOverrideBackends(List.of(new ResolvedBackend(
+                BackendType.EXTERNAL, "upstream-override", "se", "dr",
+                "override.example.com", 443, true, "/", null, "https://override.example.com")));
+
+        new MappingRulesContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("name: upstream-override"));
+        assertTrue(yaml.contains("hostname: \"override.example.com\""));
+        assertFalse(yaml.contains("name: demo-api-backend") && yaml.indexOf("backendRefs:") < yaml.indexOf("name: demo-api-backend"));
     }
 }

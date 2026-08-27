@@ -23,7 +23,7 @@ public class MappingRulesContributor implements HttpRouteContributor {
         String timeoutsBlock = builder.timeoutsBlock();
         String retryBlock = builder.retryBlock();
         String sharedFilters = builder.sharedFilters();
-        List<ResolvedBackend> backends = builder.backends();
+        List<ResolvedBackend> backends = builder.effectiveBackends();
 
         if (service.mappingRules != null && !service.mappingRules.isEmpty()) {
             Set<String> catchAllMethods = new HashSet<>();

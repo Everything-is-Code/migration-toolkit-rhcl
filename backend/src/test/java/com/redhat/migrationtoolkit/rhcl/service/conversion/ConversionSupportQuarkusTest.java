@@ -132,4 +132,87 @@ class ConversionSupportQuarkusTest {
         assertFalse(files.containsKey("envoyfilter-maintenance.yaml"));
         assertFalse(files.get("README.md").contains("## Maintenance Mode"));
     }
+
+    // ── upstream → HTTPRoute / README under quarkus-jacoco (#151 codecov) ────
+
+    @Test
+    void convert_upstream_globalCatchAll_overrideBackendsAndExternalReadme() {
+        ApiService service = ConversionSupportTestFixtures.upstreamConvertService("http");
+        service.policies.add(ConversionSupportTestFixtures.upstreamGlobalCatchAll(
+                "https://override.example.com"));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("hostname: \"override.example.com\""),
+                "Global external override must Host-rewrite: " + httproute);
+        assertFalse(files.containsKey("serviceentry.yaml")
+                        && files.get("serviceentry.yaml").contains("override.example.com"),
+                "Must not synthesize ServiceEntry solely for upstream override");
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("WARNING: Upstream conversion gaps")
+                        || readme.contains("ServiceEntry"),
+                "README must document external override / SE gap");
+    }
+
+    @Test
+    void convert_upstream_globalTopLevelUrl_internalHappyReadme() {
+        ApiService service = ConversionSupportTestFixtures.upstreamConvertService("http");
+        // no-dot host → INTERNAL; matching http scheme → happy ## Upstream (no gap bullets)
+        service.policies.add(ConversionSupportTestFixtures.upstreamGlobalTopLevelUrl(
+                "http://upstream-svc:8080"));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        assertTrue(files.get("httproute.yaml").contains("upstream-svc")
+                        || files.get("httproute.yaml").contains("backendRefs"),
+                "Global internal override must appear in HTTPRoute backends");
+        assertTrue(files.get("README.md").contains("## Upstream"));
+        assertFalse(files.get("README.md").contains("## WARNING: Upstream"));
+    }
+
+    @Test
+    void convert_upstream_pathScoped_rulesBeforeMapping() {
+        ApiService service = ConversionSupportTestFixtures.upstreamConvertService("http");
+        service.policies.add(ConversionSupportTestFixtures.upstreamPathScoped(List.of(
+                Map.of("regex", "^/v1", "url", "https://v1.example.com"),
+                Map.of("regex", "^/v2/.*", "url", "https://v2.example.com"))));
+
+        String httproute = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions())
+                .get("httproute.yaml");
+
+        int v1 = httproute.indexOf("v1.example.com");
+        int fallback = httproute.indexOf("value: \"/fallback\"");
+        assertTrue(v1 >= 0 && fallback >= 0 && v1 < fallback,
+                "Path-scoped upstream rules must precede mapping rules: " + httproute);
+        assertTrue(httproute.contains("PathPrefix") || httproute.contains("value: \"/v1\""));
+        assertTrue(httproute.contains("RegularExpression") || httproute.contains("^/v2/.*"));
+    }
+
+    @Test
+    void convert_upstream_mixedConvertibleAndNonApproximable_warnsInReadme() {
+        ApiService service = ConversionSupportTestFixtures.upstreamConvertService("http");
+        service.policies.add(ConversionSupportTestFixtures.upstreamPathScoped(List.of(
+                Map.of("regex", "^/ok", "url", "https://ok.example.com"),
+                Map.of("regex", "^/api(?=!)", "url", "https://lookaround.example.com"),
+                Map.of("regex", "^/files/.++", "url", "https://possessive.example.com"),
+                Map.of("regex", "^(/(.*))/\\1$", "url", "https://backref.example.com"))));
+
+        Map<String, String> files = conversionService.convert(
+                service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("value: \"/ok\"") || httproute.contains("ok.example.com"));
+        assertFalse(httproute.contains("lookaround.example.com"));
+        assertFalse(httproute.contains("possessive.example.com"));
+        assertFalse(httproute.contains("backref.example.com"));
+
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("WARNING: Upstream conversion gaps"));
+        assertTrue(readme.contains("skipped") || readme.contains("^/api(?=!)"));
+        assertTrue(readme.contains("ServiceEntry"));
+    }
 }

@@ -5,6 +5,7 @@ import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -96,5 +97,51 @@ class ReadmeSupportTest {
 
         assertFalse(readme.contains("envoyfilter-maintenance.yaml"));
         assertFalse(readme.contains("## Maintenance Mode"));
+    }
+
+    @Test
+    void build_upstreamGaps_includesWarningSectionWithoutSyntheticSeClaim() {
+        ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
+        service.backends.add(ConversionSupportTestFixtures.backend(
+                "primary", "http://api.example.com:8080", "/"));
+        service.policies.add(ConversionSupportTestFixtures.policy("upstream", true, Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/ok", "url", "https://ok.example.com"),
+                        Map.of("regex", "^/api(?=!)", "url", "https://skip.example.com")))));
+        ConversionContext ctx = ConversionSupportTestFixtures.context(service, "demo-ns");
+
+        String readme = ReadmeSupport.build(
+                ctx,
+                new ReadmeNotes(),
+                new PolicyFinder(),
+                new PolicyConfigSupport(),
+                RateLimitSupport.forManual());
+
+        assertTrue(readme.contains("WARNING: Upstream conversion gaps"));
+        assertTrue(readme.contains("ServiceEntry"));
+        assertTrue(readme.contains("not auto-generated") || readme.contains("manual"),
+                "README must say ServiceEntry is manual for upstream overrides");
+        assertTrue(readme.toLowerCase().contains("scheme") || readme.contains("HTTP"));
+    }
+
+    @Test
+    void build_upstreamHappyPath_listsUpstreamSection() {
+        ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
+        service.backends.add(ConversionSupportTestFixtures.backend(
+                "primary", "http://upstream-svc:8080", "/"));
+        service.policies.add(ConversionSupportTestFixtures.upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/v1", "url", "http://upstream-svc:8080")))));
+        ConversionContext ctx = ConversionSupportTestFixtures.context(service, "demo-ns");
+
+        String readme = ReadmeSupport.build(
+                ctx,
+                new ReadmeNotes(),
+                new PolicyFinder(),
+                new PolicyConfigSupport(),
+                RateLimitSupport.forManual());
+
+        assertTrue(readme.contains("## Upstream"));
+        assertFalse(readme.contains("## WARNING: Upstream"));
     }
 }

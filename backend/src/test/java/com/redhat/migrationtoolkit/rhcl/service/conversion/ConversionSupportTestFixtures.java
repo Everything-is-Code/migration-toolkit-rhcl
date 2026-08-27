@@ -136,4 +136,38 @@ final class ConversionSupportTestFixtures {
                 "client_id", "cid",
                 "client_secret", "secret"));
     }
+
+    /** 3scale `upstream` policy with arbitrary configuration. */
+    static Policy upstreamPolicy(Map<String, Object> configuration) {
+        return policy("upstream", true, configuration);
+    }
+
+    /** Global catch-all upstream override (`regex: .*`). */
+    static Policy upstreamGlobalCatchAll(String overrideUrl) {
+        return upstreamPolicy(Map.of(
+                "rules", List.of(Map.of("regex", ".*", "url", overrideUrl))));
+    }
+
+    /** Global upstream via top-level `url` with empty rules. */
+    static Policy upstreamGlobalTopLevelUrl(String overrideUrl) {
+        return upstreamPolicy(Map.of(
+                "url", overrideUrl,
+                "rules", List.of()));
+    }
+
+    /**
+     * Path-scoped rules: approximable prefix/regex and optional non-approximable
+     * (lookaround / possessive / backref) entries for WARNING README coverage.
+     */
+    static Policy upstreamPathScoped(List<?> rules) {
+        return upstreamPolicy(Map.of("rules", rules));
+    }
+
+    /** Minimal service with one product backend + mapping rule for upstream convert tests. */
+    static ApiService upstreamConvertService(String overrideBackendScheme) {
+        ApiService service = apiService("up-api");
+        service.backends.add(backend("primary", overrideBackendScheme + "://api.example.com:8080", "/"));
+        service.mappingRules.add(mappingRule("GET", "/fallback"));
+        return service;
+    }
 }

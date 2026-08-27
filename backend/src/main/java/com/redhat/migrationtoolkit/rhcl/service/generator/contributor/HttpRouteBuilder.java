@@ -14,6 +14,7 @@ public final class HttpRouteBuilder {
     private final String name;
     private final String namespace;
     private final List<ResolvedBackend> backends;
+    private List<ResolvedBackend> overrideBackends;
     private final StringBuilder annotationBody = new StringBuilder();
     private final StringBuilder rulesBody = new StringBuilder();
     private final LinkedHashSet<String> pathsForOptions = new LinkedHashSet<>();
@@ -39,6 +40,19 @@ public final class HttpRouteBuilder {
 
     public List<ResolvedBackend> backends() {
         return backends;
+    }
+
+    /**
+     * Optional upstream-policy override backends for mapping-rule fallthrough.
+     * Not added to {@link ConversionContext#resolvedBackends}.
+     */
+    public void setOverrideBackends(List<ResolvedBackend> overrideBackends) {
+        this.overrideBackends = overrideBackends;
+    }
+
+    /** Override backends when set; otherwise product {@link #backends()}. */
+    public List<ResolvedBackend> effectiveBackends() {
+        return overrideBackends != null ? overrideBackends : backends;
     }
 
     public LinkedHashSet<String> pathsForOptions() {

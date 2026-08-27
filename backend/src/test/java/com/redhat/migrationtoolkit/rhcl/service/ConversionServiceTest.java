@@ -1543,6 +1543,66 @@ class ConversionServiceTest {
         assertFalse(files.containsKey("envoyfilter-maintenance.yaml"));
     }
 
+    // ── upstream → HTTPRoute override / path-scoped (#151) ───────────────────
+
+    @Test
+    void convert_upstream_globalOverride_usesOverrideBackendsAndHostRewrite() {
+        ApiService svc = basicService("Up API", "up-api");
+        svc.backends = List.of(backend("primary", "primary", "http://api.example.com:8080", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/users"));
+        svc.policies = List.of(upstreamPolicy(Map.of(
+                "rules", List.of(Map.of("regex", ".*", "url", "https://override.example.com")))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("hostname: \"override.example.com\""),
+                "Global external override must Host-rewrite: " + httproute);
+        assertTrue(httproute.contains("port: 443") || httproute.contains("override.example.com"),
+                "Override backendRefs must reflect override URL");
+        assertFalse(files.containsKey("serviceentry.yaml")
+                        && files.get("serviceentry.yaml").contains("override.example.com"),
+                "Must not synthesize ServiceEntry solely for upstream override");
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("ServiceEntry") || readme.contains("Upstream"),
+                "README must document external override / SE gap");
+    }
+
+    @Test
+    void convert_upstream_pathScoped_prependsRulesBeforeMapping() {
+        ApiService svc = basicService("Up API", "up-api");
+        svc.backends = List.of(backend("primary", "primary", "http://api.example.com:8080", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/fallback"));
+        svc.policies = List.of(upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/v1", "url", "https://v1.example.com"),
+                        Map.of("regex", "^/v2/.*", "url", "https://v2.example.com")))));
+
+        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        int v1 = httproute.indexOf("v1.example.com");
+        int fallback = httproute.indexOf("value: \"/fallback\"");
+        assertTrue(v1 >= 0 && fallback >= 0 && v1 < fallback,
+                "Path-scoped upstream rules must precede mapping rules: " + httproute);
+    }
+
+    @Test
+    void convert_upstream_mixedRegex_emitsConvertibleAndWarnsInReadme() {
+        ApiService svc = basicService("Up API", "up-api");
+        svc.backends = List.of(backend("primary", "primary", "http://api.example.com:8080", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/fallback"));
+        svc.policies = List.of(upstreamPolicy(Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/ok", "url", "https://ok.example.com"),
+                        Map.of("regex", "^/api(?=!)", "url", "https://skip.example.com")))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("value: \"/ok\"") || httproute.contains("ok.example.com"));
+        assertFalse(httproute.contains("skip.example.com"));
+        assertTrue(files.get("README.md").contains("WARNING: Upstream conversion gaps")
+                        || files.get("README.md").contains("skipped"),
+                "README must warn about skipped regex");
+    }
+
     // ── content_limits → EnvoyFilter request + response honesty (#22 PR-A) ────
 
     @Test
@@ -2245,6 +2305,14 @@ class ConversionServiceTest {
     private Policy maintenanceModePolicy(Map<String, Object> configuration) {
         Policy p = new Policy();
         p.name = "maintenance_mode";
+        p.enabled = true;
+        p.configuration = new HashMap<>(configuration);
+        return p;
+    }
+
+    private Policy upstreamPolicy(Map<String, Object> configuration) {
+        Policy p = new Policy();
+        p.name = "upstream";
         p.enabled = true;
         p.configuration = new HashMap<>(configuration);
         return p;

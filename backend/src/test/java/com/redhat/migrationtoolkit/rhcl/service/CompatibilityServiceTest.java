@@ -898,6 +898,36 @@ class CompatibilityServiceTest {
         assertEquals(50, result.score);
     }
 
+    @Test
+    void check_upstream_allConvertible_supportedWhenInList() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy upstream = enabledPolicy("upstream");
+        upstream.configuration = Map.of(
+                "rules", List.of(Map.of("regex", "^/v1", "url", "https://v1.example.com")));
+        svc.policies = List.of(upstream);
+
+        CompatibilityResult result = service.check(svc, Set.of("Upstream"));
+        assertTrue(result.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
+                && "Upstream".equals(i.name)));
+    }
+
+    @Test
+    void check_upstream_anyNonConvertible_warningEvenIfInList() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        Policy upstream = enabledPolicy("upstream");
+        upstream.configuration = Map.of(
+                "rules", List.of(
+                        Map.of("regex", "^/ok", "url", "https://ok.example.com"),
+                        Map.of("regex", "^/api(?=!)", "url", "https://skip.example.com")));
+        svc.policies = List.of(upstream);
+
+        CompatibilityResult result = service.check(svc, Set.of("Upstream"));
+        assertTrue(result.items.stream().anyMatch(i -> "WARNING".equals(i.status)
+                && "Upstream".equals(i.name)));
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ApiService basicService() {
