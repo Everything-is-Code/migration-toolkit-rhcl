@@ -65,6 +65,8 @@ class AuthorizationPolicyGeneratorTest {
         assertTrue(yaml.contains("action: ALLOW"));
         assertTrue(yaml.contains("remoteIpBlocks:"));
         assertTrue(yaml.contains("203.0.113.10/32"));
+        assertTrue(yaml.contains("remoteIpBlocks:\n              - \"203.0.113.10/32\""),
+                "CIDR list must be nested under remoteIpBlocks");
     }
 
     @Test

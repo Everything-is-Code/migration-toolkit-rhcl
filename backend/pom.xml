@@ -135,7 +135,7 @@
 
   <build>
     <plugins>
-      <!-- src/test/e2e を追加テストソースディレクトリとして登録 -->
+      <!-- Register src/test/e2e and src/test/architect as additional test source roots -->
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
@@ -192,12 +192,11 @@
           </systemPropertyVariables>
           <includes>
             <include>**/*Test.java</include>
-            <include>**/*IT.java</include>
           </includes>
         </configuration>
       </plugin>
 
-      <!-- maven-failsafe: E2E / IT テスト実行 -->
+      <!-- maven-failsafe: E2E / integration tests (*IT.java) -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-failsafe-plugin</artifactId>
@@ -215,6 +214,7 @@
           <systemPropertyVariables>
             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
             <maven.home>${maven.home}</maven.home>
+            <quarkus.test.arg-line>${argLine}</quarkus.test.arg-line>
           </systemPropertyVariables>
           <includes>
             <include>**/*IT.java</include>
@@ -222,58 +222,38 @@
         </configuration>
       </plugin>
 
-      <!-- JaCoCo: コードカバレッジ計測
-           quarkus-jacoco がアプリクラスをオフライン計測してから @QuarkusTest カバレッジを
-           jacoco-quarkus.exec に記録する。
-           prepare-agent はユニットテスト (非 @QuarkusTest) のカバレッジを
-           jacoco-unit.exec に記録するが、quarkus-jacoco が既に計測した com/example/** は
-           excludes で除外して二重計測エラーを回避する。
-           merge ゴールで両 exec を統合し HTML レポートを生成する。 -->
+      <!-- JaCoCo: Quarkus extension records @QuarkusTest coverage in jacoco-quarkus.exec.
+           Plain JUnit (Surefire) appends into the same file via prepare-agent, excluding
+           QuarkusClassLoader to avoid double instrumentation. See:
+           https://quarkus.io/guides/tests-with-coverage#coverage-for-tests-not-using-quarkustest -->
       <plugin>
         <groupId>org.jacoco</groupId>
         <artifactId>jacoco-maven-plugin</artifactId>
         <version>0.8.15</version>
         <executions>
-          <!-- JaCoCo ランタイム初期化のみ目的 (クラス計測は quarkus-jacoco が担う)
-               includes で存在しないパターンを指定して実際の計測はさせない。
-               これにより quarkus-jacoco の offline probe が unit test 時にも
-               データを記録できるようになり coverage が向上する。 -->
           <execution>
             <id>jacoco-prepare-agent</id>
             <goals><goal>prepare-agent</goal></goals>
             <configuration>
-              <destFile>${project.build.directory}/jacoco-unit.exec</destFile>
-              <includes>
-                <!-- 存在しないパターン: 計測なし・ランタイム初期化のみ -->
-                <include>__jacoco_runtime_init_only__</include>
-              </includes>
+              <destFile>${project.build.directory}/jacoco-quarkus.exec</destFile>
+              <append>true</append>
+              <exclClassLoaders>*QuarkusClassLoader</exclClassLoaders>
             </configuration>
           </execution>
-          <!-- 2つの exec を統合 -->
           <execution>
-            <id>jacoco-merge</id>
-            <phase>verify</phase>
-            <goals><goal>merge</goal></goals>
+            <id>jacoco-prepare-agent-integration</id>
+            <goals><goal>prepare-agent-integration</goal></goals>
             <configuration>
-              <fileSets>
-                <fileSet>
-                  <directory>${project.build.directory}</directory>
-                  <includes>
-                    <include>jacoco-unit.exec</include>
-                    <include>jacoco-quarkus.exec</include>
-                  </includes>
-                </fileSet>
-              </fileSets>
-              <destFile>${project.build.directory}/jacoco-merged.exec</destFile>
+              <destFile>${project.build.directory}/jacoco-quarkus.exec</destFile>
+              <append>true</append>
             </configuration>
           </execution>
-          <!-- 統合済み exec から HTML レポート生成 -->
           <execution>
             <id>jacoco-report</id>
             <phase>verify</phase>
             <goals><goal>report</goal></goals>
             <configuration>
-              <dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+              <dataFile>${project.build.directory}/jacoco-quarkus.exec</dataFile>
               <outputDirectory>${project.build.directory}/jacoco-merged-report</outputDirectory>
             </configuration>
           </execution>
@@ -311,7 +291,9 @@
 
       <!-- Maven Clean -->
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-clean-plugin</artifactId>
+        <version>3.4.0</version>
         <configuration>
           <failOnError>false</failOnError>
         </configuration>
