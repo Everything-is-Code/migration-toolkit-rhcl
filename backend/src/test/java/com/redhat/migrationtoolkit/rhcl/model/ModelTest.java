@@ -277,4 +277,59 @@ class ModelTest {
         assertEquals(1, r.policies.size());
         assertEquals("rate_limit", r.policies.get(0).name);
     }
+
+    // ── Application ─────────────────────────────────────────────────────────
+
+    @Test
+    void application_defaultFieldsAreNull() {
+        Application app = new Application();
+        assertNull(app.id);
+        assertNull(app.name);
+        assertNull(app.appId);
+        assertNull(app.keys);
+    }
+
+    @Test
+    void application_fieldAssignment() {
+        Application app = new Application();
+        app.id = "101";
+        app.name = "Demo App";
+        app.appId = "app-id-abc";
+        app.keys = List.of("key-primary", "key-secondary");
+
+        assertEquals("101", app.id);
+        assertEquals("Demo App", app.name);
+        assertEquals("app-id-abc", app.appId);
+        assertEquals(2, app.keys.size());
+        assertEquals("key-primary", app.keys.get(0));
+    }
+
+    // ── ApplicationPlan ─────────────────────────────────────────────────────
+
+    @Test
+    void applicationPlan_defaultFieldsAreNull() {
+        ApplicationPlan plan = new ApplicationPlan();
+        assertNull(plan.id);
+        assertNull(plan.name);
+        assertNull(plan.systemName);
+        assertNull(plan.limits);
+    }
+
+    @Test
+    void applicationPlan_fieldAssignmentWithLimits() {
+        ApplicationPlan plan = new ApplicationPlan();
+        plan.id = "plan-1";
+        plan.name = "Gold";
+        plan.systemName = "gold";
+        plan.limits = List.of(
+                Map.of("period", "minute", "value", 100),
+                Map.of("period", "day", "value", 10000, "metric_system_name", "hits"));
+
+        assertEquals("plan-1", plan.id);
+        assertEquals("Gold", plan.name);
+        assertEquals("gold", plan.systemName);
+        assertEquals(2, plan.limits.size());
+        assertEquals("minute", plan.limits.get(0).get("period"));
+        assertEquals("hits", plan.limits.get(1).get("metric_system_name"));
+    }
 }
