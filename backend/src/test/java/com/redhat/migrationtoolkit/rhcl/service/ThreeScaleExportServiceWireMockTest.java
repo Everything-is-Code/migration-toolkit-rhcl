@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
+import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -172,7 +173,7 @@ class ThreeScaleExportServiceWireMockTest {
                     .withStatus(200)
                     .withHeader("Content-Type", "application/json")
                     .withBody("""
-                        {"policies_config":[]}
+                        {"policies_config":[{"name":"cors","version":"built-in","enabled":true,"configuration":{}}]}
                         """)));
 
         WireMockThreeScaleResource.server().stubFor(
@@ -187,9 +188,23 @@ class ThreeScaleExportServiceWireMockTest {
 
         assertNotNull(page);
         assertEquals(1, page.items.size());
+        assertEquals("1", page.items.get(0).id);
         assertEquals("echo-api", page.items.get(0).systemName);
         assertEquals("Echo API", page.items.get(0).name);
         assertEquals(1, page.page);
+        assertEquals(20, page.perPage);
         assertFalse(page.hasMore);
+        assertEquals(1, page.total);
+        assertNotNull(page.items.get(0).policies);
+        assertEquals(1, page.items.get(0).policies.size());
+        assertEquals("cors", page.items.get(0).policies.get(0).name);
+        assertNotNull(page.items.get(0).backends);
+
+        WireMockThreeScaleResource.server().verify(getRequestedFor(urlPathEqualTo("/admin/api/services.json")));
+        WireMockThreeScaleResource.server().verify(getRequestedFor(urlPathEqualTo("/admin/api/backend_apis.json")));
+        WireMockThreeScaleResource.server().verify(
+                getRequestedFor(urlPathEqualTo("/admin/api/services/1/proxy/policies.json")));
+        WireMockThreeScaleResource.server().verify(
+                getRequestedFor(urlPathEqualTo("/admin/api/services/1/backend_usages.json")));
     }
 }
