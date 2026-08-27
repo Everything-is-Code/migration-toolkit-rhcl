@@ -187,6 +187,7 @@ class ClusterVersionServiceTest {
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
         assertTrue(response.capabilities.timeoutsSupported);
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     @Test
@@ -200,6 +201,7 @@ class ClusterVersionServiceTest {
         assertTrue(ClusterVersionService.compareVersions(response.gatewayApi, "1.3") >= 0);
         assertNotNull(response.ossmExpectedForOcp);
         assertTrue(response.ossmExpectedForOcp.startsWith("3."));
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     // ── Cache refresh + TTL ──────────────────────────────────────────────────
@@ -351,6 +353,7 @@ class ClusterVersionServiceTest {
                 "Timeout soft-fail must surface a timeout error note: " + response.errors);
         assertTrue(elapsedMs < 5_000L,
                 "Soft-fail path must not wait the production DETECT_TIMEOUT_SECONDS ceiling");
+        assertFalse(response.capabilities.clusterReachable);
         // orTimeout completes the same future exceptionally when the ceiling elapses.
         assertTrue(never.isCompletedExceptionally());
     }
@@ -415,6 +418,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.errors.stream().anyMatch(e -> e.contains("Cluster detect failed")),
                 "Non-timeout failures must soft-fail with a detect-failed note: " + response.errors);
         assertFalse(response.errors.stream().anyMatch(e -> e.contains("timed out")));
+        assertFalse(response.capabilities.clusterReachable);
     }
 
     // ── I-7 unbounded CSV list residual ──────────────────────────────────────
@@ -749,6 +753,7 @@ class ClusterVersionServiceTest {
         assertEquals(ClusterVersionService.PROFILE_OCP_419, response.profile);
         assertEquals("profile", response.source);
         assertTrue(response.ocp.startsWith("4.19"));
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     @Test
@@ -765,6 +770,7 @@ class ClusterVersionServiceTest {
         assertEquals(ClusterVersionService.PROFILE_AUTO, response.profile);
         assertEquals("default", response.source);
         assertSoftFailOssmNullButExpected(response);
+        assertFalse(response.capabilities.clusterReachable);
     }
 
     @Test
@@ -788,6 +794,7 @@ class ClusterVersionServiceTest {
         assertEquals("profile", response.source);
         assertTrue(response.ocp.startsWith("4.21"));
         assertTrue(response.capabilities.corsNative);
+        assertTrue(response.capabilities.clusterReachable);
     }
 
     /** Test double with injectable clock for TTL assertions. */

@@ -753,7 +753,23 @@ class CompatibilityServiceTest {
         assertEquals("Cluster connection", connection.name);
         assertEquals("WARNING", connection.status);
         assertTrue(connection.message.contains("oc login"));
+        assertEquals("OpenShift cluster reachable from backend", connection.requiredVersion);
         assertTrue(result.items.stream().noneMatch(i -> "kuadrantPresent".equals(i.capability)));
+    }
+
+    @Test
+    void check_unreachableCluster_skipsOssmMismatchWarning() {
+        ApiService svc = basicService();
+        svc.authentication = auth("jwt");
+        ClusterCapabilities caps = new ClusterCapabilities();
+        caps.clusterReachable = false;
+        caps.ossmPresent = true;
+        caps.ossmMatchesOcp = false;
+        caps.timeoutsSupported = true;
+
+        CompatibilityResult result = service.check(svc, EMPTY_POLICIES, caps);
+        assertTrue(result.items.stream().anyMatch(i -> "clusterReachable".equals(i.capability)));
+        assertTrue(result.items.stream().noneMatch(i -> "ossmMatchesOcp".equals(i.capability)));
     }
 
     @Test
@@ -800,6 +816,7 @@ class CompatibilityServiceTest {
         assertEquals(legacy.score, withNull.score);
         assertTrue(withNull.items.stream().anyMatch(i -> "SUPPORTED".equals(i.status)
                 && i.name.contains("CORS")));
+        assertTrue(withNull.items.stream().noneMatch(i -> "clusterReachable".equals(i.capability)));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
