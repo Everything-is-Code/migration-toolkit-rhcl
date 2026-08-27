@@ -144,4 +144,45 @@ class ReadmeSupportTest {
         assertTrue(readme.contains("## Upstream"));
         assertFalse(readme.contains("## WARNING: Upstream"));
     }
+
+    @Test
+    void build_routingJwtAndExternalOverride_includesWarningNotes() {
+        ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
+        service.backends.add(ConversionSupportTestFixtures.backend(
+                "primary", "http://api.example.com:8080", "/"));
+        Map<String, Object> jwtOp = Map.of(
+                "match", "jwt_claim",
+                "jwt_claim_name", "role",
+                "op", "==",
+                "value", "admin");
+        Map<String, Object> headerOp = Map.of(
+                "match", "header",
+                "header_name", "X-Route",
+                "op", "==",
+                "value", "yes");
+        Map<String, Object> condition = Map.of(
+                "combine_op", "and",
+                "operations", List.of(jwtOp, headerOp));
+        Map<String, Object> rule = Map.of(
+                "url", "https://routing-override.example.com",
+                "condition", condition);
+        service.policies.add(ConversionSupportTestFixtures.policy(
+                "routing", true, Map.of("rules", List.of(rule))));
+        ConversionContext ctx = ConversionSupportTestFixtures.context(service, "demo-ns");
+
+        String readme = ReadmeSupport.build(
+                ctx,
+                new ReadmeNotes(),
+                new PolicyFinder(),
+                new PolicyConfigSupport(),
+                RateLimitSupport.forManual());
+
+        assertTrue(readme.contains("WARNING: Routing conversion gaps"));
+        assertTrue(readme.toLowerCase().contains("jwt"), "README must document jwt_claim gap");
+        assertTrue(readme.contains("ServiceEntry"));
+        assertTrue(readme.contains("routing-override.example.com")
+                        || readme.contains("not auto-generated")
+                        || readme.contains("manual"),
+                "README must say ServiceEntry is manual for routing overrides");
+    }
 }

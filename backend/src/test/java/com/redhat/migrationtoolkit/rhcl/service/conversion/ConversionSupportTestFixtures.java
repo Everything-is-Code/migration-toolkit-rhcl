@@ -170,4 +170,28 @@ final class ConversionSupportTestFixtures {
         service.mappingRules.add(mappingRule("GET", "/fallback"));
         return service;
     }
+
+    /** 3scale `routing` policy with a rules list. */
+    static Policy routingPolicy(List<?> rules) {
+        return policy("routing", true, Map.of("rules", rules));
+    }
+
+    /** One routing rule: url + combine_op + operations. */
+    static Map<String, Object> routingRule(String url, String combineOp, List<?> operations) {
+        Map<String, Object> condition = new HashMap<>();
+        condition.put("combine_op", combineOp);
+        condition.put("operations", operations);
+        Map<String, Object> rule = new HashMap<>();
+        rule.put("url", url);
+        rule.put("condition", condition);
+        return rule;
+    }
+
+    /** Minimal service for routing convert tests (product backend + fallthrough mapping). */
+    static ApiService routingConvertService() {
+        ApiService service = apiService("route-api");
+        service.backends.add(backend("primary", "http://api.example.com:8080", "/"));
+        service.mappingRules.add(mappingRule("GET", "/fallback"));
+        return service;
+    }
 }

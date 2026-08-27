@@ -1603,6 +1603,92 @@ class ConversionServiceTest {
                 "README must warn about skipped regex");
     }
 
+    // ── routing → HTTPRoute conditional matches (#150) ───────────────────────
+
+    @Test
+    void convert_routing_pathOverride_precedesMappingFallthrough() {
+        ApiService svc = basicService("Route API", "route-api");
+        svc.backends = List.of(backend("primary", "primary", "http://api.example.com:8080", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/special"));
+        svc.policies = List.of(routingPolicy(List.of(Map.of(
+                "url", "https://routing.example.com",
+                "condition", Map.of(
+                        "combine_op", "and",
+                        "operations", List.of(Map.of(
+                                "match", "path",
+                                "op", "==",
+                                "value", "/special")))))));
+
+        String httproute = service.convert(svc, "ns").get("httproute.yaml");
+        int routingHost = httproute.indexOf("routing.example.com");
+        int mappingPath = httproute.indexOf("method: GET");
+        assertTrue(routingHost >= 0 && mappingPath >= 0 && routingHost < mappingPath,
+                "Routing conditional rule must precede mapping fallthrough: " + httproute);
+        assertTrue(countOccurrences(httproute, "value: \"/special\"") >= 2
+                        || (httproute.contains("routing.example.com")
+                        && httproute.contains("method: GET")),
+                "Overlap must keep mapping fallthrough after routing: " + httproute);
+    }
+
+    @Test
+    void convert_routing_corsOn_registersRoutingOnlyPathForOptions() {
+        ApiService svc = basicService("Route API", "route-api");
+        svc.backends = List.of(backend("primary", "primary", "http://api.example.com:8080", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/mapped"));
+        svc.policies = List.of(
+                corsPolicy(
+                        List.of("https://app.example.com"),
+                        List.of("GET", "OPTIONS"),
+                        List.of("Content-Type"),
+                        false,
+                        600),
+                routingPolicy(List.of(Map.of(
+                        "url", "https://routing.example.com",
+                        "condition", Map.of(
+                                "combine_op", "and",
+                                "operations", List.of(Map.of(
+                                        "match", "path",
+                                        "op", "==",
+                                        "value", "/special")))))));
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = false;
+
+        String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
+        assertTrue(httproute.contains("value: \"/special\""), httproute);
+        assertTrue(httproute.contains("method: OPTIONS"),
+                "CORS OPTIONS must include routing-only path: " + httproute);
+        assertTrue(httproute.contains("/special") && httproute.contains("OPTIONS"),
+                "OPTIONS rule for /special must be present: " + httproute);
+    }
+
+    @Test
+    void convert_routing_unmatchedExternalOverride_readmeOnlyNoServiceEntryHost() {
+        ApiService svc = basicService("Route API", "route-api");
+        svc.backends = List.of(backend("primary", "primary", "http://api.example.com:8080", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/fallback"));
+        svc.policies = List.of(routingPolicy(List.of(Map.of(
+                "url", "https://routing-only.example.com",
+                "condition", Map.of(
+                        "combine_op", "and",
+                        "operations", List.of(Map.of(
+                                "match", "header",
+                                "header_name", "X-Route",
+                                "op", "==",
+                                "value", "yes")))))));
+
+        Map<String, String> files = service.convert(svc, "ns");
+        assertTrue(files.get("httproute.yaml").contains("routing-only.example.com")
+                        || files.get("httproute.yaml").contains("name: X-Route"),
+                files.get("httproute.yaml"));
+        assertFalse(files.containsKey("serviceentry.yaml")
+                        && files.get("serviceentry.yaml").contains("routing-only.example.com"),
+                "Must not synthesize ServiceEntry solely for routing override");
+        String readme = files.get("README.md");
+        assertTrue(readme.contains("WARNING: Routing conversion gaps")
+                        || readme.contains("ServiceEntry"),
+                "README must document routing external override / SE gap");
+    }
+
     // ── content_limits → EnvoyFilter request + response honesty (#22 PR-A) ────
 
     @Test
@@ -2316,6 +2402,25 @@ class ConversionServiceTest {
         p.enabled = true;
         p.configuration = new HashMap<>(configuration);
         return p;
+    }
+
+    private Policy routingPolicy(List<Map<String, Object>> rules) {
+        Policy p = new Policy();
+        p.name = "routing";
+        p.enabled = true;
+        p.configuration = new HashMap<>();
+        p.configuration.put("rules", rules);
+        return p;
+    }
+
+    private static int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = haystack.indexOf(needle, idx)) >= 0) {
+            count++;
+            idx += needle.length();
+        }
+        return count;
     }
 
     private Policy retryPolicy(int retries, String retryOn, String perTryTimeout) {

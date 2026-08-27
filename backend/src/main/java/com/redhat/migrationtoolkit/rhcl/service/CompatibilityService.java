@@ -6,6 +6,7 @@ import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityItem;
 import com.redhat.migrationtoolkit.rhcl.model.CompatibilityResult;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.UpstreamSupport;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -153,6 +154,14 @@ public class CompatibilityService {
                 items.add(new CompatibilityItem(displayName, "WARNING",
                         "One or more upstream rules use non-approximable PCRE or invalid URLs"
                         + " — convertible rules are emitted; review README before apply"));
+                continue;
+            }
+
+            // Routing: JWT-claim ops have no Gateway API match — partial WARNING (Logging pattern).
+            if ("routing".equals(systemName) && RoutingSupport.hasJwtClaimOperations(policy)) {
+                items.add(new CompatibilityItem(displayName, "WARNING",
+                        "Routing includes jwt_claim conditions that cannot map to Gateway API matches"
+                        + " — convertible header/query/path rules are emitted; review README before apply"));
                 continue;
             }
 

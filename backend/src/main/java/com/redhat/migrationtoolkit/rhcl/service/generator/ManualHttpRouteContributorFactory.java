@@ -7,6 +7,7 @@ import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.HttpRouteA
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.HttpRouteContributor;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.MappingRulesContributor;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.RetryContributor;
+import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.RoutingContributor;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.TimeoutsContributor;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.UpstreamContributor;
 
@@ -25,6 +26,7 @@ final class ManualHttpRouteContributorFactory {
         contributors.add(new CorsFiltersContributor());
         contributors.add(new TimeoutsContributor());
         contributors.add(new RetryContributor());
+        contributors.add(new RoutingContributor());
         contributors.add(new UpstreamContributor());
         contributors.add(new MappingRulesContributor());
         contributors.add(new CorsOptionsContributor());
