@@ -3,11 +3,65 @@
  * Kept free of React so vitest can cover WU3 scenarios without a DOM harness.
  */
 
-import type { ClusterProfile } from '../api/types';
+import type { ClusterProfile, ClusterVersionsResponse } from '../api/types';
 
-/** When to show the cluster versions card on Connection. */
-export function shouldShowClusterVersionsCard(connected: boolean): boolean {
-  return connected === true;
+export type ClusterConnectionUiState = 'reachable' | 'unreachable' | 'profile';
+
+/** Always show cluster versions on Connection (independent of 3scale connect). */
+export function shouldShowClusterVersionsCard(_connected?: boolean): boolean {
+  return true;
+}
+
+/**
+ * Connection page cluster status derived from version resolution.
+ */
+export function getClusterConnectionUiState(
+  versions: ClusterVersionsResponse | null | undefined,
+): ClusterConnectionUiState {
+  if (!versions) {
+    return 'unreachable';
+  }
+  if (versions.source === 'profile') {
+    return 'profile';
+  }
+  if (versions.capabilities?.clusterReachable === true) {
+    return 'reachable';
+  }
+  return 'unreachable';
+}
+
+/** i18n keys used when Kuadrant/RHCL is not shown as a raw detected version string. */
+export type KuadrantDisplayI18nKey =
+  | 'connection.kuadrantAbsent'
+  | 'connection.kuadrantUnreachable'
+  | 'connection.kuadrantProfileAssumed';
+
+/**
+ * Kuadrant/RHCL cell text for Connection — detected version string or translated state copy.
+ */
+export function formatKuadrantDisplay(
+  versions: ClusterVersionsResponse | null | undefined,
+  t: (key: KuadrantDisplayI18nKey) => string,
+): string {
+  if (!versions) {
+    return '—';
+  }
+  const state = getClusterConnectionUiState(versions);
+  if (state === 'profile') {
+    return versions.capabilities?.kuadrantPresent
+      ? t('connection.kuadrantProfileAssumed')
+      : t('connection.kuadrantAbsent');
+  }
+  if (state === 'unreachable') {
+    return t('connection.kuadrantUnreachable');
+  }
+  const kuadrant = versions.kuadrant?.trim();
+  return kuadrant || t('connection.kuadrantAbsent');
+}
+
+/** Whether OCP/GAPI values are fallback defaults (not live-detected). */
+export function isFallbackVersionSource(versions: ClusterVersionsResponse | null | undefined): boolean {
+  return versions?.source === 'default';
 }
 
 /**

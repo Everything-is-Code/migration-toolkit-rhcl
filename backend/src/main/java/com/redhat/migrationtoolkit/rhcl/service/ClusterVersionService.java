@@ -267,6 +267,7 @@ public class ClusterVersionService {
             r.capabilities.kuadrantPresent = true;
             r.capabilities.ossmPresent = true;
             r.capabilities.ossmMatchesOcp = true;
+            r.capabilities.clusterReachable = true;
         } else {
             r.ocp = DEFAULT_OCP;
             r.gatewayApi = DEFAULT_GATEWAY_API;
@@ -276,6 +277,7 @@ public class ClusterVersionService {
             r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, null, r.ossm, r.ossmExpectedForOcp);
             r.capabilities.ossmPresent = true;
             r.capabilities.ossmMatchesOcp = true;
+            r.capabilities.clusterReachable = true;
         }
         return r;
     }
@@ -389,6 +391,7 @@ public class ClusterVersionService {
         r.ossm = ossm;
         r.ossmExpectedForOcp = expected;
         r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, r.kuadrant, r.ossm, r.ossmExpectedForOcp);
+        r.capabilities.clusterReachable = true;
         r.errors = errors;
         return r;
     }
@@ -407,6 +410,7 @@ public class ClusterVersionService {
         // Soft-fail: keep expected for UI guidance, but do not claim OSSM is present.
         r.ossm = null;
         r.capabilities = capabilitiesFrom(r.ocp, r.gatewayApi, null, null, r.ossmExpectedForOcp);
+        r.capabilities.clusterReachable = false;
         r.errors = errors;
         return r;
     }

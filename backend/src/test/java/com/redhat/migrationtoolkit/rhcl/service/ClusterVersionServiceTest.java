@@ -117,6 +117,7 @@ class ClusterVersionServiceTest {
         assertTrue(response.ocp.startsWith("4.19"));
         assertEquals("1.2.1", response.gatewayApi);
         assertFalse(response.capabilities.corsNative);
+        assertFalse(response.capabilities.clusterReachable);
         assertSoftFailOssmNullButExpected(response);
     }
 
@@ -131,6 +132,7 @@ class ClusterVersionServiceTest {
         assertFalse(response.capabilities.ossmPresent);
         assertEquals("2.6", response.ossmExpectedForOcp);
         assertFalse(response.capabilities.ossmMatchesOcp);
+        assertFalse(response.capabilities.clusterReachable);
     }
 
     // ── 1.2 Missing SMCP RBAC still resolves via CSV or OCP→OSSM map ─────────
@@ -150,6 +152,7 @@ class ClusterVersionServiceTest {
         assertEquals("2.6.5", response.ossm);
         assertFalse(response.ossm.toLowerCase().contains("istio"));
         assertTrue(response.capabilities.ossmPresent);
+        assertTrue(response.capabilities.clusterReachable);
         assertEquals("2.6", response.ossmExpectedForOcp);
         assertTrue(response.capabilities.ossmMatchesOcp);
         // CSV already supplied OSSM — SMCP must not be consulted / must not warn
