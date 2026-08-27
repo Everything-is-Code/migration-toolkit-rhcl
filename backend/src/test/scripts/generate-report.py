@@ -18,7 +18,7 @@ TARGET       = sys.argv[1] if len(sys.argv) > 1 else "target"
 PROJECT_NAME = sys.argv[2] if len(sys.argv) > 2 else "migration-tool"
 
 _JACOCO_CANDIDATES = [
-    os.path.join(TARGET, "jacoco-merged-report", "jacoco.csv"),  # unit + quarkus merged
+    os.path.join(TARGET, "jacoco-merged-report", "jacoco.csv"),  # Surefire + @QuarkusTest (jacoco-quarkus.exec)
     os.path.join(TARGET, "site", "jacoco-merged", "jacoco.csv"),
     os.path.join(TARGET, "jacoco-report", "jacoco.csv"),
 ]

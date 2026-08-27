@@ -17,10 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * JaCoCo records conversion support coverage only through Quarkus-instrumented classes.
- * These tests complement the plain JUnit suites in this package.
- */
 @QuarkusTest
 class ConversionSupportQuarkusTest {
 
