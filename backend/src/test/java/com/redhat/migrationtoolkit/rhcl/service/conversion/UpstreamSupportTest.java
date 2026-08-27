@@ -166,6 +166,11 @@ class UpstreamSupportTest {
     }
 
     @Test
+    void buildReadmeNotes_emptyWhenUpstreamAbsent() {
+        assertEquals("", UpstreamSupport.buildReadmeNotes(ContributorTestFixtures.apiService(), new PolicyFinder()));
+    }
+
+    @Test
     void buildReadmeNotes_emptyWhenGlobalUrlBlankAndNoGapBullets() {
         ApiService service = ContributorTestFixtures.apiService();
         service.policies.add(upstreamPolicy(Map.of("url", " ", "rules", List.of())));
