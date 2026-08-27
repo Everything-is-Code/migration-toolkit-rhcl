@@ -179,6 +179,46 @@ class UpstreamSupportTest {
     }
 
     @Test
+    void allRulesConvertible_falseWhenUpstreamNull() {
+        assertFalse(UpstreamSupport.allRulesConvertible(null));
+    }
+
+    @Test
+    void parseRules_emptyWhenUpstreamNullOrMissingConfig() {
+        assertTrue(UpstreamSupport.parseRules(null).isEmpty());
+        Policy noConfig = new Policy();
+        noConfig.name = "upstream";
+        noConfig.enabled = true;
+        assertTrue(UpstreamSupport.parseRules(noConfig).isEmpty());
+    }
+
+    @Test
+    void approximateRegex_stripsCaretForSimplePrefix() {
+        UpstreamSupport.MatchApproximation match = UpstreamSupport.approximateRegex("^/api");
+        assertEquals(UpstreamSupport.MatchType.PATH_PREFIX, match.type());
+        assertEquals("/api", match.value());
+    }
+
+    @Test
+    void approximateRegex_returnsRegularExpressionForWildcardPath() {
+        UpstreamSupport.MatchApproximation match = UpstreamSupport.approximateRegex("^/api/.*");
+        assertEquals(UpstreamSupport.MatchType.REGULAR_EXPRESSION, match.type());
+        assertEquals("^/api/.*", match.value());
+    }
+
+    @Test
+    void buildReadmeNotes_schemeMismatchWithoutSkippedRegexBullet() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(upstreamPolicy(Map.of(
+                "rules", List.of(Map.of("regex", "^/v1", "url", "https://api.example.com:8443")))));
+
+        String notes = UpstreamSupport.buildReadmeNotes(service, new PolicyFinder());
+
+        assertTrue(notes.contains("scheme mismatch"));
+        assertFalse(notes.contains("skipped non-approximable"));
+    }
+
+    @Test
     void resolveOverrideBackend_nullForBlankUrl() {
         assertNull(UpstreamSupport.resolveOverrideBackend("demo-api", "   "));
     }
