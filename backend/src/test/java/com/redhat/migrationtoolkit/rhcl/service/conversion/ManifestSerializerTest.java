@@ -15,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -90,5 +91,20 @@ class ManifestSerializerTest {
         String yaml = serializer.toYaml(meta);
         assertFalse(yaml.contains("annotations:"));
         assertFalse(yaml.contains(": null"));
+    }
+
+    @Test
+    void toYaml_unserializableRecord_throwsIllegalArgumentException() {
+        class CyclicReference {
+            @SuppressWarnings("unused")
+            public final CyclicReference self = this;
+        }
+
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> serializer.toYaml(new CyclicReference()));
+
+        assertEquals("Failed to serialize manifest to YAML", ex.getMessage());
+        assertNotNull(ex.getCause());
     }
 }

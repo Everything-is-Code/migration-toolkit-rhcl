@@ -57,6 +57,51 @@ class AuthPolicyManifestTest {
     }
 
     @Test
+    void nullAuthentication_compactConstructorDefaultsToEmptyMap() {
+        AuthPolicyRules rules = new AuthPolicyRules(null, Map.of(), null);
+
+        Map<String, Object> parsed = YamlAssertions.parse(serializer.toYaml(
+                baseManifest("demo-api", rules.authentication(), rules.authorization(), rules.response())));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> auth = (Map<String, Object>) ((Map<String, Object>) ((Map<String, Object>) parsed.get("spec"))
+                .get("rules")).get("authentication");
+        assertNotNull(auth);
+        assertTrue(auth.isEmpty());
+    }
+
+    @Test
+    void nullAuthenticationRuleValue_serializesAsEmptyObject() {
+        AuthPolicyManifest manifest = baseManifest(
+                "demo-api",
+                Map.of("anonymous", new AuthenticationRule(null)),
+                Map.of(),
+                null);
+
+        Map<String, Object> parsed = YamlAssertions.parse(serializer.toYaml(manifest));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> auth = (Map<String, Object>) ((Map<String, Object>) ((Map<String, Object>) parsed.get("spec"))
+                .get("rules")).get("authentication");
+        assertNotNull(auth.get("anonymous"));
+        assertTrue(((Map<?, ?>) auth.get("anonymous")).isEmpty());
+    }
+
+    @Test
+    void nullAuthorizationRuleValue_serializesAsEmptyObject() {
+        AuthPolicyManifest manifest = baseManifest(
+                "demo-api",
+                Map.of(),
+                Map.of("allow-all", new AuthorizationRule(null)),
+                null);
+
+        Map<String, Object> parsed = YamlAssertions.parse(serializer.toYaml(manifest));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> authz = (Map<String, Object>) ((Map<String, Object>) ((Map<String, Object>) parsed.get("spec"))
+                .get("rules")).get("authorization");
+        assertNotNull(authz.get("allow-all"));
+        assertTrue(((Map<?, ?>) authz.get("allow-all")).isEmpty());
+    }
+
+    @Test
     void authorizationRule_serializesPatternMatchingBlock() {
         Map<String, AuthorizationRule> authorization = new LinkedHashMap<>();
         authorization.put(
