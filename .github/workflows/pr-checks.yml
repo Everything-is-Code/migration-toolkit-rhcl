@@ -45,6 +45,23 @@ jobs:
       - name: PMD
         run: mvn -B pmd:check
 
+  backend-deps:
+    name: Backend deps (dependency:analyze)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: dependency:analyze
+        run: mvn -B dependency:analyze
+
   backend-tests-cov:
     name: Backend tests & coverage
     runs-on: ubuntu-latest
@@ -113,6 +130,7 @@ jobs:
     needs:
       - backend-style
       - backend-static
+      - backend-deps
       - backend-tests-cov
       - frontend-quality
     if: always()
@@ -132,12 +150,14 @@ jobs:
           echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| backend-style | ${{ needs.backend-style.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| backend-static | ${{ needs.backend-static.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| backend-deps | ${{ needs.backend-deps.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| backend-tests-cov | ${{ needs.backend-tests-cov.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| frontend-quality | ${{ needs.frontend-quality.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           if ! gate_ok "${{ needs.backend-style.result }}" || \
              ! gate_ok "${{ needs.backend-static.result }}" || \
+             ! gate_ok "${{ needs.backend-deps.result }}" || \
              ! gate_ok "${{ needs.backend-tests-cov.result }}" || \
              ! gate_ok "${{ needs.frontend-quality.result }}"; then
             echo "**Result:** FAILED — one or more PR quality checks did not pass." >> "$GITHUB_STEP_SUMMARY"
