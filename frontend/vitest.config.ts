@@ -4,11 +4,25 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: 'node',
-    environmentMatchGlobs: [
-      ['**/*.test.tsx', 'jsdom'],
-    ],
     setupFiles: ['./src/test/setup.ts'],
     exclude: ['**/node_modules/**', '**/e2e/**'],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: 'unit-node',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'unit-jsdom',
+          environment: 'jsdom',
+          include: ['src/**/*.test.tsx'],
+        },
+      },
+    ],
   },
 });
