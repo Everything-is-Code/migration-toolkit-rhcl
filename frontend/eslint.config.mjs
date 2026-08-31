@@ -19,6 +19,9 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // react-hooks v7 (required for ESLint 10) enables stricter rules; warn until refactors land.
+      'react-hooks/set-state-in-effect': 'warn',
+      'react-hooks/immutability': 'warn',
       'react-refresh/only-export-components': [
         'warn',
         { allowConstantExport: true },
@@ -34,6 +37,7 @@ export default tseslint.config(
       // Pre-existing patterns — warn so lint is gateable without a mass rewrite in Slice B.
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-unused-expressions': 'warn',
+      'react-hooks/exhaustive-deps': 'warn',
       'no-regex-spaces': 'warn',
     },
   },
