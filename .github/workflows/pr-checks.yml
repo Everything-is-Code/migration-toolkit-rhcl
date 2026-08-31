@@ -92,6 +92,9 @@ jobs:
     name: Frontend quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     defaults:
       run:
         working-directory: frontend
@@ -105,8 +108,21 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      - name: Vitest with coverage
+        run: npm run test:coverage
       - run: npm run build
+      - name: Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend
+          fail_ci_if_error: true
+          verbose: true
 
   quality-summary:
     name: PR quality summary

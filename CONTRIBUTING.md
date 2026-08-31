@@ -63,6 +63,10 @@ npm test
 4. Link related issues (`Closes #…` / `Closes part of #…`).
 5. Ensure CI is green before merge.
 
+### CI notes (coverage)
+
+PR checks upload **Codecov** coverage for backend (JaCoCo) and frontend (Vitest `npm run test:coverage`). Regression gates use `target: auto` / `threshold: 0%` in `codecov.yml` — coverage must not decrease vs the PR base. Local: `cd backend && mvn verify`; `cd frontend && npm run test:coverage`. After the first successful `frontend` upload on `main`, add `codecov/project/frontend` and `codecov/patch/frontend` to branch protection (same pattern as backend). Component coverage expansion: [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
+
 ## Conventional commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

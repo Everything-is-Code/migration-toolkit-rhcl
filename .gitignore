@@ -37,6 +37,7 @@ frontend/.vite/
 frontend/e2e/.env.local
 frontend/playwright-report/
 frontend/test-results/
+frontend/coverage/
 
 # Logs
 *.log
