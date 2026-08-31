@@ -20,7 +20,7 @@
     "@patternfly/react-table": "^5.3.3",
     "@vitejs/plugin-react": "^4.2.1",
     "axios": "^1.19.0",
-    "i18next": "^26.3.6",
+    "i18next": "^26.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^17.0.11",
