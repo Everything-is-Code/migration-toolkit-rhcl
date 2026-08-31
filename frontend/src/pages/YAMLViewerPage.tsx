@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   PageSection,
   PageSectionVariants,
@@ -14,6 +14,10 @@ import { useAppState } from '../components/AppStateContext';
 import { useNavigate } from 'react-router-dom';
 import YamlFileTabs from '../components/yaml/YamlFileTabs';
 import YamlEditorPanel from '../components/yaml/YamlEditorPanel';
+import {
+  buildEditsFromResults,
+  conversionResultsFingerprint,
+} from '../components/conversion/conversionWorkflowState';
 import styles from '../components/yaml/yamlViewer.module.css';
 
 const YAMLViewerPage: React.FC = () => {
@@ -25,13 +29,22 @@ const YAMLViewerPage: React.FC = () => {
   const [selectOpen, setSelectOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
 
-  const [edits, setEdits] = useState<Record<number, Record<string, string>>>(() => {
-    const init: Record<number, Record<string, string>> = {};
-    appState.conversionResults.forEach((r, i) => {
-      if (r.yamlFiles) init[i] = { ...r.yamlFiles };
-    });
-    return init;
-  });
+  const [edits, setEdits] = useState<Record<number, Record<string, string>>>(() =>
+    buildEditsFromResults(appState.conversionResults),
+  );
+
+  const fingerprint = conversionResultsFingerprint(appState.conversionResults);
+  const prevFingerprint = useRef(fingerprint);
+
+  useEffect(() => {
+    if (prevFingerprint.current === fingerprint) {
+      return;
+    }
+    prevFingerprint.current = fingerprint;
+    setEdits(buildEditsFromResults(appState.conversionResults));
+    setActiveService(0);
+    setActiveTab(0);
+  }, [fingerprint, appState.conversionResults]);
 
   const results = appState.conversionResults.filter(r => r.yamlFiles);
   const noResults = results.length === 0;
