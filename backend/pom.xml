@@ -15,6 +15,8 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <quarkus.platform.version>3.39.1</quarkus.platform.version>
+    <!-- Keep in sync with io.fabric8:kubernetes-client from quarkus-kubernetes-client (mvn dependency:tree). -->
+    <fabric8.version>7.8.0</fabric8.version>
     <surefire-plugin.version>3.5.6</surefire-plugin.version>
   </properties>
 
@@ -70,6 +72,15 @@
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-kubernetes-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.fabric8</groupId>
+      <artifactId>istio-model</artifactId>
+      <version>${fabric8.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-yaml</artifactId>
     </dependency>
     <dependency>
       <groupId>org.yaml</groupId>

@@ -5,6 +5,14 @@ import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 
+import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.lang.ArchCondition;
+import com.tngtech.archunit.lang.ConditionEvents;
+import com.tngtech.archunit.lang.SimpleConditionEvent;
+
+import java.util.Set;
+
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
@@ -188,4 +196,93 @@ class ArchitectureTest {
     static final ArchRule noClassesShouldUseJavaUtilLogging = noClasses()
             .should().dependOnClassesThat()
             .resideInAPackage("java.util.logging..");
+
+    // ── Typed YAML migration scaffold (#262) ───────────────────────────────────
+    //
+    // Shrinking allowlist: remove each class when its typed-yaml phase lands
+    // (k8s-gateway → istio → kuadrant → httproute). When empty, every generator
+    // and conversion support class must build YAML via Fabric8 models or Kuadrant
+    // manifest records only. ReadmeSupport is excluded — it emits Markdown, not manifests.
+
+    private static final Set<String> FORMATTED_YAML_GENERATOR_ALLOWLIST = Set.of(
+            "AnonymousContributor",
+            "AnonymousSecretContributor",
+            "ApiKeyAuthenticationContributor",
+            "ApiKeyGenerator",
+            "ApiKeySecretContributor",
+            "ApiProductGenerator",
+            "AppIdKeyAuthenticationContributor",
+            "AppIdKeySecretContributor",
+            "AuthCachingContributor",
+            "AuthorizationPolicyGenerator",
+            "ConfigMapGenerator",
+            "ContentLimitsEnvoyFilterGenerator",
+            "CorsOptionsContributor",
+            "DefaultCredentialsSecretContributor",
+            "DestinationRuleGenerator",
+            "DnsPolicyGenerator",
+            "EmptyAuthenticationContributor",
+            "GatewayGenerator",
+            "HttpRouteAnnotationsContributor",
+            "HttpRouteBuilder",
+            "IpCheckOpaContributor",
+            "JwtAuthenticationContributor",
+            "LoggingEnvoyFilterGenerator",
+            "MaintenanceModeEnvoyFilterGenerator",
+            "MappingRulesContributor",
+            "Oauth2IntrospectionContributor",
+            "RetryContributor",
+            "RetryEnvoyFilterGenerator",
+            "RoutingContributor",
+            "ServiceEntryGenerator",
+            "TelemetryGenerator",
+            "TlsPolicyGenerator",
+            "TokenIntrospectionSecretContributor",
+            "UpstreamContributor",
+            "UrlRewritingEnvoyFilterGenerator"
+    );
+
+    private static final Set<String> FORMATTED_YAML_CONVERSION_ALLOWLIST = Set.of(
+            "HttpRouteSupport",
+            "JwtClaimCheckSupport",
+            "RateLimitSupport",
+            "RoutingSupport",
+            "UpstreamSupport"
+    );
+
+    @ArchTest
+    static final ArchRule generators_yamlMigration_usesShrinkingAllowlist = classes()
+            .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.service.generator..")
+            .should(onlyUseFormattedYamlWhenAllowlisted(FORMATTED_YAML_GENERATOR_ALLOWLIST));
+
+    @ArchTest
+    static final ArchRule conversion_yamlMigration_usesShrinkingAllowlist = classes()
+            .that().resideInAPackage("com.redhat.migrationtoolkit.rhcl.service.conversion..")
+            .and(notReadmeSupport())
+            .should(onlyUseFormattedYamlWhenAllowlisted(FORMATTED_YAML_CONVERSION_ALLOWLIST));
+
+    private static DescribedPredicate<JavaClass> notReadmeSupport() {
+        return new DescribedPredicate<>("not ReadmeSupport") {
+            @Override
+            public boolean test(JavaClass input) {
+                return !"ReadmeSupport".equals(input.getSimpleName());
+            }
+        };
+    }
+
+    private static ArchCondition<JavaClass> onlyUseFormattedYamlWhenAllowlisted(Set<String> allowlist) {
+        return new ArchCondition<>("use String.formatted() only when listed in the typed-YAML allowlist") {
+            @Override
+            public void check(JavaClass item, ConditionEvents events) {
+                boolean callsFormatted = item.getMethodCallsFromSelf().stream()
+                        .anyMatch(call -> call.getTarget().getOwner().isEquivalentTo(String.class)
+                                && "formatted".equals(call.getName()));
+                if (callsFormatted && !allowlist.contains(item.getSimpleName())) {
+                    String message = item.getFullName()
+                            + " uses String.formatted() but is not in the typed-YAML allowlist";
+                    events.add(SimpleConditionEvent.violated(item, message));
+                }
+            }
+        };
+    }
 }
