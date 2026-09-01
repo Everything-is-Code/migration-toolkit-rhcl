@@ -14,23 +14,8 @@ public class DefaultCredentialsSecretContributor implements SecretContributor {
         if (builder.hasSecret()) {
             return;
         }
-        String name = builder.name();
-        String namespace = builder.namespace();
-        builder.setSecretYaml("""
-apiVersion: v1
-kind: Secret
-metadata:
-  name: %s-credentials
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-type: Opaque
-stringData:
-  client-id: "%s"
-  client-secret: "%s"
-""".formatted(name, namespace, name,
-                ConversionConstants.CREDENTIAL_PLACEHOLDER,
-                ConversionConstants.CREDENTIAL_PLACEHOLDER));
+        builder.beginOpaqueSecret(builder.name() + "-credentials");
+        builder.addStringData("client-id", ConversionConstants.CREDENTIAL_PLACEHOLDER);
+        builder.addStringData("client-secret", ConversionConstants.CREDENTIAL_PLACEHOLDER);
     }
 }

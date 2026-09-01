@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorOrdering;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.SecretBuilder;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.SecretContributor;
 import jakarta.annotation.Priority;
@@ -20,10 +21,17 @@ public class SecretGenerator implements ResourceGenerator {
     @Inject
     Instance<SecretContributor> contributors;
 
+    @Inject
+    ManifestSerializer manifestSerializer;
+
     private List<SecretContributor> manualContributors;
 
     void bindManualContributors(List<SecretContributor> list) {
         this.manualContributors = list;
+    }
+
+    void bindManual(ManifestSerializer serializer) {
+        this.manifestSerializer = serializer;
     }
 
     @Override
@@ -42,7 +50,11 @@ public class SecretGenerator implements ResourceGenerator {
         for (SecretContributor contributor : orderedContributors()) {
             contributor.contribute(builder, ctx);
         }
-        return builder.build();
+        return builder.build(serializer());
+    }
+
+    private ManifestSerializer serializer() {
+        return manifestSerializer != null ? manifestSerializer : new ManifestSerializer();
     }
 
     private List<SecretContributor> orderedContributors() {

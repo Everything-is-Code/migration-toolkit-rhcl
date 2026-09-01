@@ -3,9 +3,14 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApiKeySecretContributorTest {
@@ -40,8 +45,11 @@ class ApiKeySecretContributorTest {
 
         new ApiKeySecretContributor().contribute(builder, ctx);
         String yaml = builder.build();
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) parsed.get("metadata");
 
-        assertTrue(yaml.contains("name: demo-api-api-key"));
-        assertTrue(yaml.contains("api_key:"));
+        assertEquals("demo-api-api-key", metadata.get("name"));
+        assertNotNull(parsed.get("stringData"));
     }
 }

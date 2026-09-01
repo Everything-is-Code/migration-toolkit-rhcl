@@ -4,10 +4,12 @@ import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -55,9 +57,14 @@ class AnonymousSecretContributorTest {
                 "app_id", Map.of("app_id", "aid", "app_key", "akey"));
         String yaml = AnonymousSecretContributor.buildAnonymousSecret(
                 "demo-api", ContributorTestFixtures.NAMESPACE, policy);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) parsed.get("metadata");
+        @SuppressWarnings("unchecked")
+        Map<String, String> stringData = (Map<String, String>) parsed.get("stringData");
 
-        assertTrue(yaml.contains("name: demo-api-anonymous-credentials"));
-        assertTrue(yaml.contains("app_id: \"aid\""));
-        assertTrue(yaml.contains("app_key: \"akey\""));
+        assertEquals("demo-api-anonymous-credentials", metadata.get("name"));
+        assertEquals("aid", stringData.get("app_id"));
+        assertEquals("akey", stringData.get("app_key"));
     }
 }

@@ -12,6 +12,7 @@ import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendType;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeNotes;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ReadmeSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -102,8 +103,8 @@ class ConversionServiceTest {
         ApiService svc = basicService("test-svc", "test-svc");
         svc.authentication = auth("jwt");
         Map<String, String> files = service.convert(svc, "my-namespace");
-        String gw = files.get("gateway.yaml");
-        assertTrue(gw.contains("namespace: my-namespace"));
+        Map<String, Object> gw = parseGateway(files.get("gateway.yaml"));
+        assertEquals("my-namespace", gatewayMetadata(gw).get("namespace"));
     }
 
     @Test
@@ -111,10 +112,10 @@ class ConversionServiceTest {
         ApiService svc = basicService("test-svc", "test-svc");
         svc.authentication = auth("jwt");
         Map<String, String> files = service.convert(svc, "ns");
-        String gw = files.get("gateway.yaml");
-        assertTrue(gw.contains("gatewayClassName: istio"));
-        assertTrue(gw.contains("apiVersion: gateway.networking.k8s.io/v1"));
-        assertTrue(gw.contains("kind: Gateway"));
+        Map<String, Object> gw = parseGateway(files.get("gateway.yaml"));
+        assertEquals("gateway.networking.k8s.io/v1", gw.get("apiVersion"));
+        assertEquals("Gateway", gw.get("kind"));
+        assertEquals("istio", gatewaySpec(gw).get("gatewayClassName"));
     }
 
     // ── HTTPRoute YAML content ────────────────────────────────────────────────
@@ -718,8 +719,8 @@ class ConversionServiceTest {
         svc.systemName = "my_api_service";
         svc.authentication = auth("jwt");
         Map<String, String> files = service.convert(svc, "ns");
-        String gw = files.get("gateway.yaml");
-        assertTrue(gw.contains("my-api-service"));
+        Map<String, Object> gw = parseGateway(files.get("gateway.yaml"));
+        assertTrue(gatewayMetadata(gw).get("name").toString().contains("my-api-service"));
     }
 
     @Test
@@ -785,8 +786,8 @@ class ConversionServiceTest {
         Map<String, String> withLabel = service.convert(svc, "ns", null, null, null, true);
         Map<String, String> stripped = service.convert(svc, "ns", null, null, null, false);
 
-        assertTrue(withLabel.get("gateway.yaml").contains("migrated-from: 3scale"));
-        assertFalse(stripped.get("gateway.yaml").contains("migrated-from: 3scale"));
+        assertEquals("3scale", gatewayLabel(withLabel.get("gateway.yaml"), "migrated-from"));
+        assertFalse(gatewayLabels(stripped.get("gateway.yaml")).containsKey("migrated-from"));
     }
 
     // ── ip_check → AuthorizationPolicy / AuthPolicy OPA (PR2) ─────────────────
@@ -2172,7 +2173,10 @@ class ConversionServiceTest {
         assertFalse(files.values().stream().anyMatch(y -> y.contains("kind: Certificate")));
 
         String gw = files.get("gateway.yaml");
-        assertTrue(gw.contains("name: my-api-tls"),
+        Map<String, Object> httpsTls = (Map<String, Object>) gatewayListeners(gw).get(1).get("tls");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> certRefs = (List<Map<String, Object>>) httpsTls.get("certificateRefs");
+        assertEquals("my-api-tls", certRefs.get(0).get("name"),
                 "Gateway https listener must keep certificateRefs Secret {name}-tls");
     }
 
@@ -2218,10 +2222,9 @@ class ConversionServiceTest {
         Map<String, String> files = service.convert(svc, "ns", null, opts);
 
         String gw = files.get("gateway.yaml");
-        assertTrue(gw.contains("hostname: my-api.apps.cluster.example.com"));
-        // Both http and https listeners must carry hostname
-        int hostnameCount = gw.split("hostname: my-api.apps.cluster.example.com", -1).length - 1;
-        assertEquals(2, hostnameCount, "hostname must appear on both http and https listeners");
+        List<Map<String, Object>> listeners = gatewayListeners(gw);
+        assertEquals("my-api.apps.cluster.example.com", listeners.get(0).get("hostname"));
+        assertEquals("my-api.apps.cluster.example.com", listeners.get(1).get("hostname"));
 
         assertTrue(files.containsKey("dnspolicy.yaml"));
         String dns = files.get("dnspolicy.yaml");
@@ -2557,5 +2560,34 @@ class ConversionServiceTest {
         cfg.put("rules", List.of(rule));
         p.configuration = cfg;
         return p;
+    }
+
+    private static Map<String, Object> parseGateway(String yaml) {
+        return YamlAssertions.parse(yaml);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> gatewayMetadata(Map<String, Object> gateway) {
+        return (Map<String, Object>) gateway.get("metadata");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> gatewaySpec(Map<String, Object> gateway) {
+        return (Map<String, Object>) gateway.get("spec");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> gatewayLabels(String yaml) {
+        Object labels = gatewayMetadata(parseGateway(yaml)).get("labels");
+        return labels instanceof Map<?, ?> labelMap ? (Map<String, Object>) labelMap : Map.of();
+    }
+
+    private static String gatewayLabel(String yaml, String key) {
+        return String.valueOf(gatewayLabels(yaml).get(key));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> gatewayListeners(String yaml) {
+        return (List<Map<String, Object>>) gatewaySpec(parseGateway(yaml)).get("listeners");
     }
 }

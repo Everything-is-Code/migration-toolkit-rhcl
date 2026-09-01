@@ -6,6 +6,7 @@ import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendResolver;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -38,16 +39,18 @@ class IsolatedGeneratorTest {
         String yaml = generator.generate(ctx);
 
         assertNotNull(yaml);
-        assertTrue(yaml.contains("apiVersion: gateway.networking.k8s.io/v1"),
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
+        assertEquals("gateway.networking.k8s.io/v1", parsed.get("apiVersion"),
                 "must include Gateway API version");
-        assertTrue(yaml.contains("kind: Gateway"),
-                "must include kind Gateway");
-        assertTrue(yaml.contains("my-api-gateway"),
+        assertEquals("Gateway", parsed.get("kind"), "must include kind Gateway");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) parsed.get("metadata");
+        assertTrue(metadata.get("name").toString().contains("my-api-gateway"),
                 "name must be derived from systemName");
-        assertTrue(yaml.contains("namespace: test-ns"),
-                "must use the supplied namespace");
-        assertTrue(yaml.contains("gatewayClassName: istio"),
-                "must use istio gateway class");
+        assertEquals("test-ns", metadata.get("namespace"), "must use the supplied namespace");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> spec = (Map<String, Object>) parsed.get("spec");
+        assertEquals("istio", spec.get("gatewayClassName"), "must use istio gateway class");
     }
 
     @Test
