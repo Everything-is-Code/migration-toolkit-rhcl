@@ -18,6 +18,7 @@ import { useAppState } from '../components/AppStateContext';
 import ConversionForm from '../components/conversion/ConversionForm';
 import ConversionResults from '../components/conversion/ConversionResults';
 import type { ConversionFormOptions } from '../components/conversion/conversionFormTypes';
+import { useClearStaleConversionResults } from '../components/conversion/useClearStaleConversionResults';
 import styles from '../styles/shared.module.css';
 
 const ConversionPage: React.FC = () => {
@@ -27,6 +28,8 @@ const ConversionPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+
+  useClearStaleConversionResults();
 
   const hasCorsPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'cors'));

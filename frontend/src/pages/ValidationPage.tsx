@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { validationApi } from '../api/client';
 import { ValidationResult } from '../api/types';
 import { useAppState } from '../components/AppStateContext';
+import { useClearStaleConversionResults } from '../components/conversion/useClearStaleConversionResults';
 import { useNavigate } from 'react-router-dom';
 import { PF_DANGER, PF_SUCCESS, PF_WARNING } from '../styles/pfTokens';
 import styles from '../styles/shared.module.css';
@@ -34,6 +35,7 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
 
 const ValidationPage: React.FC = () => {
   const { appState } = useAppState();
+  useClearStaleConversionResults();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
