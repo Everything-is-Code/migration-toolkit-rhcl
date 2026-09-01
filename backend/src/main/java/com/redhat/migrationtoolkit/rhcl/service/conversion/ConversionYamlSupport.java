@@ -15,9 +15,15 @@ public class ConversionYamlSupport {
 
     private static final Logger LOG = Logger.getLogger(ConversionYamlSupport.class);
 
-    /** Remove the {@code migrated-from: 3scale} label line when the user opts out. */
+    /** Remove the {@code migrated-from: 3scale} label when the user opts out (block or flow YAML). */
     public String stripMigratedFromLabel(String content) {
-        return content.replaceAll("(?m)^[ \\t]*migrated-from: 3scale\\R?", "");
+        String stripped = content.replaceAll("(?m)^[ \\t]*migrated-from:[ \\t]*[\"']?3scale[\"']?[ \\t]*\\R?", "");
+        stripped = stripped.replaceAll("migrated-from:[ \\t]*[\"']?3scale[\"']?[ \\t]*, ?", "");
+        stripped = stripped.replaceAll(",[ \\t]*migrated-from:[ \\t]*[\"']?3scale[\"']?[ \\t]*", "");
+        stripped = stripped.replaceAll(
+                "labels:[ \\t]*\\{[ \\t]*migrated-from:[ \\t]*[\"']?3scale[\"']?[ \\t]*\\}",
+                "labels: {}");
+        return stripped;
     }
 
     /**

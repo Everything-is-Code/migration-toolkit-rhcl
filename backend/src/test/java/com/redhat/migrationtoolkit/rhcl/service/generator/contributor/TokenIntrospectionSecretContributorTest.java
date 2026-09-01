@@ -4,9 +4,13 @@ import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,10 +45,15 @@ class TokenIntrospectionSecretContributorTest {
                 "https://idp.example.com/introspect");
         String yaml = TokenIntrospectionSecretContributor.generateTokenIntrospectionSecret(
                 "demo-api", ContributorTestFixtures.NAMESPACE, policy);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) parsed.get("metadata");
+        @SuppressWarnings("unchecked")
+        Map<String, String> stringData = (Map<String, String>) parsed.get("stringData");
 
-        assertTrue(yaml.contains("name: demo-api-oauth2-introspection"));
-        assertTrue(yaml.contains("clientID: \"cid\""));
-        assertTrue(yaml.contains("clientSecret: \"secret\""));
+        assertEquals("demo-api-oauth2-introspection", metadata.get("name"));
+        assertEquals("cid", stringData.get("clientID"));
+        assertEquals("secret", stringData.get("clientSecret"));
     }
 
     @Test

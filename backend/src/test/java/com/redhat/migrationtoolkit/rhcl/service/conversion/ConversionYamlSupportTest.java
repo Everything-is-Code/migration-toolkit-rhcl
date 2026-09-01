@@ -36,6 +36,47 @@ class ConversionYamlSupportTest {
     }
 
     @Test
+    void stripMigratedFromLabel_removesQuotedLabelLine() {
+        String input = """
+                metadata:
+                  labels:
+                    app: demo
+                    migrated-from: "3scale"
+                """;
+
+        String stripped = support.stripMigratedFromLabel(input);
+
+        assertTrue(stripped.contains("app: demo"));
+        assertTrue(!stripped.contains("migrated-from"));
+    }
+
+    @Test
+    void stripMigratedFromLabel_removesFlowStyleLabel() {
+        String input = """
+                metadata:
+                  labels: {app: demo, migrated-from: 3scale}
+                """;
+
+        String stripped = support.stripMigratedFromLabel(input);
+
+        assertTrue(stripped.contains("app: demo"));
+        assertTrue(!stripped.contains("migrated-from"));
+    }
+
+    @Test
+    void stripMigratedFromLabel_removesSoleFlowStyleLabel() {
+        String input = """
+                metadata:
+                  labels: {migrated-from: 3scale}
+                """;
+
+        String stripped = support.stripMigratedFromLabel(input);
+
+        assertTrue(stripped.contains("labels: {}"));
+        assertTrue(!stripped.contains("migrated-from"));
+    }
+
+    @Test
     void normalizeLineEndings_convertsCrlfToLf() {
         String crlf = "a\r\nb\rc";
         assertEquals("a\nb\nc", ConversionYamlSupport.normalizeLineEndings(crlf));

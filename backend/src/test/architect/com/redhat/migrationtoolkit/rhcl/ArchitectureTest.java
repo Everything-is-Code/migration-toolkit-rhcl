@@ -206,23 +206,17 @@ class ArchitectureTest {
 
     private static final Set<String> FORMATTED_YAML_GENERATOR_ALLOWLIST = Set.of(
             "AnonymousContributor",
-            "AnonymousSecretContributor",
             "ApiKeyAuthenticationContributor",
             "ApiKeyGenerator",
-            "ApiKeySecretContributor",
             "ApiProductGenerator",
             "AppIdKeyAuthenticationContributor",
-            "AppIdKeySecretContributor",
             "AuthCachingContributor",
             "AuthorizationPolicyGenerator",
-            "ConfigMapGenerator",
             "ContentLimitsEnvoyFilterGenerator",
             "CorsOptionsContributor",
-            "DefaultCredentialsSecretContributor",
             "DestinationRuleGenerator",
             "DnsPolicyGenerator",
             "EmptyAuthenticationContributor",
-            "GatewayGenerator",
             "HttpRouteAnnotationsContributor",
             "HttpRouteBuilder",
             "IpCheckOpaContributor",
@@ -237,7 +231,6 @@ class ArchitectureTest {
             "ServiceEntryGenerator",
             "TelemetryGenerator",
             "TlsPolicyGenerator",
-            "TokenIntrospectionSecretContributor",
             "UpstreamContributor",
             "UrlRewritingEnvoyFilterGenerator"
     );

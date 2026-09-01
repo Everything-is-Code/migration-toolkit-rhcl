@@ -4,10 +4,13 @@ import com.redhat.migrationtoolkit.rhcl.model.Application;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -80,10 +83,15 @@ class AppIdKeySecretContributorTest {
         service.applications.add(ContributorTestFixtures.application("my-app-id", "my-app-key"));
         String yaml = AppIdKeySecretContributor.generateAppIdKeySecret(
                 "demo-api", ContributorTestFixtures.NAMESPACE, service);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) parsed.get("metadata");
+        @SuppressWarnings("unchecked")
+        Map<String, String> stringData = (Map<String, String>) parsed.get("stringData");
 
-        assertTrue(yaml.contains("name: demo-api-app-id-keys"));
-        assertTrue(yaml.contains("app_id_1: \"my-app-id\""));
-        assertTrue(yaml.contains("app_key_1: \"my-app-key\""));
+        assertEquals("demo-api-app-id-keys", metadata.get("name"));
+        assertEquals("my-app-id", stringData.get("app_id_1"));
+        assertEquals("my-app-key", stringData.get("app_key_1"));
     }
 
     @Test
@@ -91,8 +99,10 @@ class AppIdKeySecretContributorTest {
         ApiService service = ContributorTestFixtures.apiServiceWithAuth("appIdKey");
         String yaml = AppIdKeySecretContributor.generateAppIdKeySecret(
                 "demo-api", ContributorTestFixtures.NAMESPACE, service);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
 
         assertTrue(yaml.contains("WARNING: No App ID/App Key credentials"));
-        assertTrue(yaml.contains("stringData: {}"));
+        Object stringData = parsed.get("stringData");
+        assertTrue(stringData == null || (stringData instanceof Map<?, ?> map && map.isEmpty()));
     }
 }

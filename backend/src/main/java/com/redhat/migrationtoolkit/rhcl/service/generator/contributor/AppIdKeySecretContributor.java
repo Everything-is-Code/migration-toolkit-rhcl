@@ -1,7 +1,9 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Application;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendResolver;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,15 +26,36 @@ public class AppIdKeySecretContributor implements SecretContributor {
         if (!"appIdKey".equals(authType)) {
             return;
         }
-        builder.setSecretYaml(generateAppIdKeySecret(builder.name(), builder.namespace(), ctx.service));
+        populateAppIdKeySecret(builder, ctx.service);
     }
 
     static String generateAppIdKeySecret(String name, String namespace, ApiService service) {
+        ApiService copy = service;
+        if (service.systemName == null) {
+            copy = new ApiService();
+            copy.id = service.id;
+            copy.name = service.name;
+            copy.systemName = name;
+            copy.authentication = service.authentication;
+            copy.applications = service.applications;
+        }
+        ConversionContext ctx = ConversionContext.build(
+                copy, namespace, null, new ConversionOptions(), new BackendResolver());
+        SecretBuilder builder = new SecretBuilder(ctx);
+        populateAppIdKeySecret(builder, copy);
+        return builder.build();
+    }
+
+    private static void populateAppIdKeySecret(SecretBuilder builder, ApiService service) {
         List<Application> apps = service.applications != null ? service.applications : List.of();
-        StringBuilder stringData = new StringBuilder();
-        String warning;
         int index = 1;
         int pairs = 0;
+        boolean hasAnyEntry = false;
+
+        builder.beginOpaqueSecret(builder.name() + "-app-id-keys");
+        builder.addLabel("auth-type", "app-id-key");
+        builder.addLabel("authorino.kuadrant.io/managed-by", "authorino");
+
         for (Application app : apps) {
             String appId = app.appId != null && !app.appId.isBlank() ? app.appId : null;
             String appKey = null;
@@ -48,56 +71,29 @@ public class AppIdKeySecretContributor implements SecretContributor {
                 continue;
             }
             if (appId != null) {
-                stringData.append(String.format("  app_id_%d: \"%s\"%n", index, appId));
+                builder.addStringData("app_id_" + index, appId);
+                hasAnyEntry = true;
             }
             if (appKey != null) {
-                stringData.append(String.format("  app_key_%d: \"%s\"%n", index, appKey));
+                builder.addStringData("app_key_" + index, appKey);
                 pairs++;
-            } else {
+                hasAnyEntry = true;
+            } else if (appId != null) {
                 LOG.warnf("App ID %s for service %s has no application keys from Admin API",
                         appId, service.id);
             }
             index++;
         }
 
-        if (pairs == 0 && stringData.length() == 0) {
-            warning = "# WARNING: No App ID/App Key credentials fetched from 3scale Admin API — "
-                    + "Secret left empty; do not invent keys\n";
+        if (pairs == 0 && !hasAnyEntry) {
+            builder.setYamlCommentPrefix(
+                    "# WARNING: No App ID/App Key credentials fetched from 3scale Admin API — "
+                            + "Secret left empty; do not invent keys\n");
             LOG.warnf("No App ID/App Key credentials for service %s; emitting empty Secret with warning",
                     service.id);
-            return """
-apiVersion: v1
-kind: Secret
-metadata:
-  name: %s-app-id-keys
-  namespace: %s
-  labels:
-    app: %s
-    auth-type: app-id-key
-    migrated-from: 3scale
-    authorino.kuadrant.io/managed-by: authorino
-type: Opaque
-%sstringData: {}
-""".formatted(name, namespace, name, warning);
         } else if (pairs == 0) {
-            warning = "# WARNING: App IDs present but application keys missing from Admin API\n";
-        } else {
-            warning = "";
+            builder.setYamlCommentPrefix(
+                    "# WARNING: App IDs present but application keys missing from Admin API\n");
         }
-
-        return """
-apiVersion: v1
-kind: Secret
-metadata:
-  name: %s-app-id-keys
-  namespace: %s
-  labels:
-    app: %s
-    auth-type: app-id-key
-    migrated-from: 3scale
-    authorino.kuadrant.io/managed-by: authorino
-type: Opaque
-%sstringData:
-%s""".formatted(name, namespace, name, warning, stringData);
     }
 }
