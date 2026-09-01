@@ -34,12 +34,12 @@ public final class AuthPolicyYamlMerger {
         }
 
         Map<String, AuthenticationRule> mergedAuth = mergeRules(
-                base.spec() != null && base.spec().rules() != null ? base.spec().rules().authentication() : null,
-                overlay.spec() != null && overlay.spec().rules() != null ? overlay.spec().rules().authentication() : null);
+                authenticationRules(base),
+                authenticationRules(overlay));
 
         Map<String, AuthorizationRule> mergedAuthz = mergeRules(
-                base.spec() != null && base.spec().rules() != null ? base.spec().rules().authorization() : null,
-                overlay.spec() != null && overlay.spec().rules() != null ? overlay.spec().rules().authorization() : null);
+                authorizationRules(base),
+                authorizationRules(overlay));
 
         ResponseConfig mergedResponse = overlay.spec() != null && overlay.spec().rules() != null
                 && overlay.spec().rules().response() != null
@@ -70,5 +70,19 @@ public final class AuthPolicyYamlMerger {
             merged.putAll(overlay);
         }
         return merged.isEmpty() ? null : merged;
+    }
+
+    private static Map<String, AuthenticationRule> authenticationRules(AuthPolicyManifest manifest) {
+        if (manifest.spec() == null || manifest.spec().rules() == null) {
+            return null;
+        }
+        return manifest.spec().rules().authentication();
+    }
+
+    private static Map<String, AuthorizationRule> authorizationRules(AuthPolicyManifest manifest) {
+        if (manifest.spec() == null || manifest.spec().rules() == null) {
+            return null;
+        }
+        return manifest.spec().rules().authorization();
     }
 }

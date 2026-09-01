@@ -11,8 +11,6 @@ import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import java.util.Map;
-
 @ApplicationScoped
 @Priority(1700)
 public class TlsPolicyGenerator implements ResourceGenerator {

@@ -61,9 +61,15 @@ public class MappingRulesContributor implements HttpRouteContributor {
                 var ruleBuilder = new HTTPRouteRuleBuilder()
                         .withMatches(match)
                         .withBackendRefs(backendRefs);
-                if (!filters.isEmpty()) ruleBuilder.withFilters(filters);
-                if (timeouts != null) ruleBuilder.withTimeouts(timeouts);
-                if (retry != null) ruleBuilder.withRetry(retry);
+                if (!filters.isEmpty()) {
+                    ruleBuilder.withFilters(filters);
+                }
+                if (timeouts != null) {
+                    ruleBuilder.withTimeouts(timeouts);
+                }
+                if (retry != null) {
+                    ruleBuilder.withRetry(retry);
+                }
                 builder.addRule(ruleBuilder.build());
             }
         } else {
@@ -82,9 +88,15 @@ public class MappingRulesContributor implements HttpRouteContributor {
             var ruleBuilder = new HTTPRouteRuleBuilder()
                     .withMatches(match)
                     .withBackendRefs(backendRefs);
-            if (!filters.isEmpty()) ruleBuilder.withFilters(filters);
-            if (timeouts != null) ruleBuilder.withTimeouts(timeouts);
-            if (retry != null) ruleBuilder.withRetry(retry);
+            if (!filters.isEmpty()) {
+                ruleBuilder.withFilters(filters);
+            }
+            if (timeouts != null) {
+                ruleBuilder.withTimeouts(timeouts);
+            }
+            if (retry != null) {
+                ruleBuilder.withRetry(retry);
+            }
             builder.addRule(ruleBuilder.build());
         }
     }

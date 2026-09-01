@@ -103,15 +103,27 @@ public class HeaderModContributor implements HttpRouteContributor {
             var modifierNested = new HTTPRouteFilterBuilder().withType(filterType);
             if (isResponse) {
                 var mod = modifierNested.withNewResponseHeaderModifier();
-                if (!setHeaders.isEmpty()) mod.withSet(setHeaders);
-                if (!addHeaders.isEmpty()) mod.withAdd(addHeaders);
-                if (!removeHeaders.isEmpty()) mod.withRemove(removeHeaders);
+                if (!setHeaders.isEmpty()) {
+                    mod.withSet(setHeaders);
+                }
+                if (!addHeaders.isEmpty()) {
+                    mod.withAdd(addHeaders);
+                }
+                if (!removeHeaders.isEmpty()) {
+                    mod.withRemove(removeHeaders);
+                }
                 result.add(mod.endResponseHeaderModifier().build());
             } else {
                 var mod = modifierNested.withNewRequestHeaderModifier();
-                if (!setHeaders.isEmpty()) mod.withSet(setHeaders);
-                if (!addHeaders.isEmpty()) mod.withAdd(addHeaders);
-                if (!removeHeaders.isEmpty()) mod.withRemove(removeHeaders);
+                if (!setHeaders.isEmpty()) {
+                    mod.withSet(setHeaders);
+                }
+                if (!addHeaders.isEmpty()) {
+                    mod.withAdd(addHeaders);
+                }
+                if (!removeHeaders.isEmpty()) {
+                    mod.withRemove(removeHeaders);
+                }
                 result.add(mod.endRequestHeaderModifier().build());
             }
         }

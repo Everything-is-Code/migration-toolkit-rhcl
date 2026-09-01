@@ -90,8 +90,11 @@ public class CorsFiltersContributor implements HttpRouteContributor {
         if (maxAgeRaw instanceof Number n) {
             maxAge = n.intValue();
         } else if (maxAgeRaw != null) {
-            try { maxAge = Integer.parseInt(maxAgeRaw.toString().trim()); }
-            catch (NumberFormatException ignored) { maxAge = null; }
+            try {
+                maxAge = Integer.parseInt(maxAgeRaw.toString().trim());
+            } catch (NumberFormatException ignored) {
+                maxAge = null;
+            }
         }
 
         StringBuilder sb = new StringBuilder();
@@ -144,8 +147,11 @@ public class CorsFiltersContributor implements HttpRouteContributor {
         if (maxAgeRaw instanceof Number n) {
             maxAge = n.intValue();
         } else if (maxAgeRaw != null) {
-            try { maxAge = Integer.parseInt(maxAgeRaw.toString().trim()); }
-            catch (NumberFormatException ignored) { maxAge = null; }
+            try {
+                maxAge = Integer.parseInt(maxAgeRaw.toString().trim());
+            } catch (NumberFormatException ignored) {
+                maxAge = null;
+            }
         }
 
         String allowOrigin = "*";
