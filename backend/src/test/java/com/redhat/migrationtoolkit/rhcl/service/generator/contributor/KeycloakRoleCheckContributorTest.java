@@ -2,18 +2,20 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class KeycloakRoleCheckContributorTest {
+
+    private static final ManifestSerializer SERIALIZER = new ManifestSerializer();
 
     @Test
     void shouldContribute_true() {
@@ -25,7 +27,7 @@ class KeycloakRoleCheckContributorTest {
 
         new KeycloakRoleCheckContributor().contribute(builder, ctx);
 
-        assertTrue(builder.build().contains("keycloak-role-check:"));
+        assertTrue(SERIALIZER.toYaml(builder.build()).contains("keycloak-role-check:"));
     }
 
     @Test
@@ -38,7 +40,7 @@ class KeycloakRoleCheckContributorTest {
 
         new KeycloakRoleCheckContributor().contribute(builder, ctx);
 
-        assertFalse(builder.build().contains("keycloak-role-check:"));
+        assertFalse(SERIALIZER.toYaml(builder.build()).contains("keycloak-role-check:"));
     }
 
     @Test
@@ -46,8 +48,10 @@ class KeycloakRoleCheckContributorTest {
         Policy policy = ContributorTestFixtures.policy("keycloak_role_check", true,
                 Map.of("type", "blacklist", "scopes", List.of(
                         Map.of("realm_roles", List.of("banned")))));
-        String rule = KeycloakRoleCheckContributor.buildNamedRule(policy);
-        assertTrue(rule.contains("operator: excl"));
+        AuthorizationRule rule = KeycloakRoleCheckContributor.buildNamedRule(policy);
+        assertNotNull(rule);
+        String yaml = SERIALIZER.toYaml(rule);
+        assertTrue(yaml.contains("operator: excl"));
     }
 
     @Test
@@ -57,13 +61,15 @@ class KeycloakRoleCheckContributorTest {
                         "resource_roles", List.of(Map.of(
                                 "name", "svc",
                                 "roles", List.of("write")))))));
-        String rule = KeycloakRoleCheckContributor.buildNamedRule(policy);
-        assertTrue(rule.contains("auth.identity.resource_access.svc.roles"));
+        AuthorizationRule rule = KeycloakRoleCheckContributor.buildNamedRule(policy);
+        assertNotNull(rule);
+        String yaml = SERIALIZER.toYaml(rule);
+        assertTrue(yaml.contains("auth.identity.resource_access.svc.roles"));
     }
 
     @Test
-    void buildNamedRule_emptyScopes_returnsEmpty() {
-        assertEquals("", KeycloakRoleCheckContributor.buildNamedRule(
+    void buildNamedRule_emptyScopes_returnsNull() {
+        assertNull(KeycloakRoleCheckContributor.buildNamedRule(
                 ContributorTestFixtures.policy("keycloak_role_check", true, Map.of())));
     }
 
@@ -74,11 +80,13 @@ class KeycloakRoleCheckContributorTest {
                 Map.of("client_roles", List.of(Map.of(
                         "name", "my-client",
                         "roles", List.of("read"))))));
-        String rule = KeycloakRoleCheckContributor.buildNamedRule(policy);
+        AuthorizationRule rule = KeycloakRoleCheckContributor.buildNamedRule(policy);
+        assertNotNull(rule);
+        String yaml = SERIALIZER.toYaml(rule);
 
-        assertTrue(rule.contains("auth.identity.realm_access.roles"));
-        assertTrue(rule.contains("operator: incl"));
-        assertTrue(rule.contains("value: \"editor\""));
-        assertTrue(rule.contains("auth.identity.resource_access.my-client.roles"));
+        assertTrue(yaml.contains("auth.identity.realm_access.roles"));
+        assertTrue(yaml.contains("operator: incl"));
+        assertTrue(yaml.contains("value: editor"));
+        assertTrue(yaml.contains("auth.identity.resource_access.my-client.roles"));
     }
 }

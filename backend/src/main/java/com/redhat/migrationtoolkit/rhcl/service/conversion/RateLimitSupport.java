@@ -3,6 +3,12 @@ package com.redhat.migrationtoolkit.rhcl.service.conversion;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.LimitDefinition;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.Rate;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.RateLimitPolicyManifest;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.RateLimitPolicySpec;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -12,13 +18,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Rate-limit policy YAML and plan-ceiling resolution shared by generator and README notes.
+ * Rate-limit policy construction and plan-ceiling resolution shared by generator and README notes.
+ * Produces typed {@link RateLimitPolicyManifest} records; serialization is the generator's concern.
+ * WARNING comments previously emitted inline are now carried only via README notes (Jackson cannot
+ * serialize YAML comments).
  */
 @ApplicationScoped
 public class RateLimitSupport {
 
     @Inject
     PolicyFinder policyFinder;
+
+    @Inject
+    ManifestSerializer manifestSerializer;
 
     /** Manual wiring when {@link PolicyFinder} is not injected. */
     public static RateLimitSupport forManual() {
@@ -65,59 +77,55 @@ public class RateLimitSupport {
         return null;
     }
 
-    public String generateRateLimitPolicy(String name, String namespace, ApiService service) {
-        Map<String, String> limitBlocks = new LinkedHashMap<>();
+    /**
+     * Build a typed {@link RateLimitPolicyManifest} for the given service, or {@code null} when no
+     * rate-limit sources are present.
+     */
+    public RateLimitPolicyManifest buildManifest(String name, String namespace, ApiService service) {
+        return buildManifest(name, namespace, service, true);
+    }
+
+    public RateLimitPolicyManifest buildManifest(
+            String name, String namespace, ApiService service, boolean includeMigratedFromLabel) {
+        Map<String, LimitDefinition> limits = new LinkedHashMap<>();
 
         Policy edge = policyFinder.findEnabled(service, "edge_limiting");
         if (edge != null && edge.configuration != null) {
-            appendEdgeLimitingRates(limitBlocks, edge.configuration);
+            appendEdgeLimitingRates(limits, edge.configuration);
         }
 
         PlanCeiling ceiling = resolvePlanCeiling(service);
         if (ceiling != null) {
-            limitBlocks.put("global", """
-      # WARNING: plan ceiling is the max limit across all application plans (not per-plan)
-      rates:
-        - limit: %d
-          window: %s
-""".formatted(ceiling.limit, ceiling.window));
+            limits.put("global", new LimitDefinition(List.of(new Rate(ceiling.limit, ceiling.window))));
         }
 
-        if (limitBlocks.isEmpty()) {
+        if (limits.isEmpty()) {
             return null;
         }
 
-        StringBuilder limitsYaml = new StringBuilder();
-        for (Map.Entry<String, String> entry : limitBlocks.entrySet()) {
-            limitsYaml.append("    ").append(entry.getKey()).append(":\n");
-            for (String line : entry.getValue().split("\n", -1)) {
-                if (line.isEmpty()) {
-                    continue;
-                }
-                limitsYaml.append(line).append('\n');
-            }
-        }
+        ManifestMeta meta = KuadrantManifestSupport.meta(
+                name + "-ratelimit", namespace, name, includeMigratedFromLabel);
 
-        return """
-apiVersion: kuadrant.io/v1
-kind: RateLimitPolicy
-metadata:
-  name: %s-ratelimit
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: %s-route
-  limits:
-%s""".formatted(name, namespace, name, name, limitsYaml);
+        TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "HTTPRoute", name + "-route");
+        RateLimitPolicySpec spec = new RateLimitPolicySpec(targetRef, limits);
+
+        return new RateLimitPolicyManifest("kuadrant.io/v1", "RateLimitPolicy", meta, spec);
+    }
+
+    /**
+     * Convenience method: serialize to YAML via the provided serializer.
+     * Returns {@code null} when no limits are present.
+     */
+    public String generateRateLimitPolicy(String name, String namespace, ApiService service) {
+        RateLimitPolicyManifest manifest = buildManifest(name, namespace, service);
+        if (manifest == null) {
+            return null;
+        }
+        return KuadrantManifestSupport.resolveSerializer(manifestSerializer).toYaml(manifest);
     }
 
     @SuppressWarnings("unchecked")
-    private void appendEdgeLimitingRates(Map<String, String> limitBlocks, Map<String, Object> cfg) {
+    private void appendEdgeLimitingRates(Map<String, LimitDefinition> limits, Map<String, Object> cfg) {
         int idx = 1;
         Object fixed = cfg.get("fixed_window_limiters");
         if (fixed instanceof List<?> list) {
@@ -132,11 +140,7 @@ spec:
                     continue;
                 }
                 String limitName = edgeLimiterName(limiter, "edge_fixed_window", idx++);
-                limitBlocks.put(limitName, """
-      rates:
-        - limit: %d
-          window: %ds
-""".formatted(count, window));
+                limits.put(limitName, new LimitDefinition(List.of(new Rate(count, window + "s"))));
             }
         }
 
@@ -152,12 +156,7 @@ spec:
                     continue;
                 }
                 String limitName = edgeLimiterName(limiter, "edge_leaky_bucket", idx++);
-                limitBlocks.put(limitName, """
-      # WARNING: 3scale leaky_bucket_limiters approximated as fixed window (window: 1s); not true leaky-bucket semantics
-      rates:
-        - limit: %d
-          window: 1s
-""".formatted(rate));
+                limits.put(limitName, new LimitDefinition(List.of(new Rate(rate, "1s"))));
             }
         }
 
@@ -173,13 +172,7 @@ spec:
                     continue;
                 }
                 String limitName = edgeLimiterName(limiter, "edge_conn", idx++);
-                limitBlocks.put(limitName, """
-      # WARNING: 3scale connection_limiters mapped to per-second rate ceiling;
-      # concurrent-connection semantics are not preserved
-      rates:
-        - limit: %d
-          window: 1s
-""".formatted(connLimit));
+                limits.put(limitName, new LimitDefinition(List.of(new Rate(connLimit, "1s"))));
             }
         }
     }

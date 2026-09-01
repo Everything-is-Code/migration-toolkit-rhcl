@@ -1,6 +1,8 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.RateLimitPolicyManifest;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RateLimitSupport;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,6 +14,9 @@ public class RateLimitPolicyGenerator implements ResourceGenerator {
 
     @Inject
     RateLimitSupport rateLimitSupport;
+
+    @Inject
+    ManifestSerializer manifestSerializer;
 
     @Override
     public String outputKey() {
@@ -33,11 +38,23 @@ public class RateLimitPolicyGenerator implements ResourceGenerator {
 
     @Override
     public String generate(ConversionContext ctx) {
-        return rateLimitSupport.generateRateLimitPolicy(
-                ctx.serviceKebabName, ctx.namespace, ctx.service);
+        RateLimitPolicyManifest manifest = rateLimitSupport.buildManifest(
+                ctx.serviceKebabName, ctx.namespace, ctx.service, ctx.includeMigratedFromLabel);
+        if (manifest == null) {
+            return null;
+        }
+        return serializer().toYaml(manifest);
     }
 
     void bindManual(RateLimitSupport support) {
         this.rateLimitSupport = support;
+    }
+
+    void bindManualSerializer(ManifestSerializer serializer) {
+        this.manifestSerializer = serializer;
+    }
+
+    private ManifestSerializer serializer() {
+        return manifestSerializer != null ? manifestSerializer : new ManifestSerializer();
     }
 }

@@ -1,5 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -13,24 +14,8 @@ public class EmptyAuthenticationContributor implements AuthPolicyContributor {
         if (builder.hasBase()) {
             return;
         }
-        String name = builder.name();
-        String namespace = builder.namespace();
-        builder.setBaseYaml("""
-apiVersion: kuadrant.io/v1
-kind: AuthPolicy
-metadata:
-  name: %s-auth
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: %s-route
-  rules:
-    authentication: {}
-""".formatted(name, namespace, name, name));
+        builder.setTargetRef(new TargetRef("gateway.networking.k8s.io", "HTTPRoute",
+                builder.name() + "-route"));
+        builder.setEmptyAuthentication();
     }
 }

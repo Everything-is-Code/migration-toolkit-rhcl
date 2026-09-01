@@ -1,12 +1,27 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.IssuerRef;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TlsPolicyManifest;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TlsPolicySpec;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.KuadrantManifestSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 @ApplicationScoped
 @Priority(1700)
 public class TlsPolicyGenerator implements ResourceGenerator {
+
+    @Inject
+    ManifestSerializer manifestSerializer;
+
+    void bindManual(ManifestSerializer serializer) {
+        this.manifestSerializer = serializer;
+    }
 
     @Override
     public String outputKey() {
@@ -26,24 +41,19 @@ public class TlsPolicyGenerator implements ResourceGenerator {
         String issuerName = ctx.options.tlsIssuerName;
         String kind = (issuerKind != null && !issuerKind.isBlank()) ? issuerKind : "ClusterIssuer";
         String issuer = (issuerName != null && !issuerName.isBlank()) ? issuerName : "letsencrypt-prod";
-        return """
-apiVersion: kuadrant.io/v1
-kind: TLSPolicy
-metadata:
-  name: %s-tls-policy
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: %s-gateway
-  issuerRef:
-    group: cert-manager.io
-    kind: %s
-    name: %s
-""".formatted(name, namespace, name, name, kind, issuer);
+
+        ManifestMeta meta = KuadrantManifestSupport.meta(
+                name + "-tls-policy", namespace, name, ctx.includeMigratedFromLabel);
+
+        TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "Gateway", name + "-gateway");
+        IssuerRef issuerRef = new IssuerRef("cert-manager.io", kind, issuer);
+        TlsPolicySpec spec = new TlsPolicySpec(targetRef, issuerRef);
+
+        TlsPolicyManifest manifest = new TlsPolicyManifest("kuadrant.io/v1", "TLSPolicy", meta, spec);
+        return serializer().toYaml(manifest);
+    }
+
+    private ManifestSerializer serializer() {
+        return manifestSerializer != null ? manifestSerializer : new ManifestSerializer();
     }
 }

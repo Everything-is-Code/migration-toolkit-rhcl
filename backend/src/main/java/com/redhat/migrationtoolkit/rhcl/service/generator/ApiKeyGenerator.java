@@ -1,12 +1,28 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiKeyManifest;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiKeySpec;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiProductRef;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.RequestedBy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.SecretRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.KuadrantManifestSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 @ApplicationScoped
 @Priority(700)
 public class ApiKeyGenerator implements ResourceGenerator {
+
+    @Inject
+    ManifestSerializer manifestSerializer;
+
+    void bindManual(ManifestSerializer serializer) {
+        this.manifestSerializer = serializer;
+    }
 
     @Override
     public String outputKey() {
@@ -23,24 +39,22 @@ public class ApiKeyGenerator implements ResourceGenerator {
     public String generate(ConversionContext ctx) {
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
-        return """
-apiVersion: devportal.kuadrant.io/v1alpha1
-kind: APIKey
-metadata:
-  name: %s-api-key
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-spec:
-  apiProductRef:
-    name: %s
-  planTier: basic
-  requestedBy:
-    email: admin@example.com
-    userId: admin
-  secretRef:
-    name: %s-api-key
-""".formatted(name, namespace, name, name, name);
+
+        ManifestMeta meta = KuadrantManifestSupport.meta(
+                name + "-api-key", namespace, name, ctx.includeMigratedFromLabel);
+
+        ApiKeySpec spec = new ApiKeySpec(
+                new ApiProductRef(name),
+                "basic",
+                new RequestedBy("admin@example.com", "admin"),
+                new SecretRef(name + "-api-key"));
+
+        ApiKeyManifest manifest = new ApiKeyManifest(
+                "devportal.kuadrant.io/v1alpha1", "APIKey", meta, spec);
+        return serializer().toYaml(manifest);
+    }
+
+    private ManifestSerializer serializer() {
+        return manifestSerializer != null ? manifestSerializer : new ManifestSerializer();
     }
 }

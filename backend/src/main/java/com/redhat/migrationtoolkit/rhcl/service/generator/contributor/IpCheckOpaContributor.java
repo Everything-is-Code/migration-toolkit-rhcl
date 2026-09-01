@@ -1,6 +1,7 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.HttpRouteSupport;
@@ -39,16 +40,18 @@ public class IpCheckOpaContributor implements AuthPolicyContributor {
         if (ipCheck == null) {
             return;
         }
-        String opaBlock = buildIpCheckOpaAuthorization(ipCheck, policyConfigSupport());
-        builder.appendAuthorizationRule(opaBlock);
+        AuthorizationRule rule = buildIpCheckOpaAuthorization(ipCheck, policyConfigSupport());
+        if (rule != null) {
+            builder.addAuthorization("ip-check", rule);
+        }
     }
 
-    static String buildIpCheckOpaAuthorization(Policy ipCheck, PolicyConfigSupport policyConfigSupport) {
+    static AuthorizationRule buildIpCheckOpaAuthorization(Policy ipCheck, PolicyConfigSupport policyConfigSupport) {
         Map<String, Object> cfg = ipCheck.configuration != null ? ipCheck.configuration : Map.of();
         String checkType = String.valueOf(cfg.getOrDefault("check_type", "whitelist"));
         List<String> ips = HttpRouteSupport.toStringList(cfg.get("ips"));
         if (ips.isEmpty()) {
-            return "";
+            return null;
         }
         StringBuilder cidrList = new StringBuilder();
         for (String ip : ips) {
@@ -62,36 +65,32 @@ public class IpCheckOpaContributor implements AuthPolicyContributor {
             cidrList.append("\"").append(cidr).append("\"");
         }
         if (cidrList.length() == 0) {
-            return "";
+            return null;
         }
         boolean whitelist = !"blacklist".equalsIgnoreCase(checkType)
                 && !"deny".equalsIgnoreCase(checkType);
+
         String allowBody = whitelist
-                ? """
-            allow {
-              some i
-              net.cidr_contains(cidrs[i], client_ip)
-            }
-"""
-                : """
-            allow {
-              not denied
-            }
-            denied {
-              some i
-              net.cidr_contains(cidrs[i], client_ip)
-            }
-""";
-        return """
-    authorization:
-      ip-check:
-        opa:
-          rego: |
-            package ipcheck
-            import future.keywords
-            cidrs := [%s]
-            # WARNING: peer IP under Authorino; for client IP use AuthorizationPolicy remoteIpBlocks.
-            client_ip := input.source.address
-%s""".formatted(cidrList, allowBody);
+                ? "            allow {\n"
+                + "              some i\n"
+                + "              net.cidr_contains(cidrs[i], client_ip)\n"
+                + "            }\n"
+                : "            allow {\n"
+                + "              not denied\n"
+                + "            }\n"
+                + "            denied {\n"
+                + "              some i\n"
+                + "              net.cidr_contains(cidrs[i], client_ip)\n"
+                + "            }\n";
+
+        String rego = "            package ipcheck\n"
+                + "            import future.keywords\n"
+                + "            cidrs := [" + cidrList + "]\n"
+                + "            # WARNING: peer IP under Authorino; for client IP use "
+                + "AuthorizationPolicy remoteIpBlocks.\n"
+                + "            client_ip := input.source.address\n"
+                + allowBody;
+
+        return new AuthorizationRule(Map.of("opa", Map.of("rego", rego)));
     }
 }
