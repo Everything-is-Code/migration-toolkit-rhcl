@@ -84,6 +84,21 @@
       <groupId>io.fabric8</groupId>
       <artifactId>istio-model</artifactId>
       <version>${fabric8.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.fabric8</groupId>
+      <artifactId>kubernetes-model-gatewayapi</artifactId>
+      <version>${fabric8.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
