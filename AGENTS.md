@@ -14,7 +14,7 @@ Short map for automated agents and humans working in this repository.
 | `deploy/` | OpenShift S2I manifests + `install.sh` |
 | `helm/` | Helm chart packaging |
 | `documentation/` | User guide, API, deployment, conversion architecture (mirrored from SDD) |
-| `docs/` | Published Helm chart index (GitHub Pages) |
+| `docs/` | Published Helm chart index (GitHub Pages) + contributor CI matrix ([STATUS_CHECK_MATRIX.md](docs/STATUS_CHECK_MATRIX.md)) |
 | `scripts/` | Seed / helper scripts |
 | `testdata/` | Sample payloads for local demos |
 
@@ -83,6 +83,8 @@ cd backend && ./generate-report.sh
 cd frontend && npm run typecheck
 cd frontend && npm test
 ```
+
+PR required / advisory checks: [docs/STATUS_CHECK_MATRIX.md](docs/STATUS_CHECK_MATRIX.md) (also summarized in [CONTRIBUTING.md](CONTRIBUTING.md)).
 
 ## Container base digests
 
