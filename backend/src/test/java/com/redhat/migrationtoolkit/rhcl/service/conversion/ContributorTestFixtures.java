@@ -7,6 +7,8 @@ import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthenticationRule;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.AuthPolicyBuilder;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.HttpRouteBuilder;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.SecretBuilder;
@@ -164,26 +166,11 @@ public final class ContributorTestFixtures {
 
     public static AuthPolicyBuilder authPolicyBuilderWithBase(ConversionContext ctx) {
         AuthPolicyBuilder builder = new AuthPolicyBuilder(ctx);
-        builder.setBaseYaml("""
-apiVersion: kuadrant.io/v1
-kind: AuthPolicy
-metadata:
-  name: demo-api-auth
-  namespace: test-ns
-  labels:
-    app: demo-api
-    migrated-from: 3scale
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: HTTPRoute
-    name: demo-api-route
-  rules:
-    authentication:
-      jwt-auth:
-        jwt:
-          issuerUrl: https://idp.example.com
-""");
+        builder.setTargetRef(new TargetRef("gateway.networking.k8s.io", "HTTPRoute",
+                ctx.serviceKebabName + "-route"));
+        builder.addAuthentication("jwt-auth",
+                new AuthenticationRule(java.util.Map.of("jwt",
+                        java.util.Map.of("issuerUrl", "https://idp.example.com"))));
         return builder;
     }
 

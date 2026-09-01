@@ -1,6 +1,7 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.JwtClaimCheckSupport;
@@ -29,7 +30,9 @@ public class JwtClaimCheckContributor implements AuthPolicyContributor {
             return;
         }
         JwtClaimCheckSupport.JwtClaimParseResult parsed = JwtClaimCheckSupport.parseRules(claimCheck);
-        String namedRule = JwtClaimCheckSupport.buildNamedRule(parsed.patterns());
-        builder.appendAuthorizationRule(namedRule);
+        AuthorizationRule rule = JwtClaimCheckSupport.buildNamedRule(parsed.patterns());
+        if (rule != null) {
+            builder.addAuthorization("jwt-claim-check", rule);
+        }
     }
 }

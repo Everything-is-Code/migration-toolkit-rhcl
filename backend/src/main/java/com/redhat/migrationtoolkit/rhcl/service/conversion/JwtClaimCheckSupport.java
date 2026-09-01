@@ -2,9 +2,11 @@ package com.redhat.migrationtoolkit.rhcl.service.conversion;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -92,20 +94,23 @@ public final class JwtClaimCheckSupport {
         return new JwtClaimParseResult(patterns, gapNotes);
     }
 
-    public static String buildNamedRule(List<JwtClaimPattern> patterns) {
+    /**
+     * Build a typed {@link AuthorizationRule} for the given JWT claim patterns.
+     * Returns {@code null} when patterns is empty.
+     */
+    public static AuthorizationRule buildNamedRule(List<JwtClaimPattern> patterns) {
         if (patterns == null || patterns.isEmpty()) {
-            return "";
+            return null;
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append("      jwt-claim-check:\n");
-        sb.append("        patternMatching:\n");
-        sb.append("          patterns:\n");
+        List<Map<String, String>> patternList = new ArrayList<>();
         for (JwtClaimPattern pattern : patterns) {
-            sb.append("            - selector: ").append(pattern.selector()).append('\n');
-            sb.append("              operator: ").append(pattern.operator()).append('\n');
-            sb.append("              value: ").append(HttpRouteSupport.yamlDoubleQuoted(pattern.value())).append('\n');
+            LinkedHashMap<String, String> entry = new LinkedHashMap<>();
+            entry.put("selector", pattern.selector());
+            entry.put("operator", pattern.operator());
+            entry.put("value", pattern.value());
+            patternList.add(entry);
         }
-        return sb.toString();
+        return new AuthorizationRule(Map.of("patternMatching", Map.of("patterns", patternList)));
     }
 
     public static String buildReadmeNotes(ApiService service, PolicyFinder policyFinder) {

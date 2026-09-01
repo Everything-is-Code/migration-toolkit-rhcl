@@ -2,16 +2,19 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.CacheConfig;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class AuthCachingContributorTest {
+
+    private static final ManifestSerializer SERIALIZER = new ManifestSerializer();
 
     @Test
     void shouldContribute_true() {
@@ -23,7 +26,7 @@ class AuthCachingContributorTest {
 
         new AuthCachingContributor().contribute(builder, ctx);
 
-        assertTrue(builder.authCacheBlock().contains("cache:"));
+        assertNotNull(builder.cacheConfig());
     }
 
     @Test
@@ -33,11 +36,11 @@ class AuthCachingContributorTest {
 
         new AuthCachingContributor().contribute(builder, ctx);
 
-        assertTrue(builder.authCacheBlock().isEmpty());
+        assertNull(builder.cacheConfig());
     }
 
     @Test
-    void contribute_withApiKeyAuth_interpolatesCacheBlockInBuiltYaml() {
+    void contribute_withApiKeyAuth_interpolatesCacheConfigInBuiltYaml() {
         ApiService service = ContributorTestFixtures.apiServiceWithAuth("apiKey");
         service.policies.add(ContributorTestFixtures.policy("caching", true,
                 Map.of("caching_type", "allow")));
@@ -46,7 +49,7 @@ class AuthCachingContributorTest {
 
         new AuthCachingContributor().contribute(builder, ctx);
         new ApiKeyAuthenticationContributor().contribute(builder, ctx);
-        String yaml = builder.build();
+        String yaml = SERIALIZER.toYaml(builder.build());
 
         assertTrue(yaml.contains("api-key-auth:"));
         assertTrue(yaml.contains("cache:"));
@@ -54,7 +57,7 @@ class AuthCachingContributorTest {
     }
 
     @Test
-    void contribute_cachingPolicy_setsBlockOnBuilder() {
+    void contribute_cachingPolicy_setsCacheConfigOnBuilder() {
         ApiService service = ContributorTestFixtures.apiService();
         service.policies.add(ContributorTestFixtures.policy("3scale_auth_caching", true,
                 Map.of("caching_type", "allow")));
@@ -63,7 +66,9 @@ class AuthCachingContributorTest {
 
         new AuthCachingContributor().contribute(builder, ctx);
 
-        assertTrue(builder.authCacheBlock().contains("ttl: 300"));
+        CacheConfig cache = builder.cacheConfig();
+        assertNotNull(cache);
+        assertEquals(300, cache.ttl());
     }
 
     @Test
@@ -75,9 +80,9 @@ class AuthCachingContributorTest {
         Policy resilient = ContributorTestFixtures.policy("caching", true,
                 Map.of("caching_type", "resilient"));
 
-        assertTrue(AuthCachingContributor.buildAuthCacheBlock(strict).contains("ttl: 60"));
-        assertTrue(AuthCachingContributor.buildAuthCacheBlock(allow).contains("ttl: 300"));
-        assertTrue(AuthCachingContributor.buildAuthCacheBlock(resilient).contains("ttl: 600"));
-        assertEquals("", AuthCachingContributor.buildAuthCacheBlock(null));
+        assertEquals(60, AuthCachingContributor.buildCacheConfig(strict).ttl());
+        assertEquals(300, AuthCachingContributor.buildCacheConfig(allow).ttl());
+        assertEquals(600, AuthCachingContributor.buildCacheConfig(resilient).ttl());
+        assertNull(AuthCachingContributor.buildCacheConfig(null));
     }
 }

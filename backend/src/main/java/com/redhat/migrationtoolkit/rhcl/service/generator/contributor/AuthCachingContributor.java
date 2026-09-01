@@ -1,6 +1,8 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.CacheConfig;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.CacheKey;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import jakarta.annotation.Priority;
@@ -21,12 +23,12 @@ public class AuthCachingContributor implements AuthPolicyContributor {
     @Override
     public void contribute(AuthPolicyBuilder builder, ConversionContext ctx) {
         Policy caching = policyFinder().findEnabledAny(ctx.service, true, "3scale_auth_caching", "caching");
-        builder.setAuthCacheBlock(buildAuthCacheBlock(caching));
+        builder.setCacheConfig(buildCacheConfig(caching));
     }
 
-    static String buildAuthCacheBlock(Policy authCachingPolicy) {
+    static CacheConfig buildCacheConfig(Policy authCachingPolicy) {
         if (authCachingPolicy == null) {
-            return "";
+            return null;
         }
         String cachingType = authCachingPolicy.configuration != null
                 ? String.valueOf(authCachingPolicy.configuration.getOrDefault("caching_type", "strict"))
@@ -36,11 +38,6 @@ public class AuthCachingContributor implements AuthPolicyContributor {
             case "resilient" -> 600;
             default -> 60;
         };
-        return """
-        cache:
-          key:
-            selector: request.headers.authorization
-          ttl: %d
-""".formatted(ttl);
+        return new CacheConfig(new CacheKey("request.headers.authorization"), ttl);
     }
 }

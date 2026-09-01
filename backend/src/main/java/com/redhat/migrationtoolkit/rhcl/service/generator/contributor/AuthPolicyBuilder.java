@@ -1,30 +1,52 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthPolicyManifest;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthPolicyRules;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthPolicySpec;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthenticationRule;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.CacheConfig;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ResponseConfig;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import org.jboss.logging.Logger;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
- * Mutable accumulator for AuthPolicy YAML assembled by contributors.
+ * Typed accumulator for AuthPolicy assembled by contributors.
  * <p>
- * Contributors that call {@link #setBaseYaml} are responsible for interpolating
- * {@link #authCacheBlock()} into their YAML template. {@code build()} merges
- * authorization rule blocks and the discovery marker but does <b>not</b> apply
- * the cache block — the base-auth contributor owns that contract.
+ * Contributors call {@link #addAuthentication}, {@link #addAuthorization}, and
+ * {@link #setResponse} to populate the policy; {@link #build()} produces an immutable
+ * {@link AuthPolicyManifest} record ready for serialization via {@code ManifestSerializer}.
+ * <p>
+ * The auth-caching contributor sets a {@link CacheConfig} via {@link #setCacheConfig} before
+ * authentication contributors run; auth contributors embed the cache into their rule via
+ * {@link #cacheConfig()}.
  */
 public final class AuthPolicyBuilder {
 
+    private static final Logger LOG = Logger.getLogger(AuthPolicyBuilder.class);
+
     private final String name;
     private final String namespace;
-    private String baseYaml;
-    private String authCacheBlock = "";
-    private final List<String> authorizationRuleBlocks = new ArrayList<>();
-    private String discoveryMarker = null;
+    private final boolean includeMigratedFromLabel;
+
+    private final LinkedHashMap<String, AuthenticationRule> authentication = new LinkedHashMap<>();
+    private final LinkedHashMap<String, AuthorizationRule> authorization = new LinkedHashMap<>();
+    private ResponseConfig response;
+    private TargetRef targetRef;
+    private CacheConfig cacheConfig;
+    private boolean authInitialized;
+
+    private final LinkedHashMap<String, String> extraAnnotations = new LinkedHashMap<>();
 
     public AuthPolicyBuilder(ConversionContext ctx) {
         this.name = ctx.serviceKebabName;
         this.namespace = ctx.namespace;
+        this.includeMigratedFromLabel = ctx.includeMigratedFromLabel;
     }
 
     public String name() {
@@ -35,59 +57,125 @@ public final class AuthPolicyBuilder {
         return namespace;
     }
 
+    /** True once an authentication rule (or the explicit-empty flag) has been set by a contributor. */
     public boolean hasBase() {
-        return baseYaml != null && !baseYaml.isBlank();
+        return authInitialized;
     }
 
-    public void setBaseYaml(String yaml) {
-        this.baseYaml = yaml;
+    // ── Authentication ────────────────────────────────────────────────────────
+
+    /**
+     * Add a named authentication rule (e.g. {@code "jwt-auth"}).
+     * Last write wins when the same name is used twice.
+     */
+    public AuthPolicyBuilder addAuthentication(String ruleName, AuthenticationRule rule) {
+        authentication.put(ruleName, rule);
+        authInitialized = true;
+        return this;
     }
 
-    public void setAuthCacheBlock(String block) {
-        this.authCacheBlock = block != null ? block : "";
+    /**
+     * Mark authentication as explicitly empty ({@code authentication: {}}).
+     * Used by {@code EmptyAuthenticationContributor} when no other contributor sets a rule.
+     */
+    public AuthPolicyBuilder setEmptyAuthentication() {
+        authInitialized = true;
+        return this;
     }
 
-    public String authCacheBlock() {
-        return authCacheBlock;
+    // ── Authorization ─────────────────────────────────────────────────────────
+
+    /**
+     * Add a named authorization rule (e.g. {@code "ip-check"}).
+     * Last write wins when the same name is used twice.
+     */
+    public AuthPolicyBuilder addAuthorization(String ruleName, AuthorizationRule rule) {
+        authorization.put(ruleName, rule);
+        return this;
     }
 
-    public void appendAuthorizationRule(String namedRuleBlock) {
-        if (namedRuleBlock != null && !namedRuleBlock.isBlank()) {
-            authorizationRuleBlocks.add(namedRuleBlock);
-        }
+    // ── Response ──────────────────────────────────────────────────────────────
+
+    public AuthPolicyBuilder setResponse(ResponseConfig response) {
+        this.response = response;
+        return this;
     }
 
+    // ── Target ref ────────────────────────────────────────────────────────────
+
+    public AuthPolicyBuilder setTargetRef(TargetRef ref) {
+        this.targetRef = ref;
+        return this;
+    }
+
+    // ── Labels / Annotations ─────────────────────────────────────────────────
+
+    public AuthPolicyBuilder addAnnotation(String key, String value) {
+        extraAnnotations.put(key, value);
+        return this;
+    }
+
+    // ── Auth caching ─────────────────────────────────────────────────────────
+
+    public AuthPolicyBuilder setCacheConfig(CacheConfig cache) {
+        this.cacheConfig = cache;
+        return this;
+    }
+
+    /** Returns the auth-caching config set by {@code AuthCachingContributor}, or {@code null}. */
+    public CacheConfig cacheConfig() {
+        return cacheConfig;
+    }
+
+    // ── Discovery marker (test infra) ─────────────────────────────────────────
+
+    /**
+     * Parses a {@code "key: value"} discovery marker string into a metadata annotation.
+     * Used by test discovery contributors only — production code should call
+     * {@link #addAnnotation} directly.
+     */
     public void setDiscoveryMarker(String marker) {
-        this.discoveryMarker = marker;
+        if (marker == null || marker.isBlank()) {
+            return;
+        }
+        int colon = marker.indexOf(':');
+        if (colon <= 0) {
+            LOG.warnf("Ignoring malformed discovery marker (expected key: value): %s", marker);
+            return;
+        }
+        String key = marker.substring(0, colon).trim();
+        String value = marker.substring(colon + 1).trim();
+        if (key.isEmpty() || value.isEmpty()) {
+            LOG.warnf("Ignoring malformed discovery marker (empty key or value): %s", marker);
+            return;
+        }
+        extraAnnotations.put(key, value);
     }
 
-    public String build() {
-        if (!hasBase()) {
-            return "";
-        }
-        String yaml = baseYaml;
-        for (String block : authorizationRuleBlocks) {
-            yaml = AuthPolicyYamlMerger.mergeAuthorizationNamedRules(yaml, block);
-        }
-        if (discoveryMarker != null) {
-            yaml = injectDiscoveryMarker(yaml, discoveryMarker);
-        }
-        return yaml;
-    }
+    // ── Build ─────────────────────────────────────────────────────────────────
 
-    private static String injectDiscoveryMarker(String yaml, String marker) {
-        if (yaml.contains("  annotations:\n")) {
-            return yaml.replace("  annotations:\n", "  annotations:\n    " + marker + "\n");
+    /**
+     * Produce an immutable {@link AuthPolicyManifest} from accumulated rules.
+     * Returns a manifest with empty authentication ({@code authentication: {}}) when
+     * {@link #setEmptyAuthentication()} was called and no rules were added.
+     */
+    public AuthPolicyManifest build() {
+        Map<String, String> labels = new LinkedHashMap<>();
+        labels.put("app", name);
+        if (includeMigratedFromLabel) {
+            labels.put("migrated-from", "3scale");
         }
-        int specIdx = yaml.indexOf("spec:");
-        if (specIdx < 0) {
-            return yaml;
-        }
-        String header = yaml.substring(0, specIdx);
-        String tail = yaml.substring(specIdx);
-        if (!header.endsWith("\n")) {
-            header += "\n";
-        }
-        return header + "  annotations:\n    " + marker + "\n" + tail;
+
+        Map<String, String> annotations = extraAnnotations.isEmpty() ? null : new LinkedHashMap<>(extraAnnotations);
+
+        ManifestMeta meta = new ManifestMeta(name + "-auth", namespace, labels, annotations);
+
+        Map<String, AuthenticationRule> authMap = authentication.isEmpty() ? Map.of() : new LinkedHashMap<>(authentication);
+        Map<String, AuthorizationRule> authzMap = authorization.isEmpty() ? null : new LinkedHashMap<>(authorization);
+
+        AuthPolicyRules rules = new AuthPolicyRules(authMap, authzMap, response);
+        AuthPolicySpec spec = new AuthPolicySpec(targetRef, rules);
+
+        return new AuthPolicyManifest("kuadrant.io/v1", "AuthPolicy", meta, spec);
     }
 }

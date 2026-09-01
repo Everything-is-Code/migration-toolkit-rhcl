@@ -1148,8 +1148,8 @@ class ConversionServiceTest {
         String rlp = files.get("ratelimitpolicy.yaml");
         String readme = files.get("README.md");
         assertNotNull(rlp);
-        assertTrue(rlp.contains("# WARNING:") && rlp.toLowerCase().contains("connection"),
-                "connection_limiters→rate approximation must warn in RateLimitPolicy YAML");
+        // WARNING comments are no longer emitted in YAML (design decision #5 — Jackson cannot serialize comments)
+        // Warnings for connection_limiters remain in README via ReadmeSupport
         assertTrue(readme != null && readme.contains("WARNING")
                         && readme.toLowerCase().contains("connection"),
                 "connection_limiters approximation must warn in README");
@@ -1167,8 +1167,8 @@ class ConversionServiceTest {
         String rlp = files.get("ratelimitpolicy.yaml");
         String readme = files.get("README.md");
         assertNotNull(rlp);
-        assertTrue(rlp.contains("# WARNING:") && rlp.toLowerCase().contains("leaky"),
-                "leaky_bucket→fixed window approximation must warn in RateLimitPolicy YAML");
+        // WARNING comments are no longer emitted in YAML (design decision #5 — Jackson cannot serialize comments)
+        // Warnings for leaky_bucket remain in README via ReadmeSupport
         assertTrue(readme != null && readme.contains("WARNING")
                         && readme.toLowerCase().contains("leaky"),
                 "leaky_bucket approximation must warn in README");
@@ -1193,9 +1193,8 @@ class ConversionServiceTest {
         String readme = files.get("README.md");
         assertNotNull(rlp);
         assertTrue(rlp.contains("90"));
-        assertTrue(rlp.contains("# WARNING:")
-                        && (rlp.toLowerCase().contains("plan") || rlp.toLowerCase().contains("ceiling")),
-                "plan ceiling = max across all plans must warn in RateLimitPolicy YAML");
+        // WARNING comments are no longer emitted in YAML (design decision #5 — Jackson cannot serialize comments)
+        // Warnings for plan-ceiling remain in README via ReadmeSupport
         assertTrue(readme != null && readme.contains("WARNING")
                         && (readme.toLowerCase().contains("plan") || readme.toLowerCase().contains("ceiling")),
                 "plan-ceiling max-all-plans note must appear in README");
