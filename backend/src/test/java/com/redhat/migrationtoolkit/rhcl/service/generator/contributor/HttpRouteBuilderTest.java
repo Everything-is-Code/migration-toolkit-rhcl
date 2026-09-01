@@ -155,8 +155,53 @@ class HttpRouteBuilderTest {
     }
 
     @Test
+    void injectCorsFilters_multiRuleMixedFilters_producesParseableYaml() {
+        String base = "spec:\n  rules:\n"
+                + "  - backendRefs:\n    - name: api-backend\n      port: 8080\n"
+                + "    filters:\n    - type: URLRewrite\n      urlRewrite:\n        hostname: api.example.com\n"
+                + "    matches:\n    - path:\n        type: PathPrefix\n        value: /api\n"
+                + "  - backendRefs:\n    - name: other-backend\n      port: 8080\n"
+                + "    matches:\n    - path:\n        type: PathPrefix\n        value: /other\n";
+        String cors = "- type: CORS\n  cors:\n    allowOrigins:\n    - \"*\"";
+
+        String merged = HttpRouteBuilder.injectCorsFilters(base, cors);
+
+        assertEquals(2, merged.split("type: CORS", -1).length - 1, merged);
+        // Second rule must get a filters: section (not bare CORS before matches)
+        int secondRuleIdx = merged.indexOf("other-backend");
+        String secondRule = merged.substring(secondRuleIdx);
+        assertTrue(secondRule.indexOf("filters:") < secondRule.indexOf("matches:"), secondRule);
+
+        org.yaml.snakeyaml.Yaml yamlParser = new org.yaml.snakeyaml.Yaml();
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> doc = yamlParser.load(merged);
+        assertTrue(doc.containsKey("spec"));
+    }
+
+    @Test
     void injectCorsFilters_blankFragment_returnsOriginal() {
         assertEquals("yaml", HttpRouteBuilder.injectCorsFilters("yaml", "  "));
+    }
+
+    @Test
+    void injectCorsFilters_withoutRulesHeader_fallsBackToSingleRuleInjection() {
+        String base = "kind: HTTPRoute\nspec:\n  hostnames:\n  - api.example.com\n"
+                + "  - backendRefs:\n    - name: demo-backend\n      port: 8080\n"
+                + "    matches:\n    - path:\n        type: PathPrefix\n        value: /\n";
+        String cors = "- type: CORS\n  cors:\n    allowOrigins:\n    - \"*\"";
+
+        String merged = HttpRouteBuilder.injectCorsFilters(base, cors);
+
+        assertTrue(merged.contains("type: CORS"), merged);
+        assertTrue(merged.indexOf("filters:") < merged.indexOf("matches:"), merged);
+    }
+
+    @Test
+    void injectCorsFilters_emptyRulesBody_returnsOriginal() {
+        String base = "spec:\n  rules:\n";
+        String cors = "- type: CORS\n  cors:\n    allowOrigins:\n    - \"*\"";
+
+        assertEquals(base, HttpRouteBuilder.injectCorsFilters(base, cors));
     }
 
     @Test
