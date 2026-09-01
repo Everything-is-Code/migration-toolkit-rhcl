@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import shared from '../styles/shared.module.css';
 import ServiceToolbar from '../components/api/ServiceToolbar';
 import ServiceList from '../components/api/ServiceList';
+import { nextStateAfterServiceSelect } from '../components/conversion/conversionWorkflowState';
 
 const DEFAULT_PER_PAGE = 20;
 
@@ -76,7 +77,10 @@ const APISelectionPage: React.FC = () => {
 
   const handleNext = () => {
     if (!selectedService) return;
-    setAppState(prev => ({ ...prev, selectedServices: [selectedService] }));
+    setAppState(prev => ({
+      ...prev,
+      ...nextStateAfterServiceSelect(prev, selectedService),
+    }));
     navigate('/compatibility');
   };
 
