@@ -64,7 +64,7 @@ jobs:
           cache: maven
       - name: Verify tests and coverage report
         # Exclude PlaywrightE2EIT: browser + cluster deps; not suited to PR gate time.
-        # Coverage regression gate: Codecov status checks (codecov.yml), not JaCoCo check.
+        # Coverage gates: Codecov patch (codecov.yml) + JaCoCo service-root floor (pom.xml jacoco-check).
         run: mvn -B -Dtest='!PlaywrightE2EIT' verify
       - name: Upload JaCoCo report
         if: always()
