@@ -89,6 +89,10 @@ Exact display names (must stay green to merge):
 
 Path-filtered **Validate en/ja locale parity** can still fail a PR when locale files change; it is not in the required list above.
 
+### CI notes (backend deps)
+
+PR checks include a parallel **Backend deps (dependency:analyze)** job (`mvn -B dependency:analyze` in `backend/`). It fails on unused or undeclared compile-scope dependencies. Intentional Quarkus / BOM suppressions are listed with comments under `maven-dependency-plugin` in `backend/pom.xml`. The job is merge-blocking via **PR quality summary** (not a separate branch-protection context yet). See [`docs/STATUS_CHECK_MATRIX.md`](docs/STATUS_CHECK_MATRIX.md).
+
 ### CI notes (coverage)
 
 PR checks upload **Codecov** coverage for backend (JaCoCo) and frontend (Vitest `npm run test:coverage`). Regression gates use `target: auto` / `threshold: 0%` in `codecov.yml` — coverage must not decrease vs the PR base. Local: `cd backend && mvn verify`; `cd frontend && npm run test:coverage`. After the first successful `frontend` upload on `main`, add `codecov/project/frontend` and `codecov/patch/frontend` to branch protection (same pattern as backend). Component coverage expansion: [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
@@ -113,7 +117,7 @@ fix(deploy): namespace placeholder for images; drop REACT_APP_API_URL
 
 ## Coding standards
 
-- **Backend**: Java 21, Quarkus patterns already in `backend/src`; prefer existing packages under `com.redhat.migrationtoolkit.rhcl`. Run Checkstyle/PMD via Maven when touching Java.
+- **Backend**: Java 21, Quarkus patterns already in `backend/src`; prefer existing packages under `com.redhat.migrationtoolkit.rhcl`. Run Checkstyle/PMD via Maven when touching Java; run `mvn -B dependency:analyze` when changing `backend/pom.xml` dependencies.
 - **Frontend**: TypeScript strict, React 18, PatternFly 5, Vite. Prefer existing page/API patterns under `frontend/src`.
 - **Deploy**: OpenShift manifests under `deploy/` use `NAMESPACE_PLACEHOLDER`; `install.sh` substitutes it with `sed` before `oc apply`. Do not hardcode a namespace in image registry paths.
 - **Secrets**: never commit tokens, kubeconfigs, or `.env` files with credentials.
