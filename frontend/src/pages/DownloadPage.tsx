@@ -21,11 +21,13 @@ import { DownloadIcon } from '@patternfly/react-icons';
 import { useTranslation, Trans } from 'react-i18next';
 import { downloadApi } from '../api/client';
 import { useAppState } from '../components/AppStateContext';
+import { useClearStaleConversionResults } from '../components/conversion/useClearStaleConversionResults';
 import { useNavigate } from 'react-router-dom';
 import styles from '../styles/shared.module.css';
 
 const DownloadPage: React.FC = () => {
   const { appState } = useAppState();
+  useClearStaleConversionResults();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
