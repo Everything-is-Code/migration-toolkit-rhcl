@@ -6,6 +6,18 @@ export default defineConfig({
   test: {
     setupFiles: ['./src/test/setup.ts'],
     exclude: ['**/node_modules/**', '**/e2e/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/test/**',
+        'src/main.tsx',
+        'src/vite-env.d.ts',
+      ],
+    },
     projects: [
       {
         extends: true,

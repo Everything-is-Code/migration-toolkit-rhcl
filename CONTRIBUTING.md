@@ -91,7 +91,11 @@ Path-filtered **Validate en/ja locale parity** can still fail a PR when locale f
 
 ### CI notes (backend deps)
 
-PR checks include a parallel **Backend deps (dependency:analyze)** job (`mvn -B dependency:analyze` in `backend/`). It fails on unused or undeclared compile-scope dependencies. Intentional Quarkus / BOM suppressions are listed with comments under `maven-dependency-plugin` in `backend/pom.xml`. The job is merge-blocking via **PR quality summary** (not a separate branch-protection context yet). When `docs/STATUS_CHECK_MATRIX.md` lands (#204), add this job there.
+PR checks include a parallel **Backend deps (dependency:analyze)** job (`mvn -B dependency:analyze` in `backend/`). It fails on unused or undeclared compile-scope dependencies. Intentional Quarkus / BOM suppressions are listed with comments under `maven-dependency-plugin` in `backend/pom.xml`. The job is merge-blocking via **PR quality summary** (not a separate branch-protection context yet). See [`docs/STATUS_CHECK_MATRIX.md`](docs/STATUS_CHECK_MATRIX.md).
+
+### CI notes (coverage)
+
+PR checks upload **Codecov** coverage for backend (JaCoCo) and frontend (Vitest `npm run test:coverage`). Regression gates use `target: auto` / `threshold: 0%` in `codecov.yml` — coverage must not decrease vs the PR base. Local: `cd backend && mvn verify`; `cd frontend && npm run test:coverage`. After the first successful `frontend` upload on `main`, add `codecov/project/frontend` and `codecov/patch/frontend` to branch protection (same pattern as backend). Component coverage expansion: [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
 
 ## Conventional commits
 

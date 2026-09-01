@@ -82,6 +82,7 @@ cd backend && ./generate-report.sh
 
 cd frontend && npm run typecheck
 cd frontend && npm test
+cd frontend && npm run test:coverage
 ```
 
 PR required / advisory checks: [docs/STATUS_CHECK_MATRIX.md](docs/STATUS_CHECK_MATRIX.md) (also summarized in [CONTRIBUTING.md](CONTRIBUTING.md)).
