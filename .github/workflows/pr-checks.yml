@@ -45,6 +45,23 @@ jobs:
       - name: PMD
         run: mvn -B pmd:check
 
+  backend-deps:
+    name: Backend deps (dependency:analyze)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: dependency:analyze
+        run: mvn -B dependency:analyze
+
   backend-tests-cov:
     name: Backend tests & coverage
     runs-on: ubuntu-latest
@@ -64,7 +81,7 @@ jobs:
           cache: maven
       - name: Verify tests and coverage report
         # Exclude PlaywrightE2EIT: browser + cluster deps; not suited to PR gate time.
-        # Coverage regression gate: Codecov status checks (codecov.yml), not JaCoCo check.
+        # Coverage gates: Codecov patch (codecov.yml) + JaCoCo service-root floor (pom.xml jacoco-check).
         run: mvn -B -Dtest='!PlaywrightE2EIT' verify
       - name: Upload JaCoCo report
         if: always()
@@ -92,6 +109,9 @@ jobs:
     name: Frontend quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
     defaults:
       run:
         working-directory: frontend
@@ -105,14 +125,28 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      - name: Vitest with coverage
+        run: npm run test:coverage
       - run: npm run build
+      - name: Upload coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend
+          fail_ci_if_error: true
+          verbose: true
 
   quality-summary:
     name: PR quality summary
     needs:
       - backend-style
       - backend-static
+      - backend-deps
       - backend-tests-cov
       - frontend-quality
     if: always()
@@ -132,12 +166,14 @@ jobs:
           echo "|------|--------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| backend-style | ${{ needs.backend-style.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| backend-static | ${{ needs.backend-static.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| backend-deps | ${{ needs.backend-deps.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| backend-tests-cov | ${{ needs.backend-tests-cov.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| frontend-quality | ${{ needs.frontend-quality.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
           if ! gate_ok "${{ needs.backend-style.result }}" || \
              ! gate_ok "${{ needs.backend-static.result }}" || \
+             ! gate_ok "${{ needs.backend-deps.result }}" || \
              ! gate_ok "${{ needs.backend-tests-cov.result }}" || \
              ! gate_ok "${{ needs.frontend-quality.result }}"; then
             echo "**Result:** FAILED — one or more PR quality checks did not pass." >> "$GITHUB_STEP_SUMMARY"

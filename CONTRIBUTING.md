@@ -60,8 +60,42 @@ npm test
 1. Branch from `main` (or the agreed feature/tracker branch).
 2. Keep PRs focused; prefer review slices under ~400 authored lines when possible.
 3. Request review from owners in [`.github/CODEOWNERS`](.github/CODEOWNERS) (primary reviewer for hygiene work: **@pcastelo**).
-4. Link related issues (`Closes #…` / `Closes part of #…`).
-5. Ensure CI is green before merge.
+4. Link related issues (`Closes #…` / `Closes part of #…`) — required for the PR ↔ issue traceability check on non-draft PRs.
+5. Ensure CI is green before merge (see [CI and required checks](#ci-and-required-checks)).
+
+## CI and required checks
+
+Full matrix (required vs advisory, triggers, change-type notes): **[docs/STATUS_CHECK_MATRIX.md](docs/STATUS_CHECK_MATRIX.md)**.
+
+### Codecov (backend)
+
+- CI job **Backend tests & coverage** uploads JaCoCo XML from `backend/target/jacoco-merged-report/jacoco.xml` with flag `backend`.
+- Auth: GitHub App **OIDC** (`use_oidc: true`); optional repo/org secret `CODECOV_TOKEN` as fallback.
+- Policy: [`codecov.yml`](codecov.yml) — `codecov/project/backend` and `codecov/patch/backend` use `target: auto` and `threshold: 0%` (coverage must not decrease vs the PR base).
+- **Required** on `main` today: `codecov/patch/backend` only. `codecov/project/backend` is configured but **advisory** (not a branch-protection context yet).
+
+### Required status checks on `main`
+
+Exact display names (must stay green to merge):
+
+1. Backend style (Checkstyle)
+2. Backend static (PMD)
+3. Backend tests & coverage
+4. Frontend quality
+5. PR quality summary
+6. Gitleaks secret scan
+7. PR ↔ issue traceability
+8. codecov/patch/backend
+
+Path-filtered **Validate en/ja locale parity** can still fail a PR when locale files change; it is not in the required list above.
+
+### CI notes (backend deps)
+
+PR checks include a parallel **Backend deps (dependency:analyze)** job (`mvn -B dependency:analyze` in `backend/`). It fails on unused or undeclared compile-scope dependencies. Intentional Quarkus / BOM suppressions are listed with comments under `maven-dependency-plugin` in `backend/pom.xml`. The job is merge-blocking via **PR quality summary** (not a separate branch-protection context yet). See [`docs/STATUS_CHECK_MATRIX.md`](docs/STATUS_CHECK_MATRIX.md).
+
+### CI notes (coverage)
+
+PR checks upload **Codecov** coverage for backend (JaCoCo) and frontend (Vitest `npm run test:coverage`). Regression gates use `target: auto` / `threshold: 0%` in `codecov.yml` — coverage must not decrease vs the PR base. Local: `cd backend && mvn verify`; `cd frontend && npm run test:coverage`. After the first successful `frontend` upload on `main`, add `codecov/project/frontend` and `codecov/patch/frontend` to branch protection (same pattern as backend). Component coverage expansion: [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
 
 ## Conventional commits
 
@@ -83,7 +117,7 @@ fix(deploy): namespace placeholder for images; drop REACT_APP_API_URL
 
 ## Coding standards
 
-- **Backend**: Java 21, Quarkus patterns already in `backend/src`; prefer existing packages under `com.redhat.migrationtoolkit.rhcl`. Run Checkstyle/PMD via Maven when touching Java.
+- **Backend**: Java 21, Quarkus patterns already in `backend/src`; prefer existing packages under `com.redhat.migrationtoolkit.rhcl`. Run Checkstyle/PMD via Maven when touching Java; run `mvn -B dependency:analyze` when changing `backend/pom.xml` dependencies.
 - **Frontend**: TypeScript strict, React 18, PatternFly 5, Vite. Prefer existing page/API patterns under `frontend/src`.
 - **Deploy**: OpenShift manifests under `deploy/` use `NAMESPACE_PLACEHOLDER`; `install.sh` substitutes it with `sed` before `oc apply`. Do not hardcode a namespace in image registry paths.
 - **Secrets**: never commit tokens, kubeconfigs, or `.env` files with credentials.
