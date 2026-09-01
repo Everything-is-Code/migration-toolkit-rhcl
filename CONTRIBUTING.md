@@ -12,7 +12,7 @@ Code owners: see [`.github/CODEOWNERS`](.github/CODEOWNERS) (`@pcastelo`, `@fmen
 |------|---------|---------|
 | Java (OpenJDK) | 21+ | Backend |
 | Apache Maven | 3.9.x+ | Backend build / tests |
-| Node.js | **22** | Frontend (matches `frontend/Dockerfile.ci`) |
+| Node.js | **26** | Frontend (matches `frontend/Dockerfile.ci`) |
 | npm | 9+ | Frontend deps |
 | Docker / Podman | Latest | Optional local image builds |
 | `oc` CLI | Matching OCP | Cluster deploy via `deploy/install.sh` |
@@ -134,7 +134,7 @@ Dockerfile `FROM` lines in `backend/Dockerfile.jvm` and `frontend/Dockerfile.ci`
 ```bash
 skopeo inspect --format '{{.Digest}}' docker://registry.access.redhat.com/ubi9/openjdk-21:1.24
 skopeo inspect --format '{{.Digest}}' docker://registry.access.redhat.com/ubi9/openjdk-21-runtime:1.24
-skopeo inspect --format '{{.Digest}}' docker://docker.io/library/node:22-alpine
+skopeo inspect --format '{{.Digest}}' docker://docker.io/library/node:26-alpine
 skopeo inspect --format '{{.Digest}}' docker://registry.access.redhat.com/ubi9/nginx-124:1
 ```
 
