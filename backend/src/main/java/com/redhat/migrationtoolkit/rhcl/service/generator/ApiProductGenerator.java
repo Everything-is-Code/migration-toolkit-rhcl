@@ -5,6 +5,7 @@ import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiProductSpec;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.KuadrantManifestSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -41,11 +42,7 @@ public class ApiProductGenerator implements ResourceGenerator {
         // Jackson handles quoting — no manual replace("\"", "'") needed
         String description = ctx.service.description != null ? ctx.service.description : "Migrated from 3scale";
 
-        ManifestMeta meta = new ManifestMeta(
-                name,
-                namespace,
-                Map.of("app", name, "migrated-from", "3scale"),
-                null);
+        ManifestMeta meta = KuadrantManifestSupport.meta(name, namespace, name, ctx.includeMigratedFromLabel);
 
         TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "HTTPRoute", name + "-route");
         ApiProductSpec spec = new ApiProductSpec(

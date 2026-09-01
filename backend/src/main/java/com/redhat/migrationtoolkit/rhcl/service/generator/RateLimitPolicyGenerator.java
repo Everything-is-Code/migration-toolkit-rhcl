@@ -39,7 +39,7 @@ public class RateLimitPolicyGenerator implements ResourceGenerator {
     @Override
     public String generate(ConversionContext ctx) {
         RateLimitPolicyManifest manifest = rateLimitSupport.buildManifest(
-                ctx.serviceKebabName, ctx.namespace, ctx.service);
+                ctx.serviceKebabName, ctx.namespace, ctx.service, ctx.includeMigratedFromLabel);
         if (manifest == null) {
             return null;
         }

@@ -7,6 +7,7 @@ import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.RequestedBy;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.SecretRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.KuadrantManifestSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -41,11 +42,8 @@ public class ApiKeyGenerator implements ResourceGenerator {
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
 
-        ManifestMeta meta = new ManifestMeta(
-                name + "-api-key",
-                namespace,
-                Map.of("app", name, "migrated-from", "3scale"),
-                null);
+        ManifestMeta meta = KuadrantManifestSupport.meta(
+                name + "-api-key", namespace, name, ctx.includeMigratedFromLabel);
 
         ApiKeySpec spec = new ApiKeySpec(
                 new ApiProductRef(name),

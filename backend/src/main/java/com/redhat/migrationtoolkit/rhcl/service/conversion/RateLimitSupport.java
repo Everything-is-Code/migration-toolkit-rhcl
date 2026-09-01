@@ -29,6 +29,9 @@ public class RateLimitSupport {
     @Inject
     PolicyFinder policyFinder;
 
+    @Inject
+    ManifestSerializer manifestSerializer;
+
     /** Manual wiring when {@link PolicyFinder} is not injected. */
     public static RateLimitSupport forManual() {
         RateLimitSupport support = new RateLimitSupport();
@@ -79,6 +82,11 @@ public class RateLimitSupport {
      * rate-limit sources are present.
      */
     public RateLimitPolicyManifest buildManifest(String name, String namespace, ApiService service) {
+        return buildManifest(name, namespace, service, true);
+    }
+
+    public RateLimitPolicyManifest buildManifest(
+            String name, String namespace, ApiService service, boolean includeMigratedFromLabel) {
         Map<String, LimitDefinition> limits = new LinkedHashMap<>();
 
         Policy edge = policyFinder.findEnabled(service, "edge_limiting");
@@ -95,11 +103,8 @@ public class RateLimitSupport {
             return null;
         }
 
-        ManifestMeta meta = new ManifestMeta(
-                name + "-ratelimit",
-                namespace,
-                Map.of("app", name, "migrated-from", "3scale"),
-                null);
+        ManifestMeta meta = KuadrantManifestSupport.meta(
+                name + "-ratelimit", namespace, name, includeMigratedFromLabel);
 
         TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "HTTPRoute", name + "-route");
         RateLimitPolicySpec spec = new RateLimitPolicySpec(targetRef, limits);
@@ -116,7 +121,7 @@ public class RateLimitSupport {
         if (manifest == null) {
             return null;
         }
-        return new ManifestSerializer().toYaml(manifest);
+        return KuadrantManifestSupport.resolveSerializer(manifestSerializer).toYaml(manifest);
     }
 
     @SuppressWarnings("unchecked")

@@ -70,6 +70,19 @@ class RateLimitSupportEdgeCaseTest {
         assertTrue(yaml.contains("limit: 0"), "Zero limit should serialize as 0, not be omitted");
     }
 
+    // 5.4 — negative rate values are skipped (toPositiveInt requires > 0)
+    @Test
+    void buildManifest_negativeRate_skipsLimiter() {
+        ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
+        service.policies.add(ConversionSupportTestFixtures.policy("edge_limiting", true, Map.of(
+                "fixed_window_limiters", List.of(
+                        Map.of("count", -5, "window", 60)))));
+
+        RateLimitPolicyManifest manifest = support.buildManifest("demo-api", "demo-ns", service);
+
+        assertNull(manifest);
+    }
+
     // plan ceiling — max across multiple plans
     @Test
     void resolvePlanCeiling_multipleMinutePlans_returnsMax() {
