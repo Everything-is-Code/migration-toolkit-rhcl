@@ -2,13 +2,14 @@ package com.redhat.migrationtoolkit.rhcl.service.conversion;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JwtClaimCheckSupportTest {
@@ -63,16 +64,28 @@ class JwtClaimCheckSupportTest {
     }
 
     @Test
-    void buildNamedRule_emitsPatternMatchingBlock() {
+    void buildNamedRule_emitsPatternMatchingRule() {
         List<JwtClaimCheckSupport.JwtClaimPattern> patterns = List.of(
                 new JwtClaimCheckSupport.JwtClaimPattern("auth.identity.sub", "eq", "user-a"));
 
-        String yaml = JwtClaimCheckSupport.buildNamedRule(patterns);
+        AuthorizationRule rule = JwtClaimCheckSupport.buildNamedRule(patterns);
 
-        assertTrue(yaml.contains("jwt-claim-check:"));
-        assertTrue(yaml.contains("selector: auth.identity.sub"));
-        assertTrue(yaml.contains("operator: eq"));
-        assertTrue(yaml.contains("value: \"user-a\""));
+        assertNotNull(rule);
+        assertTrue(rule.value().containsKey("patternMatching"));
+        @SuppressWarnings("unchecked")
+        var patternMap = (Map<String, Object>) rule.value().get("patternMatching");
+        @SuppressWarnings("unchecked")
+        var patternList = (List<Map<String, String>>) patternMap.get("patterns");
+        assertEquals(1, patternList.size());
+        assertEquals("auth.identity.sub", patternList.get(0).get("selector"));
+        assertEquals("eq", patternList.get(0).get("operator"));
+        assertEquals("user-a", patternList.get(0).get("value"));
+    }
+
+    @Test
+    void buildNamedRule_emptyPatterns_returnsNull() {
+        assertNull(JwtClaimCheckSupport.buildNamedRule(List.of()));
+        assertNull(JwtClaimCheckSupport.buildNamedRule(null));
     }
 
     @Test

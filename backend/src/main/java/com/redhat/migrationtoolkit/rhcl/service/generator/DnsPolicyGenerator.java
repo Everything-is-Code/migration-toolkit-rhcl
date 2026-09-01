@@ -1,12 +1,29 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.DnsPolicyManifest;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.DnsPolicySpec;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ProviderRef;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 @Priority(1800)
 public class DnsPolicyGenerator implements ResourceGenerator {
+
+    @Inject
+    ManifestSerializer manifestSerializer;
+
+    void bindManual(ManifestSerializer serializer) {
+        this.manifestSerializer = serializer;
+    }
 
     @Override
     public String outputKey() {
@@ -22,28 +39,26 @@ public class DnsPolicyGenerator implements ResourceGenerator {
     public String generate(ConversionContext ctx) {
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
+
+        ManifestMeta meta = new ManifestMeta(
+                name + "-dns-policy",
+                namespace,
+                Map.of("app", name, "migrated-from", "3scale"),
+                null);
+
+        TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "Gateway", name + "-gateway");
+
         String providerSecretName = ctx.options.dnsProviderSecretName;
-        String providerBlock = "";
-        if (providerSecretName != null && !providerSecretName.isBlank()) {
-            providerBlock = """
-  providerRefs:
-    - name: %s
-""".formatted(providerSecretName.trim());
-        }
-        return """
-apiVersion: kuadrant.io/v1
-kind: DNSPolicy
-metadata:
-  name: %s-dns-policy
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-spec:
-  targetRef:
-    group: gateway.networking.k8s.io
-    kind: Gateway
-    name: %s-gateway
-%s""".formatted(name, namespace, name, name, providerBlock);
+        List<ProviderRef> providerRefs = (providerSecretName != null && !providerSecretName.isBlank())
+                ? List.of(new ProviderRef(providerSecretName.trim()))
+                : null;
+
+        DnsPolicySpec spec = new DnsPolicySpec(targetRef, providerRefs);
+        DnsPolicyManifest manifest = new DnsPolicyManifest("kuadrant.io/v1", "DNSPolicy", meta, spec);
+        return serializer().toYaml(manifest);
+    }
+
+    private ManifestSerializer serializer() {
+        return manifestSerializer != null ? manifestSerializer : new ManifestSerializer();
     }
 }

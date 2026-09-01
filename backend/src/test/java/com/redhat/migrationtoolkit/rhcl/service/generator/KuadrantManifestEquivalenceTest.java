@@ -219,7 +219,7 @@ class KuadrantManifestEquivalenceTest {
                 kuadrantMeta(name, name),
                 new ApiProductSpec(
                         displayName,
-                        description.replace("\"", "'"),
+                        description,
                         "automatic",
                         "Published",
                         httpRouteTarget(name),

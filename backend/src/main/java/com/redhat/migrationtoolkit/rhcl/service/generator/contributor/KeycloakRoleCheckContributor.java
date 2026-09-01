@@ -1,9 +1,9 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
-import com.redhat.migrationtoolkit.rhcl.service.conversion.HttpRouteSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.PolicyConfigSupport;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -11,6 +11,7 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -44,16 +45,18 @@ public class KeycloakRoleCheckContributor implements AuthPolicyContributor {
                     authType);
             return;
         }
-        String namedRule = buildNamedRule(keycloak);
-        builder.appendAuthorizationRule(namedRule);
+        AuthorizationRule rule = buildNamedRule(keycloak);
+        if (rule != null) {
+            builder.addAuthorization("keycloak-role-check", rule);
+        }
     }
 
     private record KeycloakRolePattern(String selector, String operator, String value) {}
 
     @SuppressWarnings("unchecked")
-    static String buildNamedRule(Policy policy) {
+    static AuthorizationRule buildNamedRule(Policy policy) {
         if (policy == null || policy.configuration == null) {
-            return "";
+            return null;
         }
         Map<String, Object> cfg = policy.configuration;
         String checkType = String.valueOf(cfg.getOrDefault("type", "whitelist")).trim().toLowerCase(Locale.ROOT);
@@ -63,7 +66,7 @@ public class KeycloakRoleCheckContributor implements AuthPolicyContributor {
         List<KeycloakRolePattern> patterns = new ArrayList<>();
         Object scopesRaw = cfg.get("scopes");
         if (!(scopesRaw instanceof List<?> scopes)) {
-            return "";
+            return null;
         }
         for (Object scopeObj : scopes) {
             if (!(scopeObj instanceof Map<?, ?> scopeMap)) {
@@ -108,18 +111,17 @@ public class KeycloakRoleCheckContributor implements AuthPolicyContributor {
             }
         }
         if (patterns.isEmpty()) {
-            return "";
+            return null;
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append("      keycloak-role-check:\n");
-        sb.append("        patternMatching:\n");
-        sb.append("          patterns:\n");
+        List<Map<String, String>> patternList = new ArrayList<>();
         for (KeycloakRolePattern pattern : patterns) {
-            sb.append("            - selector: ").append(pattern.selector()).append('\n');
-            sb.append("              operator: ").append(pattern.operator()).append('\n');
-            sb.append("              value: ").append(HttpRouteSupport.yamlDoubleQuoted(pattern.value())).append('\n');
+            LinkedHashMap<String, String> entry = new LinkedHashMap<>();
+            entry.put("selector", pattern.selector());
+            entry.put("operator", pattern.operator());
+            entry.put("value", pattern.value());
+            patternList.add(entry);
         }
-        return sb.toString();
+        return new AuthorizationRule(Map.of("patternMatching", Map.of("patterns", patternList)));
     }
 
     private static String extractRoleName(Object roleObj) {

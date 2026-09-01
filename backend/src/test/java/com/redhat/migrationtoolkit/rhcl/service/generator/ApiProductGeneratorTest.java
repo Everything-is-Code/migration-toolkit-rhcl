@@ -31,7 +31,7 @@ class ApiProductGeneratorTest {
         assertTrue(yaml.contains("kind: APIProduct"));
         assertTrue(yaml.contains("name: product-api"));
         assertTrue(yaml.contains("namespace: " + GeneratorTestSupport.NAMESPACE));
-        assertTrue(yaml.contains("displayName: \"Product API\""));
+        assertTrue(yaml.contains("displayName: Product API"));
         assertTrue(yaml.contains("targetRef:"));
         assertTrue(yaml.contains("kind: HTTPRoute"));
         assertTrue(yaml.contains("name: product-api-route"));

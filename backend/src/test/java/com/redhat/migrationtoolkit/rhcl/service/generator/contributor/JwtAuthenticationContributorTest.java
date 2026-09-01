@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class JwtAuthenticationContributorTest {
+
+    private static final ManifestSerializer SERIALIZER = new ManifestSerializer();
 
     @Test
     void shouldContribute_true() {
@@ -40,7 +43,7 @@ class JwtAuthenticationContributorTest {
         AuthPolicyBuilder builder = ContributorTestFixtures.authPolicyBuilder(ctx);
 
         new JwtAuthenticationContributor().contribute(builder, ctx);
-        String yaml = builder.build();
+        String yaml = SERIALIZER.toYaml(builder.build());
 
         assertTrue(yaml.contains("jwt-auth:"));
         assertTrue(yaml.contains("issuerUrl: https://idp.example.com/realms/demo"));
@@ -55,6 +58,6 @@ class JwtAuthenticationContributorTest {
 
         new JwtAuthenticationContributor().contribute(builder, ctx);
 
-        assertTrue(builder.build().contains(ConversionConstants.DEFAULT_OIDC_ISSUER_URL));
+        assertTrue(SERIALIZER.toYaml(builder.build()).contains(ConversionConstants.DEFAULT_OIDC_ISSUER_URL));
     }
 }

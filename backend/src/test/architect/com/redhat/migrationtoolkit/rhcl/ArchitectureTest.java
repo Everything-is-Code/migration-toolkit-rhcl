@@ -205,31 +205,19 @@ class ArchitectureTest {
     // manifest records only. ReadmeSupport is excluded — it emits Markdown, not manifests.
 
     private static final Set<String> FORMATTED_YAML_GENERATOR_ALLOWLIST = Set.of(
-            "AnonymousContributor",
-            "ApiKeyAuthenticationContributor",
-            "ApiKeyGenerator",
-            "ApiProductGenerator",
-            "AppIdKeyAuthenticationContributor",
-            "AuthCachingContributor",
             "CorsOptionsContributor",
-            "DnsPolicyGenerator",
-            "EmptyAuthenticationContributor",
             "HttpRouteAnnotationsContributor",
             "HttpRouteBuilder",
-            "IpCheckOpaContributor",
-            "JwtAuthenticationContributor",
             "MappingRulesContributor",
-            "Oauth2IntrospectionContributor",
             "RetryContributor",
             "RoutingContributor",
-            "TlsPolicyGenerator",
             "UpstreamContributor"
     );
 
     private static final Set<String> FORMATTED_YAML_CONVERSION_ALLOWLIST = Set.of(
             "HttpRouteSupport",
+            // JwtClaimCheckSupport.buildReadmeNotes emits Markdown (not YAML manifests) — same rationale as ReadmeSupport
             "JwtClaimCheckSupport",
-            "RateLimitSupport",
             "RoutingSupport",
             "UpstreamSupport"
     );

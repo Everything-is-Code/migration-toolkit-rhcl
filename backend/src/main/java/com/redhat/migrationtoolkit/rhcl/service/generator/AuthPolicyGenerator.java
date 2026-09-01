@@ -1,7 +1,9 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthPolicyManifest;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorOrdering;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.AuthPolicyBuilder;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.AuthPolicyContributor;
 import jakarta.annotation.Priority;
@@ -20,10 +22,17 @@ public class AuthPolicyGenerator implements ResourceGenerator {
     @Inject
     Instance<AuthPolicyContributor> contributors;
 
+    @Inject
+    ManifestSerializer manifestSerializer;
+
     private List<AuthPolicyContributor> manualContributors;
 
     void bindManualContributors(List<AuthPolicyContributor> list) {
         this.manualContributors = list;
+    }
+
+    void bindManual(ManifestSerializer serializer) {
+        this.manifestSerializer = serializer;
     }
 
     @Override
@@ -42,7 +51,11 @@ public class AuthPolicyGenerator implements ResourceGenerator {
         for (AuthPolicyContributor contributor : orderedContributors()) {
             contributor.contribute(builder, ctx);
         }
-        return builder.build();
+        if (!builder.hasBase()) {
+            return "";
+        }
+        AuthPolicyManifest manifest = builder.build();
+        return serializer().toYaml(manifest);
     }
 
     private List<AuthPolicyContributor> orderedContributors() {
@@ -54,5 +67,9 @@ public class AuthPolicyGenerator implements ResourceGenerator {
         }
         list.sort(Comparator.comparingInt(ContributorOrdering::priorityOf));
         return list;
+    }
+
+    private ManifestSerializer serializer() {
+        return manifestSerializer != null ? manifestSerializer : new ManifestSerializer();
     }
 }

@@ -4,15 +4,17 @@ import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Oauth2IntrospectionContributorTest {
+
+    private static final ManifestSerializer SERIALIZER = new ManifestSerializer();
 
     @Test
     void shouldContribute_true() {
@@ -44,8 +46,13 @@ class Oauth2IntrospectionContributorTest {
                 "client_id", "cid",
                 "client_secret", "secret",
                 "token_type_hint", "access_token")));
-        String yaml = Oauth2IntrospectionContributor.generateOauth2IntrospectionAuthPolicy(
-                "demo-api", ContributorTestFixtures.NAMESPACE, policy, "");
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(policy);
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        AuthPolicyBuilder builder = ContributorTestFixtures.authPolicyBuilder(ctx);
+
+        new Oauth2IntrospectionContributor().contribute(builder, ctx);
+        String yaml = SERIALIZER.toYaml(builder.build());
 
         assertTrue(yaml.contains("oauth2-introspection:"));
         assertTrue(yaml.contains("endpoint: https://idp.example.com/introspect"));
@@ -54,9 +61,15 @@ class Oauth2IntrospectionContributorTest {
     }
 
     @Test
-    void generate_returnsNull_whenEndpointMissing() {
+    void contribute_returnsWithoutEffect_whenEndpointMissing() {
         Policy policy = ContributorTestFixtures.policy("token_introspection", true, Map.of());
-        assertNull(Oauth2IntrospectionContributor.generateOauth2IntrospectionAuthPolicy(
-                "demo-api", ContributorTestFixtures.NAMESPACE, policy, ""));
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(policy);
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        AuthPolicyBuilder builder = ContributorTestFixtures.authPolicyBuilder(ctx);
+
+        new Oauth2IntrospectionContributor().contribute(builder, ctx);
+
+        assertFalse(builder.hasBase(), "Should not set base when endpoint is missing");
     }
 }

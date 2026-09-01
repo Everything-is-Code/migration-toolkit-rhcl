@@ -3,15 +3,17 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class JwtClaimCheckContributorTest {
+
+    private static final ManifestSerializer SERIALIZER = new ManifestSerializer();
 
     @Test
     void shouldContribute_true() {
@@ -23,7 +25,7 @@ class JwtClaimCheckContributorTest {
 
         new JwtClaimCheckContributor().contribute(builder, ctx);
 
-        assertTrue(builder.build().contains("jwt-claim-check:"));
+        assertTrue(builder.build().spec().rules().authorization().containsKey("jwt-claim-check"));
     }
 
     @Test
@@ -48,9 +50,9 @@ class JwtClaimCheckContributorTest {
         AuthPolicyBuilder builder = ContributorTestFixtures.authPolicyBuilderWithBase(ctx);
 
         new JwtClaimCheckContributor().contribute(builder, ctx);
-        String yaml = builder.build();
+        String yaml = SERIALIZER.toYaml(builder.build());
 
         assertTrue(yaml.contains("auth.identity.sub"));
-        assertTrue(yaml.contains("value: \"alice\""));
+        assertTrue(yaml.contains("value: alice"));
     }
 }
