@@ -60,8 +60,34 @@ npm test
 1. Branch from `main` (or the agreed feature/tracker branch).
 2. Keep PRs focused; prefer review slices under ~400 authored lines when possible.
 3. Request review from owners in [`.github/CODEOWNERS`](.github/CODEOWNERS) (primary reviewer for hygiene work: **@pcastelo**).
-4. Link related issues (`Closes #…` / `Closes part of #…`).
-5. Ensure CI is green before merge.
+4. Link related issues (`Closes #…` / `Closes part of #…`) — required for the PR ↔ issue traceability check on non-draft PRs.
+5. Ensure CI is green before merge (see [CI and required checks](#ci-and-required-checks)).
+
+## CI and required checks
+
+Full matrix (required vs advisory, triggers, change-type notes): **[docs/STATUS_CHECK_MATRIX.md](docs/STATUS_CHECK_MATRIX.md)**.
+
+### Codecov (backend)
+
+- CI job **Backend tests & coverage** uploads JaCoCo XML from `backend/target/jacoco-merged-report/jacoco.xml` with flag `backend`.
+- Auth: GitHub App **OIDC** (`use_oidc: true`); optional repo/org secret `CODECOV_TOKEN` as fallback.
+- Policy: [`codecov.yml`](codecov.yml) — `codecov/project/backend` and `codecov/patch/backend` use `target: auto` and `threshold: 0%` (coverage must not decrease vs the PR base).
+- **Required** on `main` today: `codecov/patch/backend` only. `codecov/project/backend` is configured but **advisory** (not a branch-protection context yet).
+
+### Required status checks on `main`
+
+Exact display names (must stay green to merge):
+
+1. Backend style (Checkstyle)
+2. Backend static (PMD)
+3. Backend tests & coverage
+4. Frontend quality
+5. PR quality summary
+6. Gitleaks secret scan
+7. PR ↔ issue traceability
+8. codecov/patch/backend
+
+Path-filtered **Validate en/ja locale parity** can still fail a PR when locale files change; it is not in the required list above.
 
 ### CI notes (backend deps)
 
