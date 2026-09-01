@@ -214,7 +214,8 @@ public final class HttpRouteBuilder {
      * Used for the non-standard Istio {@code type: CORS} filter that has no Fabric8 model.
      *
      * <p>Fabric8 serializes HTTPRouteRule fields alphabetically: {@code backendRefs → filters → matches}.
-     * We insert (or prepend to) the {@code filters:} section before each rule's {@code matches:} block.</p>
+     * CORS is injected into <strong>each</strong> rule: prepend to an existing {@code filters:} block, or
+     * create {@code filters:} before {@code matches:} when absent.</p>
      */
     static String injectCorsFilters(String yaml, String rawCorsYaml) {
         if (rawCorsYaml == null || rawCorsYaml.isBlank()) {
@@ -226,18 +227,37 @@ public final class HttpRouteBuilder {
                 .collect(Collectors.joining("\n"))
                 .stripTrailing() + "\n";
 
-        // Fabric8 alphabetically serializes: backendRefs → filters → matches
-        // Find "    matches:\n" (4-space indent in the rule) as anchor for insertion
         String filtersMarker = "    filters:\n";
         String matchesMarker = "    matches:\n";
-
-        if (yaml.contains(filtersMarker)) {
-            // Existing typed filters: append CORS items before the matches block
-            return yaml.replace(matchesMarker, indented + matchesMarker);
-        } else {
-            // No existing filters: create filters section in all rules before matches
-            return yaml.replace(matchesMarker, filtersMarker + indented + matchesMarker);
+        String rulesHeader = "  rules:\n";
+        int rulesIdx = yaml.indexOf(rulesHeader);
+        if (rulesIdx < 0) {
+            return injectCorsIntoRule(yaml, indented, filtersMarker, matchesMarker);
         }
+
+        String beforeRules = yaml.substring(0, rulesIdx + rulesHeader.length());
+        String rulesBody = yaml.substring(rulesIdx + rulesHeader.length());
+        if (rulesBody.isEmpty()) {
+            return yaml;
+        }
+
+        String[] ruleBlocks = rulesBody.split("(?=  - )", -1);
+        StringBuilder merged = new StringBuilder(beforeRules.length() + rulesBody.length() + indented.length() * 4);
+        merged.append(beforeRules);
+        for (String ruleBlock : ruleBlocks) {
+            if (!ruleBlock.isEmpty()) {
+                merged.append(injectCorsIntoRule(ruleBlock, indented, filtersMarker, matchesMarker));
+            }
+        }
+        return merged.toString();
+    }
+
+    private static String injectCorsIntoRule(
+            String ruleYaml, String indentedCors, String filtersMarker, String matchesMarker) {
+        if (ruleYaml.contains(filtersMarker)) {
+            return ruleYaml.replace(matchesMarker, indentedCors + matchesMarker);
+        }
+        return ruleYaml.replace(matchesMarker, filtersMarker + indentedCors + matchesMarker);
     }
 
     private static void parseMarkerInto(Map<String, String> annotations, String marker) {
