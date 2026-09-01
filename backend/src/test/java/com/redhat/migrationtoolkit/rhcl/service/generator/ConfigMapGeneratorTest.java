@@ -1,7 +1,10 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
+import com.redhat.migrationtoolkit.rhcl.model.Backend;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendResolver;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.Test;
@@ -73,5 +76,37 @@ class ConfigMapGeneratorTest {
 
         assertTrue(labels.containsKey("app"));
         assertFalse(labels.containsKey("migrated-from"));
+    }
+
+    @Test
+    void generate_withOverrideIgnored_notesMultiBackendOverride() {
+        ApiService service = GeneratorTestSupport.basicService("Multi API", "multi-api");
+        Backend first = new Backend();
+        first.name = "b1";
+        first.systemName = "b1";
+        first.privateEndpoint = "http://one.example.com";
+        Backend second = new Backend();
+        second.name = "b2";
+        second.systemName = "b2";
+        second.privateEndpoint = "http://two.example.com";
+        service.backends = java.util.List.of(first, second);
+        ConversionContext ctx = ConversionContext.build(
+                service, GeneratorTestSupport.NAMESPACE, "https://override.example.com",
+                new ConversionOptions(), new BackendResolver());
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> data = (Map<String, String>) YamlAssertions.parse(generator.generate(ctx)).get("data");
+
+        assertEquals("ignored-multi-backend", data.get("external-backend-url-override"));
+    }
+
+    @Test
+    void bindManual_usesInjectedSerializer() {
+        ConfigMapGenerator manual = new ConfigMapGenerator();
+        manual.bindManual(new ManifestSerializer());
+        ApiService service = GeneratorTestSupport.basicService("Bound API", "bound-api");
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        assertFalse(manual.generate(ctx).isBlank());
     }
 }

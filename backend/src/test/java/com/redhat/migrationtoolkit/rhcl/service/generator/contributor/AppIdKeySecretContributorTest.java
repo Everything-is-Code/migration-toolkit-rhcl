@@ -95,6 +95,61 @@ class AppIdKeySecretContributorTest {
     }
 
     @Test
+    void contribute_skipsWhenBuilderAlreadyHasSecret() {
+        ApiService service = ContributorTestFixtures.apiServiceWithAuth("appIdKey");
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        SecretBuilder builder = ContributorTestFixtures.secretBuilder(ctx);
+        builder.beginOpaqueSecret("existing-secret");
+
+        new AppIdKeySecretContributor().contribute(builder, ctx);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) YamlAssertions.parse(builder.build()).get("metadata");
+        assertEquals("existing-secret", metadata.get("name"));
+    }
+
+    @Test
+    void contribute_skipsWhenAuthenticationMissing() {
+        ApiService service = ContributorTestFixtures.apiService();
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        SecretBuilder builder = ContributorTestFixtures.secretBuilder(ctx);
+
+        new AppIdKeySecretContributor().contribute(builder, ctx);
+
+        assertFalse(builder.hasSecret());
+    }
+
+    @Test
+    void generate_nullSystemName_usesProvidedName() {
+        ApiService service = ContributorTestFixtures.apiServiceWithAuth("appIdKey");
+        service.systemName = null;
+        service.applications.add(ContributorTestFixtures.application("id-1", "key-1"));
+
+        String yaml = AppIdKeySecretContributor.generateAppIdKeySecret(
+                "fallback-api", ContributorTestFixtures.NAMESPACE, service);
+
+        assertTrue(yaml.contains("fallback-api-app-id-keys"));
+    }
+
+    @Test
+    void contribute_skipsBlankApplicationEntries() {
+        ApiService service = ContributorTestFixtures.apiServiceWithAuth("appIdKey");
+        Application blank = new Application();
+        blank.appId = "  ";
+        blank.keys = List.of("  ");
+        service.applications.add(blank);
+        service.applications.add(ContributorTestFixtures.application("id-1", "key-1"));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        SecretBuilder builder = ContributorTestFixtures.secretBuilder(ctx);
+
+        new AppIdKeySecretContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("app_id_1: \"id-1\""));
+        assertFalse(yaml.contains("app_id_2:"));
+    }
+
+    @Test
     void contribute_emptySecret_whenNoCredentials() {
         ApiService service = ContributorTestFixtures.apiServiceWithAuth("appIdKey");
         String yaml = AppIdKeySecretContributor.generateAppIdKeySecret(
