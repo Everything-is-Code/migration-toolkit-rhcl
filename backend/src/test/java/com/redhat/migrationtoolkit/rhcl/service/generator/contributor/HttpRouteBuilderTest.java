@@ -184,6 +184,27 @@ class HttpRouteBuilderTest {
     }
 
     @Test
+    void injectCorsFilters_withoutRulesHeader_fallsBackToSingleRuleInjection() {
+        String base = "kind: HTTPRoute\nspec:\n  hostnames:\n  - api.example.com\n"
+                + "  - backendRefs:\n    - name: demo-backend\n      port: 8080\n"
+                + "    matches:\n    - path:\n        type: PathPrefix\n        value: /\n";
+        String cors = "- type: CORS\n  cors:\n    allowOrigins:\n    - \"*\"";
+
+        String merged = HttpRouteBuilder.injectCorsFilters(base, cors);
+
+        assertTrue(merged.contains("type: CORS"), merged);
+        assertTrue(merged.indexOf("filters:") < merged.indexOf("matches:"), merged);
+    }
+
+    @Test
+    void injectCorsFilters_emptyRulesBody_returnsOriginal() {
+        String base = "spec:\n  rules:\n";
+        String cors = "- type: CORS\n  cors:\n    allowOrigins:\n    - \"*\"";
+
+        assertEquals(base, HttpRouteBuilder.injectCorsFilters(base, cors));
+    }
+
+    @Test
     void build_malformedDiscoveryMarker_isIgnored() {
         ApiService service = new ApiService();
         service.name = "demo-api";
