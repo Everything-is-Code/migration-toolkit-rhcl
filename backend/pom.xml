@@ -18,6 +18,13 @@
     <!-- Keep in sync with io.fabric8:kubernetes-client from quarkus-kubernetes-client (mvn dependency:tree). -->
     <fabric8.version>7.8.0</fabric8.version>
     <surefire-plugin.version>3.5.6</surefire-plugin.version>
+    <!-- JaCoCo service-root floor (#198).
+         Baseline 2026-08-31 commit 3938ffe: PACKAGE com.redhat.migrationtoolkit.rhcl.service
+         (ROOT only) LINE ~85.9% (1117/1300). Floor = baseline − 2pp → 0.84.
+         Re-calibrate: mvn -Dtest='!PlaywrightE2EIT' verify;
+         read target/jacoco-merged-report/jacoco.csv for that PACKAGE row;
+         set this property to (measured_ratio − 0.02) floored to 2 decimals. -->
+    <jacoco.service.root.line.min>0.84</jacoco.service.root.line.min>
   </properties>
 
   <dependencyManagement>
@@ -268,6 +275,30 @@
               <outputDirectory>${project.build.directory}/jacoco-merged-report</outputDirectory>
             </configuration>
           </execution>
+          <!-- Package floor for service ROOT only (exact name; no service.* wildcards). -->
+          <execution>
+            <id>jacoco-check</id>
+            <phase>verify</phase>
+            <goals><goal>check</goal></goals>
+            <configuration>
+              <dataFile>${project.build.directory}/jacoco-quarkus.exec</dataFile>
+              <rules>
+                <rule>
+                  <element>PACKAGE</element>
+                  <includes>
+                    <include>com.redhat.migrationtoolkit.rhcl.service</include>
+                  </includes>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>${jacoco.service.root.line.min}</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
         </executions>
       </plugin>
 
@@ -297,6 +328,88 @@
           <excludes>
             <exclude>**/*Test.java</exclude>
           </excludes>
+        </configuration>
+      </plugin>
+
+      <!-- dependency:analyze (#200): fail on unused/undeclared compile deps.
+           Quarkus extensions are CDI/runtime-wired; jakarta/MP/Fabric8 APIs come
+           transitively from the Quarkus BOM — each ignore has an explicit reason. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.7.0</version>
+        <configuration>
+          <failOnWarning>true</failOnWarning>
+          <ignoreNonCompile>true</ignoreNonCompile>
+          <ignoredUnusedDeclaredDependencies>
+            <!-- Quarkus extension: JDBC driver / Agroal wiring not visible to bytecode analyze -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-jdbc-postgresql</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: SmallRye Health endpoints via extension descriptor -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-smallrye-health</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: CDI/Arc container (runtime) -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-arc</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: REST + Jackson provider registration -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-rest-jackson</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: OpenAPI generation via SmallRye -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-smallrye-openapi</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: Fabric8 client producer / config -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-kubernetes-client</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: REST client + Jackson providers -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-rest-client-jackson</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: Bean Validation integration -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-hibernate-validator</ignoredUnusedDeclaredDependency>
+            <!-- Quarkus extension: Flyway migrations at startup -->
+            <ignoredUnusedDeclaredDependency>io.quarkus:quarkus-flyway</ignoredUnusedDeclaredDependency>
+          </ignoredUnusedDeclaredDependencies>
+          <ignoredUsedUndeclaredDependencies>
+            <!-- Jakarta Persistence API provided by quarkus-hibernate-orm-panache / BOM -->
+            <ignoredUsedUndeclaredDependency>jakarta.persistence:jakarta.persistence-api</ignoredUsedUndeclaredDependency>
+            <!-- Jakarta Annotations provided by Quarkus BOM -->
+            <ignoredUsedUndeclaredDependency>jakarta.annotation:jakarta.annotation-api</ignoredUsedUndeclaredDependency>
+            <!-- JAX-RS API provided by quarkus-rest / BOM -->
+            <ignoredUsedUndeclaredDependency>jakarta.ws.rs:jakarta.ws.rs-api</ignoredUsedUndeclaredDependency>
+            <!-- Jakarta Inject API provided by Quarkus Arc / BOM -->
+            <ignoredUsedUndeclaredDependency>jakarta.inject:jakarta.inject-api</ignoredUsedUndeclaredDependency>
+            <!-- CDI API provided by Quarkus Arc / BOM -->
+            <ignoredUsedUndeclaredDependency>jakarta.enterprise:jakarta.enterprise.cdi-api</ignoredUsedUndeclaredDependency>
+            <!-- JTA API provided by Quarkus Hibernate / BOM -->
+            <ignoredUsedUndeclaredDependency>jakarta.transaction:jakarta.transaction-api</ignoredUsedUndeclaredDependency>
+            <!-- Bean Validation API provided by quarkus-hibernate-validator / BOM -->
+            <ignoredUsedUndeclaredDependency>jakarta.validation:jakarta.validation-api</ignoredUsedUndeclaredDependency>
+            <!-- Jackson databind provided by quarkus-rest-jackson / BOM -->
+            <ignoredUsedUndeclaredDependency>com.fasterxml.jackson.core:jackson-databind</ignoredUsedUndeclaredDependency>
+            <!-- JBoss Logging facade provided by Quarkus BOM -->
+            <ignoredUsedUndeclaredDependency>org.jboss.logging:jboss-logging</ignoredUsedUndeclaredDependency>
+            <!-- MicroProfile Config API provided by Quarkus BOM -->
+            <ignoredUsedUndeclaredDependency>org.eclipse.microprofile.config:microprofile-config-api</ignoredUsedUndeclaredDependency>
+            <!-- MicroProfile OpenAPI API provided by quarkus-smallrye-openapi / BOM -->
+            <ignoredUsedUndeclaredDependency>org.eclipse.microprofile.openapi:microprofile-openapi-api</ignoredUsedUndeclaredDependency>
+            <!-- MicroProfile REST Client API provided by quarkus-rest-client / BOM -->
+            <ignoredUsedUndeclaredDependency>org.eclipse.microprofile.rest.client:microprofile-rest-client-api</ignoredUsedUndeclaredDependency>
+            <!-- Fabric8 model/client APIs provided by quarkus-kubernetes-client -->
+            <ignoredUsedUndeclaredDependency>io.fabric8:kubernetes-client-api</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.fabric8:kubernetes-model-core</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.fabric8:kubernetes-model-apps</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.fabric8:kubernetes-model-apiextensions</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.fabric8:kubernetes-model-rbac</ignoredUsedUndeclaredDependency>
+            <!-- RESTEasy Reactive internals pulled by quarkus-rest (bytecode refs) -->
+            <ignoredUsedUndeclaredDependency>io.quarkus.resteasy.reactive:resteasy-reactive</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.quarkus.resteasy.reactive:resteasy-reactive-common</ignoredUsedUndeclaredDependency>
+            <!-- Test APIs: ignoreNonCompile skips unused-declared test noise but still
+                 reports used-undeclared from test bytecode; these come via quarkus-junit5 /
+                 quarkus-junit5-mockito / archunit-junit5 / rest-assured. -->
+            <ignoredUsedUndeclaredDependency>io.quarkus:quarkus-junit</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.quarkus:quarkus-junit-mockito</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.quarkus:quarkus-junit5</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>io.quarkus:quarkus-test-common</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>org.junit.jupiter:junit-jupiter-api</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>org.junit.jupiter:junit-jupiter-params</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>org.mockito:mockito-core</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>org.mockito:mockito-junit-jupiter</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>org.hamcrest:hamcrest</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>com.tngtech.archunit:archunit</ignoredUsedUndeclaredDependency>
+            <ignoredUsedUndeclaredDependency>com.tngtech.archunit:archunit-junit5-api</ignoredUsedUndeclaredDependency>
+          </ignoredUsedUndeclaredDependencies>
         </configuration>
       </plugin>
 

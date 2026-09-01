@@ -1,8 +1,8 @@
-# Codecov regression gates for backend JaCoCo (flag: backend).
+# Codecov regression gates for backend JaCoCo (flag: backend) and frontend Vitest (flag: frontend).
 # Compares each PR to its base commit — coverage must not decrease (threshold 0%).
 # Baseline ratchets automatically when main improves; no pom.xml edits needed.
-# Setup: add CODECOV_TOKEN repo secret; mark codecov/project/backend and
-# codecov/patch/backend as required checks after the first upload on main.
+# Setup: add CODECOV_TOKEN repo secret; mark codecov/project/* and codecov/patch/*
+# as required checks after the first upload on main for each flag.
 coverage:
   status:
     project:
@@ -15,6 +15,14 @@ coverage:
         if_no_uploads: error
         flags:
           - backend
+      frontend:
+        target: auto
+        threshold: 0%
+        informational: false
+        if_ci_failed: error
+        if_no_uploads: error
+        flags:
+          - frontend
     patch:
       default: false
       backend:
@@ -25,6 +33,14 @@ coverage:
         if_no_uploads: error
         flags:
           - backend
+      frontend:
+        target: auto
+        threshold: 0%
+        informational: false
+        if_ci_failed: error
+        if_no_uploads: error
+        flags:
+          - frontend
 
 comment:
   layout: "condensed_header, diff, flags"
@@ -34,4 +50,8 @@ flags:
   backend:
     paths:
       - backend/src/main/java/**
+    carryforward: true
+  frontend:
+    paths:
+      - frontend/src/**
     carryforward: true
