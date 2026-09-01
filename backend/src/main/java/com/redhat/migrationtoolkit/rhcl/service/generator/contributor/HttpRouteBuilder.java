@@ -1,6 +1,7 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.IstioManifestSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteFilter;
@@ -26,6 +27,7 @@ public final class HttpRouteBuilder {
 
     private final String name;
     private final String namespace;
+    private final boolean includeMigratedFromLabel;
     private final List<ResolvedBackend> backends;
     private List<ResolvedBackend> overrideBackends;
 
@@ -44,6 +46,7 @@ public final class HttpRouteBuilder {
     public HttpRouteBuilder(ConversionContext ctx) {
         this.name = ctx.serviceKebabName;
         this.namespace = ctx.namespace;
+        this.includeMigratedFromLabel = ctx.includeMigratedFromLabel;
         this.backends = ctx.resolvedBackends;
     }
 
@@ -163,9 +166,10 @@ public final class HttpRouteBuilder {
 
         var meta = routeBuilder.withNewMetadata()
                 .withName(name + "-route")
-                .withNamespace(namespace)
-                .addToLabels("app", name)
-                .addToLabels("migrated-from", "3scale");
+                .withNamespace(namespace);
+
+        IstioManifestSupport.baseLabels(name, includeMigratedFromLabel)
+                .forEach(meta::addToLabels);
 
         allAnnotations.forEach(meta::addToAnnotations);
 

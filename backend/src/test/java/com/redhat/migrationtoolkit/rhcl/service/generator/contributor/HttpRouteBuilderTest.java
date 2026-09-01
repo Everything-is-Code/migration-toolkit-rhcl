@@ -45,6 +45,23 @@ class HttpRouteBuilderTest {
     }
 
     @Test
+    void build_omitsMigratedFromLabelWhenDisabled() {
+        ApiService service = new ApiService();
+        service.name = "demo-api";
+        service.systemName = "demo-api";
+        ConversionOptions options = new ConversionOptions();
+        options.includeMigratedFromLabel = false;
+        ConversionContext ctx = ConversionContext.build(
+                service, "ns", null, options, new BackendResolver());
+        HttpRouteBuilder builder = new HttpRouteBuilder(ctx);
+
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("app:") && yaml.contains("demo-api"), yaml);
+        assertFalse(yaml.contains("migrated-from"), yaml);
+    }
+
+    @Test
     void effectiveBackends_returnsOverrideWhenSet() {
         ApiService service = new ApiService();
         service.name = "demo-api";
