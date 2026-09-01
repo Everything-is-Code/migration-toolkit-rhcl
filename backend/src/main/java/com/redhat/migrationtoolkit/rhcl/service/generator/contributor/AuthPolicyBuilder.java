@@ -174,8 +174,12 @@ public final class AuthPolicyBuilder {
                 KuadrantManifestSupport.baseLabels(name, includeMigratedFromLabel),
                 annotations);
 
-        Map<String, AuthenticationRule> authMap = authentication.isEmpty() ? Map.of() : new LinkedHashMap<>(authentication);
-        Map<String, AuthorizationRule> authzMap = authorization.isEmpty() ? null : new LinkedHashMap<>(authorization);
+        Map<String, AuthenticationRule> authMap = authentication.isEmpty()
+                ? Map.of()
+                : new LinkedHashMap<>(authentication);
+        Map<String, AuthorizationRule> authzMap = authorization.isEmpty()
+                ? null
+                : new LinkedHashMap<>(authorization);
 
         AuthPolicyRules rules = new AuthPolicyRules(authMap, authzMap, response);
         AuthPolicySpec spec = new AuthPolicySpec(targetRef, rules);
