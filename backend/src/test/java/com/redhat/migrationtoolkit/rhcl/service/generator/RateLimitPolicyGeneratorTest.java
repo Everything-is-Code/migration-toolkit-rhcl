@@ -1,9 +1,11 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
+import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.RateLimitSupport;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
@@ -77,5 +79,56 @@ class RateLimitPolicyGeneratorTest {
         assertTrue(yaml.contains("name: limited-api-route"));
         assertTrue(yaml.contains("limit: 10"));
         assertTrue(yaml.contains("window: 60s"));
+    }
+
+    @Test
+    void generate_returnsNull_whenNoResolvableLimits() {
+        Policy edgeLimiting = GeneratorTestSupport.enabledPolicy("edge_limiting");
+        edgeLimiting.configuration = Map.of("fixed_window_limiters",
+                List.of(Map.of("count", 0, "window", 60)));
+
+        ApiService service = GeneratorTestSupport.basicService("Empty Limits", "empty-limits");
+        service.policies = List.of(edgeLimiting);
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        assertNull(generator.generate(ctx));
+    }
+
+    @Test
+    void generate_omitsMigratedFromLabel_whenOptionDisabled() {
+        Policy edgeLimiting = GeneratorTestSupport.enabledPolicy("edge_limiting");
+        edgeLimiting.configuration = Map.of("fixed_window_limiters",
+                List.of(Map.of("count", 5, "window", 60)));
+
+        ApiService service = GeneratorTestSupport.basicService("Limited API", "limited-api");
+        service.policies = List.of(edgeLimiting);
+        ConversionOptions options = new ConversionOptions();
+        options.includeMigratedFromLabel = false;
+        ConversionContext ctx = GeneratorTestSupport.context(service, options);
+
+        String yaml = generator.generate(ctx);
+
+        assertNotNull(yaml);
+        assertFalse(yaml.contains("migrated-from"));
+    }
+
+    @Test
+    void generate_manualWiring_withoutCdi() {
+        RateLimitPolicyGenerator manual = new RateLimitPolicyGenerator();
+        manual.bindManual(RateLimitSupport.forManual());
+        manual.bindManualSerializer(new com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer());
+
+        Policy edgeLimiting = GeneratorTestSupport.enabledPolicy("edge_limiting");
+        edgeLimiting.configuration = Map.of("fixed_window_limiters",
+                List.of(Map.of("count", 3, "window", 30)));
+
+        ApiService service = GeneratorTestSupport.basicService("Manual API", "manual-api");
+        service.policies = List.of(edgeLimiting);
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        String yaml = manual.generate(ctx);
+
+        assertNotNull(yaml);
+        assertTrue(yaml.contains("kind: RateLimitPolicy"));
     }
 }

@@ -5,7 +5,11 @@ import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthPolicyRules;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthPolicySpec;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthenticationRule;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.HeaderEntry;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.PlainValue;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ResponseConfig;
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ResponseSuccess;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import org.junit.jupiter.api.Test;
@@ -109,5 +113,48 @@ class AuthPolicyYamlMergerTest {
 
         assertEquals("demo-api-auth", merged.metadata().name());
         assertEquals("ns", merged.metadata().namespace());
+    }
+
+    @Test
+    void merge_nullBaseSpec_usesOverlayRules() {
+        ManifestMeta meta = new ManifestMeta("demo-api-auth", "ns", Map.of("app", "demo-api"), null);
+        AuthPolicyManifest base = new AuthPolicyManifest("kuadrant.io/v1", "AuthPolicy", meta, null);
+
+        AuthPolicyRules overlayRules = new AuthPolicyRules(
+                Map.of("api-key", new AuthenticationRule(Map.of("apiKey", Map.of()))),
+                null,
+                null);
+        TargetRef ref = new TargetRef("gateway.networking.k8s.io", "HTTPRoute", "demo-api-route");
+        AuthPolicyManifest overlay = new AuthPolicyManifest("kuadrant.io/v1", "AuthPolicy", meta,
+                new AuthPolicySpec(ref, overlayRules));
+
+        AuthPolicyManifest merged = AuthPolicyYamlMerger.merge(base, overlay);
+
+        assertNotNull(merged.spec().rules().authentication());
+        assertTrue(merged.spec().rules().authentication().containsKey("api-key"));
+    }
+
+    @Test
+    void merge_overlayResponseOverridesBase() {
+        AuthPolicyManifest base = baseManifest();
+        ResponseConfig baseResponse = new ResponseConfig(new ResponseSuccess(Map.of()));
+        AuthPolicyRules baseRules = new AuthPolicyRules(
+                base.spec().rules().authentication(),
+                null,
+                baseResponse);
+        base = new AuthPolicyManifest(base.apiVersion(), base.kind(), base.metadata(),
+                new AuthPolicySpec(base.spec().targetRef(), baseRules));
+
+        ResponseConfig overlayResponse = new ResponseConfig(new ResponseSuccess(Map.of(
+                "X-Overlay", new HeaderEntry(new PlainValue("yes")))));
+        AuthPolicyRules overlayRules = new AuthPolicyRules(Map.of(), null, overlayResponse);
+        AuthPolicyManifest overlay = new AuthPolicyManifest("kuadrant.io/v1", "AuthPolicy",
+                base.metadata(), new AuthPolicySpec(base.spec().targetRef(), overlayRules));
+
+        AuthPolicyManifest merged = AuthPolicyYamlMerger.merge(base, overlay);
+
+        assertNotNull(merged.spec().rules().response());
+        assertNotNull(merged.spec().rules().response().success());
+        assertTrue(merged.spec().rules().response().success().headers().containsKey("X-Overlay"));
     }
 }
