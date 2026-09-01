@@ -3,10 +3,12 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeouts;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class TimeoutsContributorTest {
 
@@ -19,7 +21,7 @@ class TimeoutsContributorTest {
 
         new TimeoutsContributor().contribute(builder, ctx);
 
-        assertFalse(builder.timeoutsBlock().isEmpty());
+        assertNotNull(builder.timeouts());
     }
 
     @Test
@@ -29,18 +31,36 @@ class TimeoutsContributorTest {
 
         new TimeoutsContributor().contribute(builder, ctx);
 
-        assertTrue(builder.timeoutsBlock().isEmpty());
+        assertNull(builder.timeouts());
     }
 
     @Test
     void contribute_addsExpectedFragments() {
         ApiService service = ContributorTestFixtures.apiService();
         service.policies.add(ContributorTestFixtures.upstreamConnectionPolicy(10, 20, 40));
-        String block = TimeoutsContributor.buildTimeoutsBlock(service);
+        HTTPRouteTimeouts timeouts = TimeoutsContributor.buildTimeouts(service);
 
-        assertTrue(block.contains("timeouts:"));
-        assertTrue(block.contains("backendRequest: \"10s\""));
-        assertTrue(block.contains("request: \"40s\""));
-        assertTrue(block.contains("send_timeout: 20s"));
+        assertNotNull(timeouts);
+        assertEquals("10s", timeouts.getBackendRequest());
+        assertEquals("40s", timeouts.getRequest());
+        // send_timeout (20s) has no Gateway API field — recorded as annotation by
+        // HttpRouteAnnotationsContributor instead
+    }
+
+    @Test
+    void buildTimeouts_noValues_returnsNull() {
+        ApiService service = ContributorTestFixtures.apiService();
+        assertNull(TimeoutsContributor.buildTimeouts(service));
+    }
+
+    @Test
+    void buildTimeouts_onlyReadTimeout_sets_request() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(ContributorTestFixtures.upstreamConnectionPolicy(0, 0, 15));
+        HTTPRouteTimeouts timeouts = TimeoutsContributor.buildTimeouts(service);
+
+        assertNotNull(timeouts);
+        assertEquals("15s", timeouts.getRequest());
+        assertNull(timeouts.getBackendRequest());
     }
 }

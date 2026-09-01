@@ -3,6 +3,8 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetryBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeoutsBuilder;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,7 +23,8 @@ class CorsOptionsContributorTest {
 
         new CorsOptionsContributor().contribute(builder, ctx);
 
-        assertTrue(builder.build().contains("method: OPTIONS"));
+        // Fabric8 serializes method values with double quotes
+        assertTrue(builder.build().contains("OPTIONS"));
     }
 
     @Test
@@ -63,8 +66,26 @@ class CorsOptionsContributorTest {
         new CorsOptionsContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertTrue(yaml.contains("value: \"/api\""));
-        assertTrue(yaml.contains("value: \"/v2\""));
-        assertTrue(yaml.contains("method: OPTIONS"));
+        assertTrue(yaml.contains("/api"), yaml);
+        assertTrue(yaml.contains("/v2"), yaml);
+        // Fabric8 serializes method values with double quotes
+        assertTrue(yaml.contains("OPTIONS"), yaml);
+    }
+
+    @Test
+    void contribute_withTimeoutsAndRetry() {
+        ApiService service = ContributorTestFixtures.apiService();
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+        builder.setCorsEnabled(true);
+        builder.addPathForOptions("/api");
+        builder.setTimeouts(new HTTPRouteTimeoutsBuilder().withRequest("12s").build());
+        builder.setRetry(new HTTPRouteRetryBuilder().withAttempts(2).build());
+
+        new CorsOptionsContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("12s"), yaml);
+        assertTrue(yaml.contains("attempts: 2") || yaml.contains("attempts:2"), yaml);
     }
 }

@@ -3,6 +3,10 @@ package com.redhat.migrationtoolkit.rhcl.service.conversion;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPBackendRef;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPBackendRefBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteFilter;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteFilterBuilder;
 import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
@@ -72,18 +76,41 @@ public final class HttpRouteSupport {
         return path.equals(mount) || path.startsWith(mount.endsWith("/") ? mount : mount + "/");
     }
 
-    public static String formatBackendRefs(List<ResolvedBackend> selected) {
+    /**
+     * Build typed Fabric8 {@link HTTPBackendRef} list from resolved backends.
+     */
+    public static List<HTTPBackendRef> buildBackendRefs(List<ResolvedBackend> selected) {
         boolean weighted = selected.size() > 1;
-        StringBuilder sb = new StringBuilder();
+        List<HTTPBackendRef> refs = new ArrayList<>();
         for (ResolvedBackend backend : selected) {
-            sb.append("        - name: ").append(backend.refName).append('\n');
-            sb.append("          port: ").append(backend.port).append('\n');
+            var refBuilder = new HTTPBackendRefBuilder()
+                    .withName(backend.refName)
+                    .withPort(backend.port);
             if (weighted) {
-                int weight = backend.weight != null ? backend.weight : 1;
-                sb.append("          weight: ").append(weight).append('\n');
+                refBuilder.withWeight(backend.weight != null ? backend.weight : 1);
             }
+            refs.add(refBuilder.build());
         }
-        return sb.toString();
+        return refs;
+    }
+
+    /**
+     * Build typed {@link HTTPRouteFilter} list for a rule: URLRewrite for external hosts + shared filters.
+     */
+    public static List<HTTPRouteFilter> buildRuleFilters(
+            List<ResolvedBackend> selected, List<HTTPRouteFilter> sharedFilters) {
+        List<HTTPRouteFilter> filters = new ArrayList<>();
+        String rewriteHost = uniqueExternalHost(selected);
+        if (rewriteHost != null) {
+            filters.add(new HTTPRouteFilterBuilder()
+                    .withType("URLRewrite")
+                    .withNewUrlRewrite()
+                    .withHostname(rewriteHost)
+                    .endUrlRewrite()
+                    .build());
+        }
+        filters.addAll(sharedFilters);
+        return filters;
     }
 
     public static String uniqueExternalHost(List<ResolvedBackend> selected) {
@@ -99,22 +126,6 @@ public final class HttpRouteSupport {
             return null;
         }
         return hosts.size() == 1 ? hosts.iterator().next() : null;
-    }
-
-    public static String buildRuleFiltersBlock(List<ResolvedBackend> selected, String sharedFilters) {
-        StringBuilder filterItems = new StringBuilder();
-        String rewriteHost = uniqueExternalHost(selected);
-        if (rewriteHost != null) {
-            filterItems.append("""
-        - type: URLRewrite
-          urlRewrite:
-            hostname: "%s"
-""".formatted(rewriteHost));
-        }
-        filterItems.append(sharedFilters);
-        return filterItems.length() > 0
-                ? "      filters:\n" + filterItems
-                : "";
     }
 
     /** Double-quote a YAML scalar so values like {@code *} do not parse as aliases. */

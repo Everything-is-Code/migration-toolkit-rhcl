@@ -2,6 +2,7 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorOrdering;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.HttpRouteBuilder;
 import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.HttpRouteContributor;
 import jakarta.annotation.Priority;
@@ -20,10 +21,17 @@ public class HttpRouteGenerator implements ResourceGenerator {
     @Inject
     Instance<HttpRouteContributor> contributors;
 
+    @Inject
+    ManifestSerializer manifestSerializer;
+
     private List<HttpRouteContributor> manualContributors;
 
     void bindManualContributors(List<HttpRouteContributor> list) {
         this.manualContributors = list;
+    }
+
+    void bindManual(ManifestSerializer serializer) {
+        this.manifestSerializer = serializer;
     }
 
     @Override
@@ -42,7 +50,7 @@ public class HttpRouteGenerator implements ResourceGenerator {
         for (HttpRouteContributor contributor : orderedContributors()) {
             contributor.contribute(builder, ctx);
         }
-        return builder.build();
+        return builder.build(serializer());
     }
 
     private List<HttpRouteContributor> orderedContributors() {
@@ -54,5 +62,9 @@ public class HttpRouteGenerator implements ResourceGenerator {
         }
         list.sort(Comparator.comparingInt(ContributorOrdering::priorityOf));
         return list;
+    }
+
+    private ManifestSerializer serializer() {
+        return manifestSerializer != null ? manifestSerializer : new ManifestSerializer();
     }
 }

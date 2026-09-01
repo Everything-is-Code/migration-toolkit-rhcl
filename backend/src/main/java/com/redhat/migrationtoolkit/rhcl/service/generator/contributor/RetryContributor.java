@@ -3,6 +3,8 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.PolicyConfigSupport;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetry;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetryBuilder;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -28,18 +30,18 @@ public class RetryContributor implements HttpRouteContributor {
     @Override
     public void contribute(HttpRouteBuilder builder, ConversionContext ctx) {
         if (!ctx.options.retriesSupported) {
-            builder.setRetryBlock("");
+            builder.setRetry(null);
             return;
         }
         Integer attempts = policyConfigSupport().resolveRetryAttempts(
                 policyFinder().findEnabled(ctx.service, "retry"));
         if (attempts == null || attempts <= 0) {
-            builder.setRetryBlock("");
+            builder.setRetry(null);
             return;
         }
-        builder.setRetryBlock("""
-      retry:
-        attempts: %d
-""".formatted(attempts));
+        HTTPRouteRetry retry = new HTTPRouteRetryBuilder()
+                .withAttempts(attempts)
+                .build();
+        builder.setRetry(retry);
     }
 }

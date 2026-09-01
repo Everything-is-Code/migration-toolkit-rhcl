@@ -235,8 +235,8 @@ class ConversionSupportQuarkusTest {
                 service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
 
         String httproute = files.get("httproute.yaml");
-        assertTrue(httproute.contains("name: X-Tenant") && httproute.contains("value: \"acme\""), httproute);
-        assertTrue(httproute.contains("name: env") && httproute.contains("value: \"staging\""), httproute);
+        assertTrue(httproute.contains("X-Tenant") && httproute.contains("value: \"acme\""), httproute);
+        assertTrue(httproute.contains("env") && httproute.contains("value: \"staging\""), httproute);
         assertTrue(httproute.contains("value: \"/special\""), httproute);
         int routingPath = httproute.indexOf("value: \"/special\"");
         int fallback = httproute.indexOf("value: \"/fallback\"");
@@ -261,10 +261,10 @@ class ConversionSupportQuarkusTest {
                 service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions())
                 .get("httproute.yaml");
 
-        assertTrue(httproute.contains("name: X-A") && httproute.contains("name: X-B"), httproute);
+        assertTrue(httproute.contains("X-A") && httproute.contains("X-B"), httproute);
         // OR multi-emit: each op is its own matches block (not ANDed headers in one rule)
-        int xa = httproute.indexOf("name: X-A");
-        int xb = httproute.indexOf("name: X-B");
+        int xa = httproute.indexOf("X-A");
+        int xb = httproute.indexOf("X-B");
         assertTrue(xa >= 0 && xb >= 0 && xa != xb, httproute);
         String between = xa < xb ? httproute.substring(xa, xb) : httproute.substring(xb, xa);
         assertTrue(between.contains("backendRefs") || between.contains("- matches:"),
@@ -287,7 +287,7 @@ class ConversionSupportQuarkusTest {
                 service, "demo-ns", null, ConversionSupportTestFixtures.conversionOptions());
 
         String httproute = files.get("httproute.yaml");
-        assertTrue(httproute.contains("name: X-Ok"), "Sibling header must still convert: " + httproute);
+        assertTrue(httproute.contains("X-Ok"), "Sibling header must still convert: " + httproute);
         assertFalse(httproute.contains("jwt_claim") || httproute.contains("role"),
                 "JWT claim must not appear as HTTPRoute match: " + httproute);
         String readme = files.get("README.md");

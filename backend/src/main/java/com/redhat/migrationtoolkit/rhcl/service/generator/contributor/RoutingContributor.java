@@ -9,6 +9,17 @@ import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport.MatchKind;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport.MatchOp;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport.RoutingRule;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPBackendRef;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPHeaderMatch;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPHeaderMatchBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPQueryParamMatch;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPQueryParamMatchBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteFilter;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteMatch;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteMatchBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetry;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRuleBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeouts;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -36,9 +47,9 @@ public class RoutingContributor implements HttpRouteContributor {
         if (routing == null) {
             return;
         }
-        String timeoutsBlock = builder.timeoutsBlock();
-        String retryBlock = builder.retryBlock();
-        String sharedFilters = builder.sharedFilters();
+        HTTPRouteTimeouts timeouts = builder.timeouts();
+        HTTPRouteRetry retry = builder.retry();
+        List<HTTPRouteFilter> sharedFilters = builder.sharedFilters();
         List<ResolvedBackend> productBackends = builder.effectiveBackends();
 
         for (RoutingRule rule : RoutingSupport.parseRules(routing)) {
@@ -58,40 +69,53 @@ public class RoutingContributor implements HttpRouteContributor {
 
             if ("or".equals(rule.combineOp())) {
                 for (MatchOp op : convertible) {
-                    emitRule(builder, List.of(op), selected, sharedFilters, timeoutsBlock, retryBlock);
+                    emitRule(builder, List.of(op), selected, sharedFilters, timeouts, retry);
                 }
             } else {
-                emitRule(builder, convertible, selected, sharedFilters, timeoutsBlock, retryBlock);
+                emitRule(builder, convertible, selected, sharedFilters, timeouts, retry);
             }
         }
     }
 
     private static void emitRule(HttpRouteBuilder builder, List<MatchOp> ops,
-            List<ResolvedBackend> selected, String sharedFilters, String timeoutsBlock,
-            String retryBlock) {
+            List<ResolvedBackend> selected, List<HTTPRouteFilter> sharedFilters,
+            HTTPRouteTimeouts timeouts, HTTPRouteRetry retry) {
+        // Register paths for OPTIONS rules
         for (MatchOp op : ops) {
             if (op.kind() == MatchKind.PATH) {
                 String path = HttpRouteSupport.toGatewayApiPathPrefix(op.value());
                 builder.addPathForOptions(path);
             }
         }
-        String matchBody = formatMatches(ops);
-        if (matchBody.isBlank()) {
+
+        HTTPRouteMatch match = buildMatch(ops);
+        if (match == null) {
             return;
         }
-        String filtersBlock = HttpRouteSupport.buildRuleFiltersBlock(selected, sharedFilters);
-        builder.appendRule("""
-    - matches:
-        - %s
-%s%s%s      backendRefs:
-%s""".formatted(matchBody, filtersBlock, timeoutsBlock, retryBlock,
-                HttpRouteSupport.formatBackendRefs(selected)));
+
+        List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
+        List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+
+        var ruleBuilder = new HTTPRouteRuleBuilder()
+                .withMatches(match)
+                .withBackendRefs(backendRefs);
+        if (!filters.isEmpty()) {
+            ruleBuilder.withFilters(filters);
+        }
+        if (timeouts != null) {
+            ruleBuilder.withTimeouts(timeouts);
+        }
+        if (retry != null) {
+            ruleBuilder.withRetry(retry);
+        }
+        builder.addRule(ruleBuilder.build());
     }
 
-    static String formatMatches(List<MatchOp> ops) {
-        List<String> headerItems = new ArrayList<>();
-        List<String> queryItems = new ArrayList<>();
+    static HTTPRouteMatch buildMatch(List<MatchOp> ops) {
+        List<HTTPHeaderMatch> headerMatches = new ArrayList<>();
+        List<HTTPQueryParamMatch> queryMatches = new ArrayList<>();
         String pathValue = null;
+
         for (MatchOp op : ops) {
             if (!op.convertible()) {
                 continue;
@@ -99,50 +123,44 @@ public class RoutingContributor implements HttpRouteContributor {
             switch (op.kind()) {
                 case HEADER -> {
                     if (op.name() != null) {
-                        headerItems.add("            - name: " + op.name()
-                                + "\n              value: "
-                                + HttpRouteSupport.yamlDoubleQuoted(op.value()));
+                        headerMatches.add(new HTTPHeaderMatchBuilder()
+                                .withName(op.name())
+                                .withValue(op.value())
+                                .build());
                     }
                 }
                 case QUERY_ARG -> {
                     if (op.name() != null) {
-                        queryItems.add("            - name: " + op.name()
-                                + "\n              value: "
-                                + HttpRouteSupport.yamlDoubleQuoted(op.value()));
+                        queryMatches.add(new HTTPQueryParamMatchBuilder()
+                                .withName(op.name())
+                                .withValue(op.value())
+                                .build());
                     }
                 }
                 case PATH -> pathValue = HttpRouteSupport.toGatewayApiPathPrefix(op.value());
                 default -> {
-                    // jwt / unsupported already filtered
+                    // jwt / unsupported already filtered by convertible()
                 }
             }
         }
-        StringBuilder sb = new StringBuilder();
-        boolean first = true;
-        if (!headerItems.isEmpty()) {
-            sb.append("headers:\n");
-            for (String item : headerItems) {
-                sb.append(item).append('\n');
-            }
-            first = false;
+
+        if (headerMatches.isEmpty() && queryMatches.isEmpty() && pathValue == null) {
+            return null;
         }
-        if (!queryItems.isEmpty()) {
-            if (!first) {
-                sb.append("          ");
-            }
-            sb.append("queryParams:\n");
-            for (String item : queryItems) {
-                sb.append(item).append('\n');
-            }
-            first = false;
+
+        var matchBuilder = new HTTPRouteMatchBuilder();
+        if (!headerMatches.isEmpty()) {
+            matchBuilder.withHeaders(headerMatches);
+        }
+        if (!queryMatches.isEmpty()) {
+            matchBuilder.withQueryParams(queryMatches);
         }
         if (pathValue != null) {
-            if (!first) {
-                sb.append("          ");
-            }
-            sb.append("path:\n            type: PathPrefix\n            value: ")
-                    .append(HttpRouteSupport.yamlDoubleQuoted(pathValue));
+            matchBuilder.withNewPath()
+                    .withType("PathPrefix")
+                    .withValue(pathValue)
+                    .endPath();
         }
-        return sb.toString().stripTrailing();
+        return matchBuilder.build();
     }
 }

@@ -6,8 +6,9 @@ import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtur
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class RetryContributorTest {
 
@@ -22,7 +23,8 @@ class RetryContributorTest {
 
         new RetryContributor().contribute(builder, ctx);
 
-        assertTrue(builder.retryBlock().contains("attempts: 3"));
+        assertNotNull(builder.retry());
+        assertEquals(3, builder.retry().getAttempts());
     }
 
     @Test
@@ -36,7 +38,7 @@ class RetryContributorTest {
 
         new RetryContributor().contribute(builder, ctx);
 
-        assertTrue(builder.retryBlock().isEmpty());
+        assertNull(builder.retry());
     }
 
     @Test
@@ -50,7 +52,21 @@ class RetryContributorTest {
 
         new RetryContributor().contribute(builder, ctx);
 
-        assertTrue(builder.retryBlock().contains("retry:"));
-        assertTrue(builder.retryBlock().contains("attempts: 5"));
+        assertNotNull(builder.retry());
+        assertEquals(5, builder.retry().getAttempts());
+    }
+
+    @Test
+    void contribute_zeroRetries_clearsRetry() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(ContributorTestFixtures.retryPolicy(0));
+        ConversionOptions options = new ConversionOptions();
+        options.retriesSupported = true;
+        ConversionContext ctx = ContributorTestFixtures.context(service, options);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new RetryContributor().contribute(builder, ctx);
+
+        assertNull(builder.retry());
     }
 }

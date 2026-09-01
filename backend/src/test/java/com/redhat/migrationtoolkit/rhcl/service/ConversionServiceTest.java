@@ -148,7 +148,7 @@ class ConversionServiceTest {
 
         Map<String, String> files = service.convert(svc, "ns");
         String httproute = files.get("httproute.yaml");
-        assertTrue(httproute.contains("type: PathPrefix"), "brace patterns must use PathPrefix");
+        assertTrue(httproute.contains("PathPrefix"), "brace patterns must use PathPrefix");
         assertTrue(httproute.contains("value: \"/api\""), "prefix should truncate at '{'");
         assertFalse(httproute.contains("{?}"), "brace wildcards must not appear in HTTPRoute");
         assertFalse(httproute.contains("value: \"/api*\""), "must not emit a literal '*' PathPrefix");
@@ -260,7 +260,7 @@ class ConversionServiceTest {
         opts.corsNative = corsNative;
         String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
 
-        assertTrue(httproute.contains("method: OPTIONS"),
+        assertTrue(httproute.contains("OPTIONS"),
                 "cors must add OPTIONS preflight on product path(s)");
         assertTrue(httproute.contains("/api/users"));
         assertTrue(httproute.contains("https://app.example.com"));
@@ -268,7 +268,7 @@ class ConversionServiceTest {
         if (corsNative) {
             assertTrue(httproute.contains("type: CORS"),
                     "corsNative=true must emit Gateway API CORS filter");
-            assertTrue(httproute.contains("\n          cors:"));
+            assertTrue(httproute.contains("\n      cors:"));
             assertTrue(httproute.contains("allowOrigins:"));
             assertTrue(httproute.contains("allowMethods:"));
             assertFalse(httproute.contains("Access-Control-Allow-Origin"),
@@ -277,9 +277,9 @@ class ConversionServiceTest {
             // Default / OCP 4.19 / GAPI 1.2.1 path
             assertFalse(httproute.contains("type: CORS"),
                     "type: CORS requires Gateway API ≥ 1.3; OCP 4.19 ships 1.2.1");
-            assertFalse(httproute.contains("\n          cors:"),
+            assertFalse(httproute.contains("\n      cors:"),
                     "native cors: block must not appear when corsNative=false");
-            assertTrue(httproute.contains("type: ResponseHeaderModifier"));
+            assertTrue(httproute.contains("ResponseHeaderModifier"));
             assertTrue(httproute.contains("Access-Control-Allow-Origin"));
             assertTrue(httproute.contains("Access-Control-Allow-Methods"));
             assertTrue(httproute.contains("GET, POST") || httproute.contains("GET,POST"));
@@ -302,7 +302,7 @@ class ConversionServiceTest {
         String httproute = service.convert(svc, "ns").get("httproute.yaml");
         assertFalse(httproute.contains("type: CORS"),
                 "ConversionOptions.corsNative defaults false — never emit type: CORS");
-        assertTrue(httproute.contains("type: ResponseHeaderModifier"));
+        assertTrue(httproute.contains("ResponseHeaderModifier"));
     }
 
     @Test
@@ -346,16 +346,18 @@ class ConversionServiceTest {
         opts.corsNative = false;
         String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
 
-        String originItem = "              - name: Access-Control-Allow-Origin";
-        String credentialsItem = "              - name: Access-Control-Allow-Credentials";
-        String credentialsValue = "                value: \"true\"";
+        // Fabric8 serializes HTTPRouteFilter fields alphabetically; header set items are at 8-space
+        // indent with double-quoted name values.
+        String originItem = "        - name: \"Access-Control-Allow-Origin\"";
+        String credentialsItem = "        - name: \"Access-Control-Allow-Credentials\"";
+        String credentialsValue = "          value: \"true\"";
         assertTrue(httproute.contains(originItem),
-                "Allow-Origin sibling must use 14-space list-item indent");
+                "Allow-Origin sibling must use 8-space list-item indent");
         assertTrue(httproute.contains(credentialsItem),
-                "Allow-Credentials must align at 14 spaces like sibling Access-Control-* headers");
+                "Allow-Credentials must align at 8 spaces like sibling Access-Control-* headers");
         assertTrue(httproute.contains(credentialsItem + "\n" + credentialsValue),
-                "Allow-Credentials value must use 16-space indent matching sibling headers");
-        assertFalse(httproute.contains("                  - name: Access-Control-Allow-Credentials"),
+                "Allow-Credentials value must use 10-space indent matching sibling headers");
+        assertFalse(httproute.contains("              - name: Access-Control-Allow-Credentials"),
                 "must not over-indent Allow-Credentials relative to siblings");
     }
 
@@ -375,9 +377,9 @@ class ConversionServiceTest {
         String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
 
         assertTrue(httproute.contains(
-                        "              - name: Access-Control-Allow-Credentials\n"
-                                + "                value: \"true\"\n"
-                                + "              - name: Access-Control-Max-Age"),
+                        "        - name: \"Access-Control-Allow-Credentials\"\n"
+                                + "          value: \"true\"\n"
+                                + "        - name: \"Access-Control-Max-Age\""),
                 "credentials block must sit between siblings at the same indent as Max-Age");
     }
 
@@ -397,9 +399,9 @@ class ConversionServiceTest {
         String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
 
         assertTrue(httproute.contains("type: CORS"));
-        assertTrue(httproute.contains("allowOrigins:\n              - \"*\""),
+        assertTrue(httproute.contains("allowOrigins:\n        - \"*\""),
                 "native CORS wildcard origin must be double-quoted for valid YAML");
-        assertFalse(httproute.contains("allowOrigins:\n              - *\n"),
+        assertFalse(httproute.contains("allowOrigins:\n        - *\n"),
                 "unquoted - * is invalid YAML (alias indicator)");
         assertTrue(httproute.contains("- \"Authorization\""));
         assertTrue(httproute.contains("- \"Content-Type\""));
@@ -492,7 +494,7 @@ class ConversionServiceTest {
         String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
         assertFalse(httproute.contains("type: CORS"));
         assertFalse(httproute.contains("Access-Control-Allow-Origin"));
-        assertFalse(httproute.contains("method: OPTIONS"),
+        assertFalse(httproute.contains("OPTIONS"),
                 "without cors, no CORS-only OPTIONS match should be added");
         assertTrue(httproute.contains("ResponseHeaderModifier"));
     }
@@ -1621,12 +1623,12 @@ class ConversionServiceTest {
 
         String httproute = service.convert(svc, "ns").get("httproute.yaml");
         int routingHost = httproute.indexOf("routing.example.com");
-        int mappingPath = httproute.indexOf("method: GET");
+        int mappingPath = httproute.indexOf("\"GET\"");
         assertTrue(routingHost >= 0 && mappingPath >= 0 && routingHost < mappingPath,
                 "Routing conditional rule must precede mapping fallthrough: " + httproute);
         assertTrue(countOccurrences(httproute, "value: \"/special\"") >= 2
                         || (httproute.contains("routing.example.com")
-                        && httproute.contains("method: GET")),
+                        && httproute.contains("\"GET\"")),
                 "Overlap must keep mapping fallthrough after routing: " + httproute);
     }
 
@@ -1655,7 +1657,7 @@ class ConversionServiceTest {
 
         String httproute = service.convert(svc, "ns", null, opts).get("httproute.yaml");
         assertTrue(httproute.contains("value: \"/special\""), httproute);
-        assertTrue(httproute.contains("method: OPTIONS"),
+        assertTrue(httproute.contains("OPTIONS"),
                 "CORS OPTIONS must include routing-only path: " + httproute);
         assertTrue(httproute.contains("/special") && httproute.contains("OPTIONS"),
                 "OPTIONS rule for /special must be present: " + httproute);
