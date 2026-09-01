@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RegistryDiscoveryMarkers;
 import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.Test;
@@ -112,5 +113,27 @@ class GatewayGeneratorTest {
 
         assertTrue(labels.containsKey("app"));
         assertFalse(labels.containsKey("migrated-from"));
+    }
+
+    @Test
+    void generate_withMigratedFromLabel_includesLabel() {
+        ApiService service = GeneratorTestSupport.basicService("My API", "my-api");
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> labels = (Map<String, Object>) ((Map<String, Object>) YamlAssertions
+                .parse(generator.generate(ctx)).get("metadata")).get("labels");
+
+        assertEquals("3scale", labels.get("migrated-from"));
+    }
+
+    @Test
+    void bindManual_usesInjectedSerializer() {
+        GatewayGenerator manual = new GatewayGenerator();
+        manual.bindManual(new ManifestSerializer());
+        ApiService service = GeneratorTestSupport.basicService("Bound API", "bound-api");
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        assertFalse(manual.generate(ctx).isBlank());
     }
 }

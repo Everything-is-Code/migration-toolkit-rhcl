@@ -2,11 +2,14 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
+import com.redhat.migrationtoolkit.rhcl.service.generator.contributor.DefaultCredentialsSecretContributor;
 import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -46,5 +49,19 @@ class SecretGeneratorTest {
         Map<String, String> stringData = (Map<String, String>) parsed.get("stringData");
         assertTrue(stringData.containsKey("client-id"));
         assertTrue(stringData.containsValue("REPLACE_ME"));
+    }
+
+    @Test
+    void manualBinding_generatesSecretWithoutCdi() {
+        SecretGenerator manual = new SecretGenerator();
+        manual.bindManual(new ManifestSerializer());
+        manual.bindManualContributors(List.of(new DefaultCredentialsSecretContributor()));
+        ApiService service = GeneratorTestSupport.basicService("Manual Secret", "manual-secret");
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        String yaml = manual.generate(ctx);
+
+        assertEquals("manual-secret-credentials",
+                ((Map<?, ?>) YamlAssertions.parse(yaml).get("metadata")).get("name"));
     }
 }
