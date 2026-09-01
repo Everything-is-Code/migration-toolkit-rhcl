@@ -14,6 +14,9 @@ import java.util.Map;
  * Merges two typed {@link AuthPolicyManifest} instances by combining their named-rule maps.
  * Rules from the overlay take precedence over base rules with the same name (last-write-wins).
  * Metadata (name, namespace, labels, annotations) is taken from the base manifest.
+ * <p>
+ * Production {@link AuthPolicyGenerator} accumulates rules in a single {@link AuthPolicyBuilder};
+ * this merger is retained for tested merge semantics and future multi-manifest composition.
  */
 public final class AuthPolicyYamlMerger {
 

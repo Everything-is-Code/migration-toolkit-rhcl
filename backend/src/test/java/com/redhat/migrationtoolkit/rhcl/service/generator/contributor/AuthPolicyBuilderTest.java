@@ -81,7 +81,7 @@ class AuthPolicyBuilderTest {
         AuthPolicyManifest manifest = builder.build();
         String yaml = SERIALIZER.toYaml(manifest);
 
-        assertTrue(yaml.contains("authentication: {}") || yaml.contains("authentication:\n"));
+        assertTrue(yaml.contains("authentication: {}"), yaml);
     }
 
     @Test

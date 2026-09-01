@@ -10,6 +10,7 @@ import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ResponseConfig;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.KuadrantManifestSupport;
 import org.jboss.logging.Logger;
 
 import java.util.LinkedHashMap;
@@ -69,6 +70,9 @@ public final class AuthPolicyBuilder {
      * Last write wins when the same name is used twice.
      */
     public AuthPolicyBuilder addAuthentication(String ruleName, AuthenticationRule rule) {
+        if (authentication.containsKey(ruleName)) {
+            LOG.debugf("Overwriting authentication rule '%s' (last-write-wins)", ruleName);
+        }
         authentication.put(ruleName, rule);
         authInitialized = true;
         return this;
@@ -90,6 +94,9 @@ public final class AuthPolicyBuilder {
      * Last write wins when the same name is used twice.
      */
     public AuthPolicyBuilder addAuthorization(String ruleName, AuthorizationRule rule) {
+        if (authorization.containsKey(ruleName)) {
+            LOG.debugf("Overwriting authorization rule '%s' (last-write-wins)", ruleName);
+        }
         authorization.put(ruleName, rule);
         return this;
     }
@@ -160,15 +167,12 @@ public final class AuthPolicyBuilder {
      * {@link #setEmptyAuthentication()} was called and no rules were added.
      */
     public AuthPolicyManifest build() {
-        Map<String, String> labels = new LinkedHashMap<>();
-        labels.put("app", name);
-        if (includeMigratedFromLabel) {
-            labels.put("migrated-from", "3scale");
-        }
-
         Map<String, String> annotations = extraAnnotations.isEmpty() ? null : new LinkedHashMap<>(extraAnnotations);
-
-        ManifestMeta meta = new ManifestMeta(name + "-auth", namespace, labels, annotations);
+        ManifestMeta meta = new ManifestMeta(
+                name + "-auth",
+                namespace,
+                KuadrantManifestSupport.baseLabels(name, includeMigratedFromLabel),
+                annotations);
 
         Map<String, AuthenticationRule> authMap = authentication.isEmpty()
                 ? Map.of()

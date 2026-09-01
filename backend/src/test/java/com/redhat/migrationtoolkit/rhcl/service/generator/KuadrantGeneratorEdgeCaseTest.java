@@ -21,9 +21,9 @@ class KuadrantGeneratorEdgeCaseTest {
         return ConversionContext.build(service, "ns", null, options, new BackendResolver());
     }
 
-    // 5.6 — TlsPolicyGenerator fails fast with clear error when issuerRef is blank
+    // 5.6 — TlsPolicyGenerator applies defaults when issuer kind/name are blank
     @Test
-    void tlsPolicyGenerator_blankIssuerKindAndName_stillUsesDefaults() {
+    void tlsPolicyGenerator_blankIssuerKindAndName_appliesDefaults() {
         TlsPolicyGenerator generator = new TlsPolicyGenerator();
         generator.bindManual(SERIALIZER);
 
@@ -42,7 +42,26 @@ class KuadrantGeneratorEdgeCaseTest {
         assertTrue(yaml.contains("name: letsencrypt-prod"), "Default name should be letsencrypt-prod");
     }
 
-    // 5.8 — ApiKeyGenerator with empty/blank service name produces predictable output
+    // 5.8 — ApiKeyGenerator with blank service system name still produces deterministic resource name
+    @Test
+    void apiKeyGenerator_blankSystemName_usesKebabFallback() {
+        ApiKeyGenerator generator = new ApiKeyGenerator();
+        generator.bindManual(SERIALIZER);
+
+        ApiService service = new ApiService();
+        service.name = "My API";
+        service.systemName = null;
+        service.authentication = new Authentication();
+        service.authentication.type = "apiKey";
+        ConversionContext ctx = ctx(service, new ConversionOptions());
+
+        String yaml = generator.generate(ctx);
+
+        assertNotNull(yaml);
+        assertTrue(yaml.contains("kind: APIKey"));
+        assertTrue(yaml.contains("name: my-api-api-key"));
+    }
+
     @Test
     void apiKeyGenerator_standardService_producesDeterministicYaml() {
         ApiKeyGenerator generator = new ApiKeyGenerator();
@@ -84,6 +103,24 @@ class KuadrantGeneratorEdgeCaseTest {
         assertTrue(yaml.contains("description:"), "description field must be present");
         // Jackson handles quoting — no replace hack should cause incorrect output
         assertTrue(yaml.contains("embedded"), "description content should be present");
+    }
+
+    @Test
+    void apiProductGenerator_multilineDescriptionAndYamlSeparator_jacksonHandles() {
+        ApiProductGenerator generator = new ApiProductGenerator();
+        generator.bindManual(SERIALIZER);
+
+        ApiService service = new ApiService();
+        service.name = "Multiline API";
+        service.systemName = "multiline-api";
+        service.description = "Line one\nLine two\n---\nnot a document";
+        ConversionContext ctx = ctx(service, new ConversionOptions());
+
+        String yaml = generator.generate(ctx);
+
+        assertNotNull(yaml);
+        assertTrue(yaml.contains("description:"));
+        assertTrue(yaml.contains("Line one"));
     }
 
     // DnsPolicy with no provider ref → providerRefs omitted

@@ -6,6 +6,7 @@ import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ProviderRef;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.KuadrantManifestSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -39,11 +40,8 @@ public class DnsPolicyGenerator implements ResourceGenerator {
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
 
-        ManifestMeta meta = new ManifestMeta(
-                name + "-dns-policy",
-                namespace,
-                Map.of("app", name, "migrated-from", "3scale"),
-                null);
+        ManifestMeta meta = KuadrantManifestSupport.meta(
+                name + "-dns-policy", namespace, name, ctx.includeMigratedFromLabel);
 
         TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "Gateway", name + "-gateway");
 
