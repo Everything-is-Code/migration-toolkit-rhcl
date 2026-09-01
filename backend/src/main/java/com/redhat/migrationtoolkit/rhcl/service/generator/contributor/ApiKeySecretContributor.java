@@ -19,20 +19,7 @@ public class ApiKeySecretContributor implements SecretContributor {
             return;
         }
         String apiKey = SecretSupport.generateRandomHex(32);
-        String name = builder.name();
-        String namespace = builder.namespace();
-        builder.setSecretYaml("""
-apiVersion: v1
-kind: Secret
-metadata:
-  name: %s-api-key
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-type: Opaque
-stringData:
-  api_key: "%s"
-""".formatted(name, namespace, name, apiKey));
+        builder.beginOpaqueSecret(builder.name() + "-api-key");
+        builder.addStringData("api_key", apiKey);
     }
 }

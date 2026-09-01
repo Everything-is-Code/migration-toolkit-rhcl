@@ -5,8 +5,12 @@ import com.redhat.migrationtoolkit.rhcl.service.ConversionService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendResolver;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ResourceGeneratorRegistryTest {
@@ -26,6 +30,6 @@ class ResourceGeneratorRegistryTest {
         var files = registry.generateAll(ctx);
 
         assertTrue(files.containsKey("gateway.yaml"));
-        assertTrue(files.get("gateway.yaml").contains("kind: Gateway"));
+        assertEquals("Gateway", YamlAssertions.parse(files.get("gateway.yaml")).get("kind"));
     }
 }
