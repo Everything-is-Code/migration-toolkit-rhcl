@@ -71,13 +71,23 @@ public class IpCheckOpaContributor implements AuthPolicyContributor {
                 && !"deny".equalsIgnoreCase(checkType);
 
         String allowBody = whitelist
-                ? "            allow {\n              some i\n              net.cidr_contains(cidrs[i], client_ip)\n            }\n"
-                : "            allow {\n              not denied\n            }\n            denied {\n              some i\n              net.cidr_contains(cidrs[i], client_ip)\n            }\n";
+                ? "            allow {\n"
+                + "              some i\n"
+                + "              net.cidr_contains(cidrs[i], client_ip)\n"
+                + "            }\n"
+                : "            allow {\n"
+                + "              not denied\n"
+                + "            }\n"
+                + "            denied {\n"
+                + "              some i\n"
+                + "              net.cidr_contains(cidrs[i], client_ip)\n"
+                + "            }\n";
 
         String rego = "            package ipcheck\n"
                 + "            import future.keywords\n"
                 + "            cidrs := [" + cidrList + "]\n"
-                + "            # WARNING: peer IP under Authorino; for client IP use AuthorizationPolicy remoteIpBlocks.\n"
+                + "            # WARNING: peer IP under Authorino; for client IP use "
+                + "AuthorizationPolicy remoteIpBlocks.\n"
                 + "            client_ip := input.source.address\n"
                 + allowBody;
 
