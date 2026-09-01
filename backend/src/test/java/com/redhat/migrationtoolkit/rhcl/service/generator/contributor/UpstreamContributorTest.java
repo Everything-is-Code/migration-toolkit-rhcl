@@ -5,6 +5,8 @@ import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetryBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeoutsBuilder;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
@@ -139,6 +141,35 @@ class UpstreamContributorTest {
 
         assertEquals(before, builder.backends());
         assertTrue(builder.build().isBlank() || !builder.build().contains("backendRefs"));
+    }
+
+    @Test
+    void contribute_globalBlankUrl_doesNotSetOverride() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(upstreamPolicy(Map.of("url", "  ", "rules", List.of())));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new UpstreamContributor().contribute(builder, ctx);
+
+        assertEquals(builder.backends(), builder.effectiveBackends());
+    }
+
+    @Test
+    void contribute_pathScoped_withTimeoutsAndRetry() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(upstreamPolicy(Map.of(
+                "rules", List.of(Map.of("regex", "^/v1", "url", "https://v1.example.com")))));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+        builder.setTimeouts(new HTTPRouteTimeoutsBuilder().withRequest("6s").build());
+        builder.setRetry(new HTTPRouteRetryBuilder().withAttempts(3).build());
+
+        new UpstreamContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("6s"), yaml);
+        assertTrue(yaml.contains("attempts: 3") || yaml.contains("attempts:3"), yaml);
     }
 
     private static Policy upstreamPolicy(Map<String, Object> configuration) {

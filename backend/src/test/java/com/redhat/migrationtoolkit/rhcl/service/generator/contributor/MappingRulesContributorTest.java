@@ -5,10 +5,13 @@ import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendType;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetryBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeoutsBuilder;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -72,5 +75,71 @@ class MappingRulesContributorTest {
         // Fabric8 serializes name values with double quotes; check value substrings
         assertTrue(yaml.contains("upstream-override"), yaml);
         assertTrue(yaml.contains("override.example.com"), yaml);
+    }
+
+    @Test
+    void contribute_duplicatePathAndMethod_skipsSecondRule() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/dup"));
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/dup"));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new MappingRulesContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertEquals(1, countOccurrences(yaml, "- backendRefs:"));
+    }
+
+    @Test
+    void contribute_catchAllRoot_registersCatchAllMethod() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/"));
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("POST", "/users"));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new MappingRulesContributor().contribute(builder, ctx);
+
+        assertTrue(builder.pathsForOptions().contains("/"));
+        assertTrue(builder.pathsForOptions().contains("/users"));
+    }
+
+    @Test
+    void contribute_withTimeoutsAndRetry_onMappingRules() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.mappingRules.add(ContributorTestFixtures.mappingRule("GET", "/timed"));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+        builder.setTimeouts(new HTTPRouteTimeoutsBuilder().withRequest("15s").build());
+        builder.setRetry(new HTTPRouteRetryBuilder().withAttempts(2).build());
+
+        new MappingRulesContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("15s"), yaml);
+        assertTrue(yaml.contains("attempts: 2") || yaml.contains("attempts:2"), yaml);
+    }
+
+    @Test
+    void contribute_withTimeouts_onCatchAllWhenNoRules() {
+        ConversionContext ctx = ContributorTestFixtures.context(ContributorTestFixtures.apiService());
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+        builder.setTimeouts(new HTTPRouteTimeoutsBuilder().withRequest("30s").build());
+
+        new MappingRulesContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("30s"), yaml);
+    }
+
+    private static int countOccurrences(String haystack, String needle) {
+        int count = 0;
+        int idx = 0;
+        while ((idx = haystack.indexOf(needle, idx)) >= 0) {
+            count++;
+            idx += needle.length();
+        }
+        return count;
     }
 }

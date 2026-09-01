@@ -91,4 +91,35 @@ class HeaderModContributorTest {
                 .flatMap(f -> f.getResponseHeaderModifier().getRemove().stream())
                 .anyMatch(name -> "X-Remove".equals(name)));
     }
+
+    @Test
+    void buildHeaderModificationFilters_requestAddAndRemove() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(ContributorTestFixtures.headerModificationPolicy(
+                List.of(
+                        Map.of("header", "X-Req-Add", "value", "added", "op", "add"),
+                        Map.of("header", "X-Req-Del", "op", "delete")),
+                null));
+        List<HTTPRouteFilter> filters = HeaderModContributor.buildHeaderModificationFilters(service);
+
+        assertTrue(filters.stream().anyMatch(f -> "RequestHeaderModifier".equals(f.getType())));
+        assertTrue(filters.stream()
+                .filter(f -> f.getRequestHeaderModifier() != null)
+                .flatMap(f -> f.getRequestHeaderModifier().getAdd().stream())
+                .anyMatch(h -> "X-Req-Add".equals(h.getName())));
+        assertTrue(filters.stream()
+                .filter(f -> f.getRequestHeaderModifier() != null)
+                .flatMap(f -> f.getRequestHeaderModifier().getRemove().stream())
+                .anyMatch(name -> "X-Req-Del".equals(name)));
+    }
+
+    @Test
+    void buildHeaderModificationFilters_skipsBlankHeaderAndEmptyDirection() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(ContributorTestFixtures.headerModificationPolicy(
+                List.of(Map.of("header", "  ", "value", "x", "op", "set")),
+                List.of()));
+        List<HTTPRouteFilter> filters = HeaderModContributor.buildHeaderModificationFilters(service);
+        assertTrue(filters.isEmpty());
+    }
 }

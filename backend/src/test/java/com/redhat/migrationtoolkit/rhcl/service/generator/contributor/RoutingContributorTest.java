@@ -8,6 +8,8 @@ import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport.MatchKind;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport.MatchOp;
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteMatch;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetryBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeoutsBuilder;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -252,6 +254,69 @@ class RoutingContributorTest {
         List<MatchOp> ops = List.of(new MatchOp(MatchKind.JWT_CLAIM, "claim", "==", "x"));
         HTTPRouteMatch match = RoutingContributor.buildMatch(ops);
         assertNull(match);
+    }
+
+    @Test
+    void buildMatch_headerWithoutName_returnsNull() {
+        List<MatchOp> ops = List.of(new MatchOp(MatchKind.HEADER, null, "==", "val"));
+        assertNull(RoutingContributor.buildMatch(ops));
+    }
+
+    @Test
+    void contribute_emptyEffectiveBackends_skipsRoutingRules() {
+        ApiService service = ContributorTestFixtures.apiService();
+        Map<String, Object> condition = new HashMap<>();
+        condition.put("combine_op", "and");
+        condition.put("operations", List.of(op("header", "X-Route", "==", "yes")));
+        Map<String, Object> rule = new HashMap<>();
+        rule.put("condition", condition);
+        service.policies.add(routingPolicy(List.of(rule)));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+        builder.setOverrideBackends(List.of());
+
+        new RoutingContributor().contribute(builder, ctx);
+
+        assertFalse(builder.build().contains("X-Route"));
+    }
+
+    @Test
+    void contribute_withTimeoutsAndRetry() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(routingPolicy(List.of(rule(
+                "https://timed.example.com",
+                "and",
+                List.of(op("header", "X-Timed", "==", "1"))))));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+        builder.setTimeouts(new HTTPRouteTimeoutsBuilder().withRequest("8s").build());
+        builder.setRetry(new HTTPRouteRetryBuilder().withAttempts(4).build());
+
+        new RoutingContributor().contribute(builder, ctx);
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("8s"), yaml);
+        assertTrue(yaml.contains("attempts: 4") || yaml.contains("attempts:4"), yaml);
+    }
+
+    @Test
+    void contribute_headerOpWithoutName_skipsRule() {
+        ApiService service = ContributorTestFixtures.apiService();
+        Map<String, Object> condition = new HashMap<>();
+        condition.put("combine_op", "and");
+        condition.put("operations", List.of(Map.of(
+                "match", "header",
+                "op", "==",
+                "value", "orphan")));
+        Map<String, Object> rule = new HashMap<>();
+        rule.put("condition", condition);
+        service.policies.add(routingPolicy(List.of(rule)));
+        ConversionContext ctx = ContributorTestFixtures.context(service);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new RoutingContributor().contribute(builder, ctx);
+
+        assertFalse(builder.build().contains("orphan"));
     }
 
     private static Policy routingPolicy(List<Map<String, Object>> rules) {

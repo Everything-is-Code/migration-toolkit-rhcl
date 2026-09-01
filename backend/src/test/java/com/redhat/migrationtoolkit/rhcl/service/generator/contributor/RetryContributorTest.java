@@ -55,4 +55,18 @@ class RetryContributorTest {
         assertNotNull(builder.retry());
         assertEquals(5, builder.retry().getAttempts());
     }
+
+    @Test
+    void contribute_zeroRetries_clearsRetry() {
+        ApiService service = ContributorTestFixtures.apiService();
+        service.policies.add(ContributorTestFixtures.retryPolicy(0));
+        ConversionOptions options = new ConversionOptions();
+        options.retriesSupported = true;
+        ConversionContext ctx = ContributorTestFixtures.context(service, options);
+        HttpRouteBuilder builder = ContributorTestFixtures.httpRouteBuilder(ctx);
+
+        new RetryContributor().contribute(builder, ctx);
+
+        assertNull(builder.retry());
+    }
 }

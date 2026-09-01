@@ -10,9 +10,11 @@ import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteMatchBuilder;
 import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRuleBuilder;
 import org.junit.jupiter.api.Test;
 
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPBackendRefBuilder;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -110,6 +112,95 @@ class HttpRouteBuilderTest {
         assertTrue(merged.contains("    filters:\n"), merged);
         assertTrue(merged.contains("type: CORS"), merged);
         assertTrue(merged.indexOf("filters:") < merged.indexOf("matches:"), merged);
+    }
+
+    @Test
+    void accessors_exposeBuilderState() {
+        ApiService service = new ApiService();
+        service.name = "demo-api";
+        service.systemName = "demo-api";
+        ConversionContext ctx = ConversionContext.build(
+                service, "ns", null, new ConversionOptions(), new BackendResolver());
+        HttpRouteBuilder builder = new HttpRouteBuilder(ctx);
+
+        assertEquals("demo-api", builder.name());
+        assertEquals("ns", builder.namespace());
+        builder.setRawCorsFilterYaml("- type: CORS\n");
+        assertTrue(builder.rawCorsFilterYaml().contains("type: CORS"));
+        builder.setRawCorsFilterYaml("  ");
+        assertEquals(null, builder.rawCorsFilterYaml());
+    }
+
+    @Test
+    void injectYamlComments_emptyOrMissingSpec_returnsOriginal() {
+        assertEquals("plain", HttpRouteBuilder.injectYamlComments("plain", List.of("note")));
+        assertEquals("y", HttpRouteBuilder.injectYamlComments("y", List.of()));
+    }
+
+    @Test
+    void injectCorsFilters_blankFragment_returnsOriginal() {
+        assertEquals("yaml", HttpRouteBuilder.injectCorsFilters("yaml", "  "));
+    }
+
+    @Test
+    void build_malformedDiscoveryMarker_isIgnored() {
+        ApiService service = new ApiService();
+        service.name = "demo-api";
+        service.systemName = "demo-api";
+        ConversionContext ctx = ConversionContext.build(
+                service, "ns", null, new ConversionOptions(), new BackendResolver());
+        HttpRouteBuilder builder = new HttpRouteBuilder(ctx);
+        builder.setDiscoveryMarker("no-colon-marker");
+        builder.setDiscoveryMarker(":empty-value");
+        builder.setDiscoveryMarker("empty-key:");
+
+        String yaml = builder.build();
+
+        assertFalse(yaml.contains("no-colon-marker"));
+        assertFalse(yaml.contains("empty-value"));
+    }
+
+    @Test
+    void build_withYamlComments_injectsBeforeSpec() {
+        ApiService service = new ApiService();
+        service.name = "demo-api";
+        service.systemName = "demo-api";
+        ConversionContext ctx = ConversionContext.build(
+                service, "ns", null, new ConversionOptions(), new BackendResolver());
+        HttpRouteBuilder builder = new HttpRouteBuilder(ctx);
+        builder.addYamlComment("operator note");
+        builder.addRule(new HTTPRouteRuleBuilder()
+                .withMatches(new HTTPRouteMatchBuilder()
+                        .withNewPath().withType("PathPrefix").withValue("/").endPath()
+                        .build())
+                .withBackendRefs(new HTTPBackendRefBuilder().withName("demo-backend").withPort(8080).build())
+                .build());
+
+        String yaml = builder.build();
+
+        assertTrue(yaml.indexOf("# operator note") < yaml.indexOf("spec:"), yaml);
+    }
+
+    @Test
+    void build_withRawCors_injectsIntoRuleOutput() {
+        ApiService service = new ApiService();
+        service.name = "demo-api";
+        service.systemName = "demo-api";
+        ConversionContext ctx = ConversionContext.build(
+                service, "ns", null, new ConversionOptions(), new BackendResolver());
+        HttpRouteBuilder builder = new HttpRouteBuilder(ctx);
+        builder.setRawCorsFilterYaml("- type: CORS\n  cors:\n    allowOrigins:\n    - \"*\"");
+        builder.addRule(new HTTPRouteRuleBuilder()
+                .withMatches(new HTTPRouteMatchBuilder()
+                        .withNewPath().withType("PathPrefix").withValue("/api").endPath()
+                        .build())
+                .withBackendRefs(new HTTPBackendRefBuilder().withName("demo-backend").withPort(8080).build())
+                .build());
+
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("type: CORS"), yaml);
+        assertTrue(yaml.indexOf("filters:") < yaml.indexOf("matches:"), yaml);
     }
 
     @Test

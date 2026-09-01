@@ -159,6 +159,16 @@ class HttpRouteSupportTest {
     }
 
     @Test
+    void selectBackendsForPath_emptyBackends_returnsEmptyList() {
+        assertTrue(HttpRouteSupport.selectBackendsForPath(List.of(), "/api").isEmpty());
+    }
+
+    @Test
+    void toStringList_emptyScalar_returnsEmpty() {
+        assertTrue(HttpRouteSupport.toStringList("   ").isEmpty());
+    }
+
+    @Test
     void collectMappingRulePaths_emptyRules_addsRoot() {
         ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
         LinkedHashSet<String> paths = new LinkedHashSet<>();
