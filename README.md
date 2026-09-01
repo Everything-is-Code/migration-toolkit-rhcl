@@ -64,7 +64,7 @@ Setup, tests, PR workflow: **[CONTRIBUTING.md](CONTRIBUTING.md)**
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup and tests |
 | [AGENTS.md](AGENTS.md) | Repo map for AI contributors |
 | [SECURITY.md](SECURITY.md) | Report vulnerabilities |
-| [docs/README.ja.md](docs/README.ja.md) | Japanese README (legacy mirror) |
+| [docs/README.ja.md](docs/README.ja.md) | Japanese front page (detailed guides in English `documentation/`) |
 
 **Conversion architecture** lives in both this repo ([`documentation/conversion-architecture.md`](documentation/conversion-architecture.md)) and the [rhcl-sdd store](https://github.com/Everything-is-Code/rhcl-sdd/blob/main/docs/conversion-architecture.md) — keep them in sync when extending policy conversion ([#40](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/40)).
 

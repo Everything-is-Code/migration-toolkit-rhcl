@@ -17,4 +17,4 @@ User and operator guides for **Migration Toolkit for Red Hat Connectivity Link**
 - [SECURITY.md](../SECURITY.md) — vulnerability reporting
 - [docs/technical-specifications.md](../docs/technical-specifications.md) — pointer to SDD technical audit
 - [rhcl-sdd store](https://github.com/Everything-is-Code/rhcl-sdd) — OpenSpec changes and canonical SDD copies of architecture docs
-- [docs/README.ja.md](../docs/README.ja.md) — Japanese README (legacy mirror; English `documentation/` is authoritative until JA split)
+- [docs/README.ja.md](../docs/README.ja.md) — Japanese front page (detailed guides in English `documentation/`)
