@@ -81,6 +81,7 @@ cd backend && ./generate-report.sh
 
 cd frontend && npm run typecheck
 cd frontend && npm test
+cd frontend && npm run test:coverage
 ```
 
 ## Container base digests
