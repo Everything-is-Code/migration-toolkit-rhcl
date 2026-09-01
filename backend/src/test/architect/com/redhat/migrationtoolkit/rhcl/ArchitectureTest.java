@@ -211,28 +211,19 @@ class ArchitectureTest {
             "ApiProductGenerator",
             "AppIdKeyAuthenticationContributor",
             "AuthCachingContributor",
-            "AuthorizationPolicyGenerator",
-            "ContentLimitsEnvoyFilterGenerator",
             "CorsOptionsContributor",
-            "DestinationRuleGenerator",
             "DnsPolicyGenerator",
             "EmptyAuthenticationContributor",
             "HttpRouteAnnotationsContributor",
             "HttpRouteBuilder",
             "IpCheckOpaContributor",
             "JwtAuthenticationContributor",
-            "LoggingEnvoyFilterGenerator",
-            "MaintenanceModeEnvoyFilterGenerator",
             "MappingRulesContributor",
             "Oauth2IntrospectionContributor",
             "RetryContributor",
-            "RetryEnvoyFilterGenerator",
             "RoutingContributor",
-            "ServiceEntryGenerator",
-            "TelemetryGenerator",
             "TlsPolicyGenerator",
-            "UpstreamContributor",
-            "UrlRewritingEnvoyFilterGenerator"
+            "UpstreamContributor"
     );
 
     private static final Set<String> FORMATTED_YAML_CONVERSION_ALLOWLIST = Set.of(

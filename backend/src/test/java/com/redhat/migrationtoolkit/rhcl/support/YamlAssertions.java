@@ -3,6 +3,8 @@ package com.redhat.migrationtoolkit.rhcl.support;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.YamlSerializationConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -39,6 +41,14 @@ public final class YamlAssertions {
         } catch (Exception e) {
             throw new IllegalArgumentException("Failed to parse YAML: " + e.getMessage(), e);
         }
+    }
+
+    public static List<Map<String, Object>> parseDocuments(String yaml) {
+        return Arrays.stream(yaml.split("---\\R"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(YamlAssertions::parse)
+                .toList();
     }
 
     private static String requireContent(String yaml) {

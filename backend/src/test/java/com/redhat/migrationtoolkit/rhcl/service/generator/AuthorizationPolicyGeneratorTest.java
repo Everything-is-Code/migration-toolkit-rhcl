@@ -4,6 +4,7 @@ import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
@@ -55,18 +56,36 @@ class AuthorizationPolicyGeneratorTest {
         ConversionContext ctx = GeneratorTestSupport.context(service);
 
         String yaml = generator.generate(ctx);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
 
         assertNotNull(yaml);
         assertEquals("authorizationpolicy.yaml", generator.outputKey());
-        assertTrue(yaml.contains("apiVersion: security.istio.io/v1"));
-        assertTrue(yaml.contains("kind: AuthorizationPolicy"));
-        assertTrue(yaml.contains("name: ip-api-ip-check"));
-        assertTrue(yaml.contains("namespace: " + GeneratorTestSupport.NAMESPACE));
-        assertTrue(yaml.contains("action: ALLOW"));
-        assertTrue(yaml.contains("remoteIpBlocks:"));
-        assertTrue(yaml.contains("203.0.113.10/32"));
-        assertTrue(yaml.contains("remoteIpBlocks:\n              - \"203.0.113.10/32\""),
-                "CIDR list must be nested under remoteIpBlocks");
+        assertEquals("security.istio.io/v1", parsed.get("apiVersion"));
+        assertEquals("AuthorizationPolicy", parsed.get("kind"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) parsed.get("metadata");
+        assertEquals("ip-api-ip-check", metadata.get("name"));
+        assertEquals(GeneratorTestSupport.NAMESPACE, metadata.get("namespace"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> spec = (Map<String, Object>) parsed.get("spec");
+        assertEquals("ALLOW", spec.get("action"));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rules = (List<Map<String, Object>>) spec.get("rules");
+        assertNotNull(rules);
+        assertFalse(rules.isEmpty());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> from = (List<Map<String, Object>>) rules.get(0).get("from");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> source = (Map<String, Object>) from.get(0).get("source");
+        @SuppressWarnings("unchecked")
+        List<String> remoteIpBlocks = (List<String>) source.get("remoteIpBlocks");
+        assertNotNull(remoteIpBlocks);
+        assertTrue(remoteIpBlocks.contains("203.0.113.10/32"),
+                "CIDR 203.0.113.10/32 must be in remoteIpBlocks");
     }
 
     @Test
@@ -79,7 +98,29 @@ class AuthorizationPolicyGeneratorTest {
         ConversionContext ctx = GeneratorTestSupport.context(service);
 
         String yaml = generator.generate(ctx);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
 
-        assertTrue(yaml.contains("action: DENY"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> spec = (Map<String, Object>) parsed.get("spec");
+        assertEquals("DENY", spec.get("action"));
+    }
+
+    @Test
+    void generate_nonListIps_defaultsToOpenCidr() {
+        Policy ipCheck = GeneratorTestSupport.policyWithConfig("ip_check", Map.of(
+                "check_type", "whitelist",
+                "ips", "not-a-list"));
+        ApiService service = GeneratorTestSupport.basicService("IP API", "ip-api");
+        service.policies = List.of(ipCheck);
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        String yaml = generator.generate(ctx);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rules = (List<Map<String, Object>>) ((Map<String, Object>) parsed.get("spec")).get("rules");
+        @SuppressWarnings("unchecked")
+        List<String> remoteIpBlocks = (List<String>) ((Map<String, Object>) ((List<Map<String, Object>>) rules.get(0).get("from")).get(0).get("source")).get("remoteIpBlocks");
+        assertEquals(List.of("0.0.0.0/0"), remoteIpBlocks);
     }
 }
