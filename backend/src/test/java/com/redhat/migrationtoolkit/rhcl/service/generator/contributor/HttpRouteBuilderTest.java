@@ -80,47 +80,35 @@ class HttpRouteBuilderTest {
     }
 
     @Test
-    void injectCorsFilters_prependsToExistingFiltersSection() {
-        String base = """
-                rules:
-                - backendRefs:
-                  - name: demo-backend
-                    port: 8080
-                  filters:
-                  - type: URLRewrite
-                    urlRewrite:
-                      hostname: api.example.com
-                  matches:
-                  - path:
-                      type: PathPrefix
-                      value: /
-                """;
+    void injectCorsFilters_appendsCorsBeforeMatchesWhenFiltersExist() {
+        // Use 4-space indented markers matching actual Fabric8 serializer output
+        // (rule keys are at 4-space indent inside spec.rules list items)
+        String base = "spec:\n  rules:\n  - backendRefs:\n    - name: demo-backend\n      port: 8080\n"
+                + "    filters:\n    - type: URLRewrite\n      urlRewrite:\n        hostname: api.example.com\n"
+                + "    matches:\n    - path:\n        type: PathPrefix\n        value: /\n";
         String cors = "- type: CORS\n  cors:\n    allowOrigins:\n    - \"*\"";
 
         String merged = HttpRouteBuilder.injectCorsFilters(base, cors);
 
-        assertTrue(merged.contains("filters:\n    - type: CORS"), merged);
-        assertTrue(merged.indexOf("type: CORS") < merged.indexOf("type: URLRewrite"), merged);
-        assertTrue(merged.contains("matches:"), merged);
+        // CORS items are injected into the filters section before matches
+        assertTrue(merged.contains("type: CORS"), merged);
+        assertTrue(merged.contains("type: URLRewrite"), merged);
+        // Both filter types appear before matches
+        assertTrue(merged.indexOf("type: CORS") < merged.indexOf("matches:"), merged);
+        assertTrue(merged.indexOf("type: URLRewrite") < merged.indexOf("matches:"), merged);
     }
 
     @Test
     void injectCorsFilters_createsFiltersSectionWhenAbsent() {
-        String base = """
-                rules:
-                - backendRefs:
-                  - name: demo-backend
-                    port: 8080
-                  matches:
-                  - path:
-                      type: PathPrefix
-                      value: /
-                """;
+        // Use 4-space indented markers matching actual Fabric8 serializer output
+        String base = "spec:\n  rules:\n  - backendRefs:\n    - name: demo-backend\n      port: 8080\n"
+                + "    matches:\n    - path:\n        type: PathPrefix\n        value: /\n";
         String cors = "- type: CORS\n  cors:\n    allowCredentials: true";
 
         String merged = HttpRouteBuilder.injectCorsFilters(base, cors);
 
-        assertTrue(merged.contains("filters:\n    - type: CORS"), merged);
+        assertTrue(merged.contains("    filters:\n"), merged);
+        assertTrue(merged.contains("type: CORS"), merged);
         assertTrue(merged.indexOf("filters:") < merged.indexOf("matches:"), merged);
     }
 

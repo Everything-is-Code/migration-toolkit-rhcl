@@ -24,13 +24,17 @@ public class HeaderModContributor implements HttpRouteContributor {
 
     @Override
     public void contribute(HttpRouteBuilder builder, ConversionContext ctx) {
-        for (HTTPRouteFilter filter : buildHeaderModificationFilters(ctx.service)) {
+        for (HTTPRouteFilter filter : buildHeaderModificationFilters(ctx.service, builder)) {
             builder.addSharedFilter(filter);
         }
     }
 
-    @SuppressWarnings("unchecked")
     static List<HTTPRouteFilter> buildHeaderModificationFilters(ApiService service) {
+        return buildHeaderModificationFilters(service, null);
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<HTTPRouteFilter> buildHeaderModificationFilters(ApiService service, HttpRouteBuilder builder) {
         Policy policy = HttpRouteSupport.findHeaderModificationPolicy(service);
         if (policy == null || policy.configuration == null) {
             return List.of();
@@ -66,8 +70,13 @@ public class HeaderModContributor implements HttpRouteContributor {
                 }
 
                 if ("liquid".equals(valueType)) {
-                    LOG.infof("Header '%s' uses liquid template — manual conversion required: %s",
+                    String note = String.format(
+                            "Header '%s' uses liquid template — manual conversion required: %s",
                             headerName, value);
+                    if (builder != null) {
+                        builder.addYamlComment(note);
+                    }
+                    LOG.infof("%s", note);
                     continue;
                 }
 

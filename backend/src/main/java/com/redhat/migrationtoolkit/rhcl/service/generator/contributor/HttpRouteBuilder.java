@@ -39,6 +39,7 @@ public final class HttpRouteBuilder {
     private String discoveryMarker;
     /** Raw YAML fragment for non-standard {@code type: CORS} filter (Istio/EnvoyProxy extension). */
     private String rawCorsFilterYaml;
+    private final List<String> yamlCommentLines = new ArrayList<>();
 
     public HttpRouteBuilder(ConversionContext ctx) {
         this.name = ctx.serviceKebabName;
@@ -135,6 +136,13 @@ public final class HttpRouteBuilder {
         this.rawCorsFilterYaml = yaml != null && !yaml.isBlank() ? yaml : null;
     }
 
+    /** Operator-visible YAML comment lines injected before {@code spec:} in serialized output. */
+    public void addYamlComment(String comment) {
+        if (comment != null && !comment.isBlank()) {
+            yamlCommentLines.add(comment.trim());
+        }
+    }
+
     public String rawCorsFilterYaml() {
         return rawCorsFilterYaml;
     }
@@ -174,10 +182,27 @@ public final class HttpRouteBuilder {
         }
 
         String yaml = serializer.toYaml(specNested.endSpec().build());
+        if (!yamlCommentLines.isEmpty()) {
+            yaml = injectYamlComments(yaml, yamlCommentLines);
+        }
         if (rawCorsFilterYaml != null) {
             yaml = injectCorsFilters(yaml, rawCorsFilterYaml);
         }
         return yaml;
+    }
+
+    static String injectYamlComments(String yaml, List<String> comments) {
+        if (comments == null || comments.isEmpty()) {
+            return yaml;
+        }
+        String block = comments.stream()
+                .map(line -> "  # " + line)
+                .collect(Collectors.joining("\n")) + "\n";
+        int specIdx = yaml.indexOf("\nspec:");
+        if (specIdx < 0) {
+            return yaml;
+        }
+        return yaml.substring(0, specIdx + 1) + block + yaml.substring(specIdx + 1);
     }
 
     /**
@@ -203,7 +228,7 @@ public final class HttpRouteBuilder {
         String matchesMarker = "    matches:\n";
 
         if (yaml.contains(filtersMarker)) {
-            // Existing typed filters: append CORS items before matches in all rules
+            // Existing typed filters: append CORS items before the matches block
             return yaml.replace(matchesMarker, indented + matchesMarker);
         } else {
             // No existing filters: create filters section in all rules before matches
