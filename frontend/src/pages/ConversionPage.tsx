@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   PageSection,
   PageSectionVariants,
@@ -18,7 +18,7 @@ import { useAppState } from '../components/AppStateContext';
 import ConversionForm from '../components/conversion/ConversionForm';
 import ConversionResults from '../components/conversion/ConversionResults';
 import type { ConversionFormOptions } from '../components/conversion/conversionFormTypes';
-import { resultsMatchSelection } from '../components/conversion/conversionWorkflowState';
+import { useClearStaleConversionResults } from '../components/conversion/useClearStaleConversionResults';
 import styles from '../styles/shared.module.css';
 
 const ConversionPage: React.FC = () => {
@@ -29,17 +29,7 @@ const ConversionPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
 
-  // Defense in depth: drop stale results when selection no longer matches (#229).
-  useEffect(() => {
-    if (resultsMatchSelection(appState.conversionResults, appState.selectedServices)) {
-      return;
-    }
-    setAppState(prev =>
-      resultsMatchSelection(prev.conversionResults, prev.selectedServices)
-        ? prev
-        : { ...prev, conversionResults: [] },
-    );
-  }, [appState.conversionResults, appState.selectedServices, setAppState]);
+  useClearStaleConversionResults();
 
   const hasCorsPolicy = appState.selectedServices.some(svc =>
     svc.policies?.some(p => p.enabled && p.name === 'cors'));

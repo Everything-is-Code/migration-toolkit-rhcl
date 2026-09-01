@@ -117,3 +117,19 @@ describe('resultsMatchSelection', () => {
     expect(resultsMatchSelection([], [svc('a')])).toBe(true);
   });
 });
+
+describe('validate/download workflow (#229)', () => {
+  it('reselecting API B clears results so validate/download do not see API A YAML', () => {
+    const afterReselect = nextStateAfterServiceSelect(
+      { selectedServices: [svc('a')], conversionResults: [result('a')] },
+      svc('b'),
+    );
+    expect(afterReselect.conversionResults).toEqual([]);
+    expect(resultsMatchSelection([result('a')], afterReselect.selectedServices)).toBe(false);
+  });
+
+  it('mismatched stale results are cleared before validate/download consume state', () => {
+    const staleForA = [result('a', { yamlFiles: { 'gateway.yaml': 'metadata:\n  name: a-gateway' } })];
+    expect(resultsMatchSelection(staleForA, [svc('b')])).toBe(false);
+  });
+});
