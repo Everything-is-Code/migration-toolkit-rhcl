@@ -13,7 +13,8 @@ Short map for automated agents and humans working in this repository.
 | `frontend/` | React + PatternFly + Vite SPA — `components/<domain>/` + thin `pages/` orchestrators; `AppStateContext` for workflow state |
 | `deploy/` | OpenShift S2I manifests + `install.sh` |
 | `helm/` | Helm chart packaging |
-| `docs/` | Helm chart index (GitHub Pages) + contributor CI matrix ([STATUS_CHECK_MATRIX.md](docs/STATUS_CHECK_MATRIX.md)) |
+| `documentation/` | User guide, API, deployment, conversion architecture (mirrored from SDD) |
+| `docs/` | Published Helm chart index (GitHub Pages) + contributor CI matrix ([STATUS_CHECK_MATRIX.md](docs/STATUS_CHECK_MATRIX.md)) |
 | `scripts/` | Seed / helper scripts |
 | `testdata/` | Sample payloads for local demos |
 
@@ -31,7 +32,7 @@ This repo is the **consolidated** 3scale → Connectivity Link (Kuadrant) migrat
 - **Strategy + Registry** — `ResourceGenerator` per K8s output file (`gateway.yaml`, `httproute.yaml`, `policy.yaml`, `secret.yaml`, EnvoyFilters, optional TLS/DNS, etc.), looked up via CDI registry instead of hardcoded branches in `convert()`.
 - **Collector/Contributor** — `httproute.yaml`, `policy.yaml`, and `secret.yaml` aggregate fragments from multiple 3scale policies via `*Contributor` beans against shared builders.
 
-Full file list and conditions: [`docs/conversion-architecture.md`](https://github.com/Everything-is-Code/rhcl-sdd/blob/main/docs/conversion-architecture.md) in the SDD store (local: `../migration-toolkit-sdd/docs/conversion-architecture.md`).
+Full file list and conditions: [`documentation/conversion-architecture.md`](documentation/conversion-architecture.md) (product repo) and [`rhcl-sdd` canonical copy](https://github.com/Everything-is-Code/rhcl-sdd/blob/main/docs/conversion-architecture.md) — keep both aligned when editing.
 
 Before adding a new policy conversion, check:
 - **#149** — epic tracking recognized-but-unconverted 3scale policies.
