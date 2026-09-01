@@ -3,10 +3,14 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.EnvoyFilterManifests;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.IstioManifestSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
@@ -18,6 +22,9 @@ public class MaintenanceModeEnvoyFilterGenerator implements ResourceGenerator {
 
     @Inject
     PolicyFinder policyFinder;
+
+    @Inject
+    ManifestSerializer manifestSerializer;
 
     @Override
     public String outputKey() {
@@ -40,51 +47,32 @@ public class MaintenanceModeEnvoyFilterGenerator implements ResourceGenerator {
 
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
-        String luaScript = """
+        String luaScript = String.format("""
 function envoy_on_request(request_handle)
   request_handle:respond(
     {[":status"] = "%s", ["content-type"] = "%s"},
     "%s")
 end
-""".formatted(escapeLua(status), escapeLua(contentType), escapeLua(message));
-        String indentedScript = luaScript.lines()
-                .map(l -> "              " + l)
-                .reduce((a, b) -> a + "\n" + b)
-                .orElse("");
-        return """
-apiVersion: networking.istio.io/v1alpha3
-kind: EnvoyFilter
-metadata:
-  name: %s-maintenance
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-  annotations:
-    3scale-migration/source: maintenance_mode
-spec:
-  workloadSelector:
-    labels:
-      gateway.networking.k8s.io/gateway-name: %s-gateway
-  configPatches:
-    - applyTo: HTTP_FILTER
-      match:
-        context: GATEWAY
-        listener:
-          filterChain:
-            filter:
-              name: "envoy.filters.network.http_connection_manager"
-              subFilter:
-                name: "envoy.filters.http.router"
-      patch:
-        operation: INSERT_BEFORE
-        value:
-          name: envoy.filters.http.lua
-          typed_config:
-            "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
-            inlineCode: |
-%s
-""".formatted(name, namespace, name, name, indentedScript);
+""", escapeLua(status), escapeLua(contentType), escapeLua(message));
+
+        Map<String, Object> patchValue = Map.of(
+                "name", "envoy.filters.http.lua",
+                "typed_config", Map.of(
+                        "@type", "type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua",
+                        "inlineCode", luaScript));
+
+        Map<String, Object> document = EnvoyFilterManifests.baseDocument(
+                name, namespace, name + "-maintenance", ctx.includeMigratedFromLabel);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) document.get("metadata");
+        metadata.put("annotations", Map.of("3scale-migration/source", "maintenance_mode"));
+
+        Map<String, Object> spec = EnvoyFilterManifests.gatewayWorkloadSpec(name);
+        EnvoyFilterManifests.withConfigPatches(
+                spec, List.of(EnvoyFilterManifests.httpFilterGatewayPatch("INSERT_BEFORE", patchValue)));
+        document.put("spec", spec);
+
+        return serializer().toYaml(document);
     }
 
     void bindManual(PolicyFinder finder) {
@@ -123,5 +111,9 @@ spec:
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r");
+    }
+
+    private ManifestSerializer serializer() {
+        return IstioManifestSupport.resolveSerializer(manifestSerializer);
     }
 }

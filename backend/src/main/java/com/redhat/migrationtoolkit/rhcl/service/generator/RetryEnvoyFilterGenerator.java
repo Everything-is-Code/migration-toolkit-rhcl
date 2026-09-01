@@ -2,10 +2,17 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.EnvoyFilterManifests;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.IstioManifestSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.PolicyConfigSupport;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 @Priority(1400)
@@ -16,6 +23,9 @@ public class RetryEnvoyFilterGenerator implements ResourceGenerator {
 
     @Inject
     PolicyConfigSupport policyConfigSupport;
+
+    @Inject
+    ManifestSerializer manifestSerializer;
 
     @Override
     public String outputKey() {
@@ -38,38 +48,37 @@ public class RetryEnvoyFilterGenerator implements ResourceGenerator {
                 policyFinder.findEnabled(ctx.service, "retry"));
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
-        return """
-apiVersion: networking.istio.io/v1alpha3
-kind: EnvoyFilter
-metadata:
-  name: %s-retry
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-  annotations:
-    3scale-migration/source: retry
-    3scale-migration/note: "HTTPRoute retry unsupported on this cluster — Envoy route retry_policy fallback"
-spec:
-  workloadSelector:
-    labels:
-      gateway.networking.k8s.io/gateway-name: %s-gateway
-  configPatches:
-    - applyTo: HTTP_ROUTE
-      match:
-        context: GATEWAY
-      patch:
-        operation: MERGE
-        value:
-          route:
-            retry_policy:
-              retry_on: "5xx,reset,connect-failure,refused-stream"
-              num_retries: %d
-""".formatted(name, namespace, name, name, retries);
+
+        Map<String, Object> patchValue = Map.of(
+                "route", Map.of(
+                        "retry_policy", Map.of(
+                                "retry_on", "5xx,reset,connect-failure,refused-stream",
+                                "num_retries", retries)));
+
+        Map<String, Object> document = EnvoyFilterManifests.baseDocument(
+                name, namespace, name + "-retry", ctx.includeMigratedFromLabel);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) document.get("metadata");
+        Map<String, Object> annotations = new LinkedHashMap<>();
+        annotations.put("3scale-migration/source", "retry");
+        annotations.put(
+                "3scale-migration/note",
+                "HTTPRoute retry unsupported on this cluster — Envoy route retry_policy fallback");
+        metadata.put("annotations", annotations);
+
+        Map<String, Object> spec = EnvoyFilterManifests.gatewayWorkloadSpec(name);
+        EnvoyFilterManifests.withConfigPatches(spec, List.of(EnvoyFilterManifests.httpRouteGatewayPatch(patchValue)));
+        document.put("spec", spec);
+
+        return serializer().toYaml(document);
     }
 
     void bindManual(PolicyFinder finder, PolicyConfigSupport support) {
         this.policyFinder = finder;
         this.policyConfigSupport = support;
+    }
+
+    private ManifestSerializer serializer() {
+        return IstioManifestSupport.resolveSerializer(manifestSerializer);
     }
 }
