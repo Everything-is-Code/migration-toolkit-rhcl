@@ -36,4 +36,9 @@ class KuadrantManifestSupportTest {
         ManifestSerializer injected = new ManifestSerializer();
         assertSame(injected, KuadrantManifestSupport.resolveSerializer(injected));
     }
+
+    @Test
+    void resolveSerializer_createsDefaultWhenNull() {
+        assertNotNull(KuadrantManifestSupport.resolveSerializer(null));
+    }
 }
