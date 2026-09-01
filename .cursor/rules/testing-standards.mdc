@@ -37,14 +37,16 @@ Run: `cd backend && mvn test` (unit) / `mvn verify` (+ITs, JaCoCo, Checkstyle, P
 
 ## Frontend (`frontend/src/`)
 
-- Framework: **Vitest** (`vitest run`). Default `environment: 'node'` for `*.test.ts`; **`jsdom`** for `*.test.tsx` (`vitest.config.ts` + `/// @vitest-environment jsdom` when needed).
-- **`@testing-library/react`** for minimal component smoke tests; PatternFly often mocked in unit tests to avoid CSS import issues.
-- Co-located next to the file under test: `<name>.test.ts` or `<name>.test.tsx` (no `__tests__/` folder).
-- Examples: `utils/apiError.test.ts`, `components/import/importUtils.test.ts`, `components/AppStateContext.test.tsx`, `utils/supportedPoliciesCache.test.ts`, `locales/locales.smoke.test.ts`.
-- Mock Axios with `vi.mock('axios', ...)`, then dynamically `await import('./client')` inside the test.
-- `describe`/`it` + `expect(...).toBe/toMatchObject/toBeTruthy`; `beforeEach` to reset mocks/storage.
+- Framework: **Vitest 4** with dual projects in `vitest.config.ts`:
+  - `unit-node` — `src/**/*.test.ts` (pure logic, API mocks, locale smoke)
+  - `unit-jsdom` — `src/**/*.test.tsx` (RTL component/page orchestration tests)
+- Setup: `src/test/setup.ts` imports `@testing-library/jest-dom/vitest`.
+- **`@testing-library/react`** + **`user-event`** for component tests; co-locate as `<name>.test.tsx` next to the source file.
+- **Mock conventions:** mock `../api/client` and heavy child components (PatternFly forms, dropzones); keep the page orchestrator under test. Mock `react-i18next` with `t: (key) => key`.
+- **Coverage today (orchestration RTL):** `ImportPage`, `ConversionPage` (incl. DNS validation), `ConnectionPage`, `RouteErrorBoundary`, plus smoke tests for `AppLayout`, `AppStateContext`, `ConversionPolicySettings`, `ClusterVersionsPanel`.
+- Utils/API: `vi.mock('axios')` or `vi.mock('../api/client')`; `describe`/`it` + `beforeEach`/`cleanup()`.
 
-Run: `cd frontend && npm test` / `npm run typecheck` / `npm run lint`.
+Run: `cd frontend && npm test` / `npm run test:coverage` / `npm run typecheck` / `npm run lint`.
 
 ### Playwright E2E (`frontend/e2e/`)
 
@@ -55,5 +57,5 @@ Run: `cd frontend && npm test` / `npm run typecheck` / `npm run lint`.
 
 ## Suggested improvements (not yet implemented)
 
-- Expand RTL coverage beyond utils + smoke tests — [#172](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/172).
+- Expand RTL to `HistoryPage`, `YAMLViewerPage`, and remaining untested pages/components (follow-up beyond #172 baseline).
 - Add a shared `ExceptionMapper`-level test once centralized error handling is introduced on the backend.
