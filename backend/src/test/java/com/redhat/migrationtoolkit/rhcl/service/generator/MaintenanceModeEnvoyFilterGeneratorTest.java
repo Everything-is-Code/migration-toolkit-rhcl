@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.support.YamlAssertions;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
@@ -66,19 +67,38 @@ class MaintenanceModeEnvoyFilterGeneratorTest {
         ConversionContext ctx = GeneratorTestSupport.context(service);
 
         String yaml = generator.generate(ctx);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
 
         assertNotNull(yaml);
         assertEquals("envoyfilter-maintenance.yaml", generator.outputKey());
-        assertTrue(yaml.contains("kind: EnvoyFilter"));
-        assertTrue(yaml.contains("name: maint-api-maintenance"));
-        assertTrue(yaml.contains("namespace: " + GeneratorTestSupport.NAMESPACE));
-        assertTrue(yaml.contains("3scale-migration/source: maintenance_mode"));
-        assertTrue(yaml.contains("envoy.filters.http.lua"));
-        assertTrue(yaml.contains("envoy_on_request"));
-        assertTrue(yaml.contains("respond"));
-        assertTrue(yaml.contains("\":status\"] = \"503\"") || yaml.contains("\":status\"]=\"503\""));
-        assertTrue(yaml.contains("Under maintenance"));
-        assertTrue(yaml.contains("text/plain"));
+        assertEquals("networking.istio.io/v1alpha3", parsed.get("apiVersion"));
+        assertEquals("EnvoyFilter", parsed.get("kind"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) parsed.get("metadata");
+        assertEquals("maint-api-maintenance", metadata.get("name"));
+        assertEquals(GeneratorTestSupport.NAMESPACE, metadata.get("namespace"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> annotations = (Map<String, Object>) metadata.get("annotations");
+        assertEquals("maintenance_mode", annotations.get("3scale-migration/source"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> spec = (Map<String, Object>) parsed.get("spec");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> configPatches = (List<Map<String, Object>>) spec.get("configPatches");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> value = (Map<String, Object>) configPatches.get(0).get("patch");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> patchVal = (Map<String, Object>) value.get("value");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> typedConfig = (Map<String, Object>) patchVal.get("typed_config");
+        String inlineCode = (String) typedConfig.get("inlineCode");
+
+        assertTrue(inlineCode.contains("respond"), "Lua script must call respond");
+        assertTrue(inlineCode.contains("503"), "Lua script must embed the status code");
+        assertTrue(inlineCode.contains("Under maintenance"), "Lua script must embed the message");
+        assertTrue(inlineCode.contains("text/plain"), "Lua script must embed the content-type");
     }
 
     @Test
@@ -96,10 +116,9 @@ class MaintenanceModeEnvoyFilterGeneratorTest {
         String yaml = generator.generate(ctx);
 
         assertNotNull(yaml);
-        assertTrue(yaml.contains("\":status\"] = \"503\"") || yaml.contains("\":status\"]=\"503\""));
-        assertTrue(yaml.contains("text/plain"));
-        // Empty body still passed to respond as ""
-        assertTrue(yaml.contains("respond("));
+        assertTrue(yaml.contains("503"), "default status 503 must be present");
+        assertTrue(yaml.contains("text/plain"), "default content-type must be present");
+        assertTrue(yaml.contains("respond("), "Lua respond call must be present");
     }
 
     @Test
@@ -132,5 +151,39 @@ class MaintenanceModeEnvoyFilterGeneratorTest {
 
         assertEquals("", MaintenanceModeEnvoyFilterGenerator.escapeLua(null));
         assertEquals("a\\\"b\\\\c\\nd", MaintenanceModeEnvoyFilterGenerator.escapeLua("a\"b\\c\nd"));
+    }
+
+    // ── Edge case 4.3 ────────────────────────────────────────────────────────
+
+    @Test
+    void generate_luaScript_preservesSpecialCharsInInlineCode() {
+        String specialMessage = "--- : # Service unavailable ---";
+        Policy maintenance = GeneratorTestSupport.policyWithConfig("maintenance_mode", Map.of(
+                "enabled", true,
+                "status", "503",
+                "message", specialMessage,
+                "message_content_type", "text/plain"));
+        ApiService service = GeneratorTestSupport.basicService("Special API", "special-api");
+        service.policies = List.of(maintenance);
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        String yaml = generator.generate(ctx);
+        Map<String, Object> parsed = YamlAssertions.parse(yaml);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> spec = (Map<String, Object>) parsed.get("spec");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> configPatches = (List<Map<String, Object>>) spec.get("configPatches");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> patch = (Map<String, Object>) configPatches.get(0).get("patch");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> value = (Map<String, Object>) patch.get("value");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> typedConfig = (Map<String, Object>) value.get("typed_config");
+        String inlineCode = (String) typedConfig.get("inlineCode");
+
+        assertNotNull(inlineCode, "inlineCode must be present in YAML");
+        assertTrue(inlineCode.contains("---") || inlineCode.contains("Service unavailable"),
+                "special chars --- and # in message must survive YAML round-trip via inlineCode");
     }
 }

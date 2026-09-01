@@ -4,10 +4,14 @@ import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionYamlSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.EnvoyFilterManifests;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.IstioManifestSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +24,9 @@ public class LoggingEnvoyFilterGenerator implements ResourceGenerator {
 
     @Inject
     ConversionYamlSupport yamlSupport;
+
+    @Inject
+    ManifestSerializer manifestSerializer;
 
     @Override
     public String outputKey() {
@@ -47,56 +54,46 @@ public class LoggingEnvoyFilterGenerator implements ResourceGenerator {
                         ? loggingPolicy.configuration.get("json_object_config") : null);
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
-        StringBuilder jsonFormat = new StringBuilder();
+        String context = isGateway ? "GATEWAY" : "SIDECAR_INBOUND";
+
+        Map<String, Object> jsonFormat = new LinkedHashMap<>();
         for (Map<String, Object> entry : jsonCfg) {
             String key = String.valueOf(entry.getOrDefault("key", ""));
             String value = String.valueOf(entry.getOrDefault("value", ""));
-            String envoyValue = ConversionYamlSupport.toEnvoyVar(value);
-            jsonFormat.append(String.format("                      %s: \"%s\"%n", key, envoyValue));
+            jsonFormat.put(key, ConversionYamlSupport.toEnvoyVar(value));
         }
-        String context = isGateway ? "GATEWAY" : "SIDECAR_INBOUND";
-        String selectorLabel = isGateway
-                ? "gateway.networking.k8s.io/gateway-name: " + name + "-gateway"
-                : "app: " + name;
-        return """
-apiVersion: networking.istio.io/v1alpha3
-kind: EnvoyFilter
-metadata:
-  name: %s-logging-format
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-  annotations:
-    3scale-migration/source: logging
-spec:
-  workloadSelector:
-    labels:
-      %s
-  configPatches:
-    - applyTo: NETWORK_FILTER
-      match:
-        context: %s
-        listener:
-          filterChain:
-            filter:
-              name: "envoy.filters.network.http_connection_manager"
-      patch:
-        operation: MERGE
-        value:
-          typed_config:
-            "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-            access_log:
-              - name: envoy.access_loggers.stdout
-                typed_config:
-                  "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
-                  log_format:
-                    json_format:
-%s""".formatted(name, namespace, name, selectorLabel, context, jsonFormat.toString());
+
+        Map<String, Object> patchValue = Map.of(
+                "typed_config", Map.of(
+                        "@type", "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                        "access_log", List.of(Map.of(
+                                "name", "envoy.access_loggers.stdout",
+                                "typed_config", Map.of(
+                                        "@type", "type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog",
+                                        "log_format", Map.of("json_format", jsonFormat))))));
+
+        Map<String, Object> document = EnvoyFilterManifests.baseDocument(
+                name, namespace, name + "-logging-format", ctx.includeMigratedFromLabel);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> metadata = (Map<String, Object>) document.get("metadata");
+        metadata.put("annotations", Map.of("3scale-migration/source", "logging"));
+
+        Map<String, Object> spec = new LinkedHashMap<>();
+        spec.put("workloadSelector", Map.of(
+                "labels", IstioManifestSupport.loggingWorkloadLabels(name, isGateway)));
+        EnvoyFilterManifests.withConfigPatches(
+                spec, List.of(EnvoyFilterManifests.networkFilterPatch(context, patchValue)));
+        document.put("spec", spec);
+
+        return serializer().toYaml(document);
     }
 
     void bindManual(PolicyFinder finder, ConversionYamlSupport support) {
         this.policyFinder = finder;
         this.yamlSupport = support;
+    }
+
+    private ManifestSerializer serializer() {
+        return IstioManifestSupport.resolveSerializer(manifestSerializer);
     }
 }

@@ -2,16 +2,24 @@ package com.redhat.migrationtoolkit.rhcl.service.generator;
 
 import com.redhat.migrationtoolkit.rhcl.service.conversion.BackendType;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.IstioManifestSupport;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
+import io.fabric8.istio.api.api.networking.v1alpha3.ClientTLSSettingsTLSmode;
+import io.fabric8.istio.api.networking.v1alpha3.DestinationRule;
+import io.fabric8.istio.api.networking.v1alpha3.DestinationRuleBuilder;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @ApplicationScoped
 @Priority(900)
 public class DestinationRuleGenerator implements ResourceGenerator {
+
+    @Inject
+    ManifestSerializer manifestSerializer;
 
     @Override
     public String outputKey() {
@@ -28,35 +36,44 @@ public class DestinationRuleGenerator implements ResourceGenerator {
         List<ResolvedBackend> externals = ctx.resolvedBackends.stream()
                 .filter(b -> b.type == BackendType.EXTERNAL)
                 .toList();
-        return externals.stream()
-                .map(b -> generateOne(b, ctx.namespace, ctx.serviceKebabName))
-                .collect(Collectors.joining("---\n"));
+        return IstioManifestSupport.joinYamlChunks(externals.stream()
+                .map(b -> generateOne(b, ctx))
+                .toArray(String[]::new));
     }
 
-    private static String generateOne(ResolvedBackend b, String namespace, String appLabel) {
-        String trafficPolicy = b.usesTls
-                ? """
-  trafficPolicy:
-    tls:
-      mode: SIMPLE
-      sni: %s
-""".formatted(b.externalHost)
-                : """
-  trafficPolicy:
-    tls:
-      mode: DISABLE
-""";
-        return """
-apiVersion: networking.istio.io/v1alpha3
-kind: DestinationRule
-metadata:
-  name: %s
-  namespace: %s
-  labels:
-    app: %s
-    migrated-from: 3scale
-spec:
-  host: %s
-%s""".formatted(b.drName, namespace, appLabel, b.externalHost, trafficPolicy);
+    private String generateOne(ResolvedBackend backend, ConversionContext ctx) {
+        var spec = new DestinationRuleBuilder()
+                .withApiVersion("networking.istio.io/v1alpha3")
+                .withKind("DestinationRule")
+                .withNewMetadata()
+                .withName(backend.drName)
+                .withNamespace(ctx.namespace)
+                .withLabels(IstioManifestSupport.baseLabels(ctx.serviceKebabName, ctx.includeMigratedFromLabel))
+                .endMetadata()
+                .withNewSpec()
+                .withHost(backend.externalHost)
+                .withNewTrafficPolicy();
+
+        if (backend.usesTls) {
+            spec.withNewTls()
+                    .withMode(ClientTLSSettingsTLSmode.SIMPLE)
+                    .withSni(backend.externalHost)
+                    .endTls();
+        } else {
+            spec.withNewTls()
+                    .withMode(ClientTLSSettingsTLSmode.DISABLE)
+                    .endTls();
+        }
+
+        DestinationRule destinationRule = spec
+                .endTrafficPolicy()
+                .endSpec()
+                .build();
+
+        return serializer().toYaml(destinationRule);
+    }
+
+    private ManifestSerializer serializer() {
+        return IstioManifestSupport.resolveSerializer(manifestSerializer);
     }
 }

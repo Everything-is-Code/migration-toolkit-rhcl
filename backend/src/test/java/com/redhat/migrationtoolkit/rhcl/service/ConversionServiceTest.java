@@ -805,7 +805,7 @@ class ConversionServiceTest {
         assertTrue(files.containsKey("authorizationpolicy.yaml"),
                 "authorizationPolicy mode must emit authorizationpolicy.yaml");
         String authz = files.get("authorizationpolicy.yaml");
-        assertTrue(authz.contains("kind: AuthorizationPolicy"));
+        assertTrue(authz.contains("AuthorizationPolicy"));
         assertTrue(authz.contains("203.0.113.10") || authz.contains("203.0.113.10/32"));
         assertTrue(authz.contains("198.51.100.0/24"));
         assertFalse(authz.toLowerCase().contains("opa"),
@@ -1517,7 +1517,7 @@ class ConversionServiceTest {
         String ef = files.get("envoyfilter-maintenance.yaml");
         assertTrue(ef.contains("503") && ef.contains("Under maintenance") && ef.contains("text/plain"),
                 "EnvoyFilter must encode status/body/content-type");
-        assertTrue(ef.contains("3scale-migration/source: maintenance_mode"));
+        assertTrue(ef.contains("3scale-migration/source") && ef.contains("maintenance_mode"));
         assertTrue(files.containsKey("httproute.yaml"),
                 "HTTPRoute must still be present when maintenance is active");
     }
@@ -2006,7 +2006,7 @@ class ConversionServiceTest {
         assertFalse(route.contains("solo-only-backend"),
                 "Must not include systemName in single-backend ref name");
         String se = files.get("serviceentry.yaml");
-        assertTrue(se.contains("name: solo-external"));
+        assertTrue(se.contains("solo-external"));
         assertFalse(se.contains("solo-only-external"));
     }
 
@@ -2090,7 +2090,7 @@ class ConversionServiceTest {
         assertTrue(route.contains("collide-orders-api-backend-2")
                         || se.contains("collide-orders-api-external-2"),
                 "Colliding kebab names must be disambiguated: route=" + route + " se=" + se);
-        long seNames = se.lines().filter(l -> l.contains("name: collide-orders-api-external")).count();
+        long seNames = se.lines().filter(l -> l.contains("collide-orders-api-external")).count();
         assertTrue(seNames >= 2, "Two distinct SE names expected: " + se);
     }
 
