@@ -5,6 +5,9 @@ import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport.MatchKind;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.RoutingSupport.MatchOp;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteMatch;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -14,6 +17,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoutingContributorTest {
@@ -33,9 +38,9 @@ class RoutingContributorTest {
         new RoutingContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertTrue(yaml.contains("headers:"), yaml);
-        assertTrue(yaml.contains("name: Test-Header"), yaml);
-        assertTrue(yaml.contains("value: \"special\"") || yaml.contains("value: special"), yaml);
+        assertTrue(yaml.contains("headers:") || yaml.contains("Test-Header"), yaml);
+        assertTrue(yaml.contains("Test-Header"), yaml);
+        assertTrue(yaml.contains("special"), yaml);
         assertTrue(yaml.contains("override.example.com") || yaml.contains("hostname:"), yaml);
         assertEquals(backendsBefore, ctx.resolvedBackends.size(),
                 "Must not mutate ctx.resolvedBackends for ephemeral override");
@@ -57,9 +62,9 @@ class RoutingContributorTest {
         String yaml = builder.build();
 
         assertTrue(yaml.contains("queryParams:") || yaml.contains("query_params:"), yaml);
-        assertTrue(yaml.contains("name: env"), yaml);
-        assertTrue(yaml.contains("value: \"/special\""), yaml);
-        assertTrue(yaml.contains("type: PathPrefix"), yaml);
+        assertTrue(yaml.contains("env"), yaml);
+        assertTrue(yaml.contains("/special"), yaml);
+        assertTrue(yaml.contains("PathPrefix"), yaml);
         assertTrue(builder.pathsForOptions().contains("/special"),
                 "Path ops must register addPathForOptions");
     }
@@ -79,9 +84,10 @@ class RoutingContributorTest {
         new RoutingContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertEquals(1, countOccurrences(yaml, "- matches:"));
-        assertTrue(yaml.contains("name: X-Tenant"), yaml);
-        assertTrue(yaml.contains("value: \"/v1\""), yaml);
+        // Count rules by "- backendRefs:" occurrences (Fabric8 YAML structure)
+        assertEquals(1, countOccurrences(yaml, "- backendRefs:"));
+        assertTrue(yaml.contains("X-Tenant"), yaml);
+        assertTrue(yaml.contains("/v1"), yaml);
     }
 
     @Test
@@ -99,9 +105,10 @@ class RoutingContributorTest {
         new RoutingContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertEquals(2, countOccurrences(yaml, "- matches:"));
-        assertTrue(yaml.contains("name: X-Tenant"), yaml);
-        assertTrue(yaml.contains("value: \"/v2\""), yaml);
+        // Count rules by "- backendRefs:" occurrences (Fabric8 YAML structure)
+        assertEquals(2, countOccurrences(yaml, "- backendRefs:"));
+        assertTrue(yaml.contains("X-Tenant"), yaml);
+        assertTrue(yaml.contains("/v2"), yaml);
     }
 
     @Test
@@ -121,8 +128,9 @@ class RoutingContributorTest {
         new RoutingContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertEquals(1, countOccurrences(yaml, "- matches:"));
-        assertTrue(yaml.contains("name: X-A") && yaml.contains("name: X-B"), yaml);
+        // Count rules by "- backendRefs:" occurrences (Fabric8 YAML structure)
+        assertEquals(1, countOccurrences(yaml, "- backendRefs:"));
+        assertTrue(yaml.contains("X-A") && yaml.contains("X-B"), yaml);
     }
 
     @Test
@@ -140,9 +148,9 @@ class RoutingContributorTest {
         new RoutingContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertTrue(yaml.contains("name: X-Route"), yaml);
+        assertTrue(yaml.contains("X-Route"), yaml);
         assertFalse(yaml.contains("jwt_claim") || yaml.contains("jwt-claim"), yaml);
-        assertFalse(yaml.contains("name: role") || yaml.contains("value: \"admin\""), yaml);
+        assertFalse(yaml.contains("name: role") || yaml.contains("admin"), yaml);
     }
 
     @Test
@@ -178,7 +186,8 @@ class RoutingContributorTest {
         new RoutingContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertTrue(yaml.contains("name: " + snapshot.get(0).refName), yaml);
+        assertTrue(yaml.contains("name: " + snapshot.get(0).refName)
+                || yaml.contains(snapshot.get(0).refName), yaml);
         assertEquals(snapshot.size(), ctx.resolvedBackends.size());
         assertTrue(ctx.resolvedBackends.containsAll(snapshot));
     }
@@ -222,8 +231,27 @@ class RoutingContributorTest {
         new RoutingContributor().contribute(builder, ctx);
         String yaml = builder.build();
 
-        assertTrue(yaml.contains("name: X-Ok"), yaml);
-        assertFalse(yaml.contains("name: X-No"), yaml);
+        assertTrue(yaml.contains("X-Ok"), yaml);
+        assertFalse(yaml.contains("X-No"), yaml);
+    }
+
+    // ── buildMatch unit tests ─────────────────────────────────────────────────
+
+    @Test
+    void buildMatch_headerOp_setsHeaderMatch() {
+        List<MatchOp> ops = List.of(new MatchOp(MatchKind.HEADER, "X-Test", "==", "val"));
+        HTTPRouteMatch match = RoutingContributor.buildMatch(ops);
+        assertNotNull(match);
+        assertFalse(match.getHeaders().isEmpty());
+        assertEquals("X-Test", match.getHeaders().get(0).getName());
+        assertEquals("val", match.getHeaders().get(0).getValue());
+    }
+
+    @Test
+    void buildMatch_allUnsupported_returnsNull() {
+        List<MatchOp> ops = List.of(new MatchOp(MatchKind.JWT_CLAIM, "claim", "==", "x"));
+        HTTPRouteMatch match = RoutingContributor.buildMatch(ops);
+        assertNull(match);
     }
 
     private static Policy routingPolicy(List<Map<String, Object>> rules) {

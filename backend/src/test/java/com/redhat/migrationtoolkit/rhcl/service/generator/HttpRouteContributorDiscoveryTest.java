@@ -30,7 +30,8 @@ class HttpRouteContributorDiscoveryTest {
 
         String yaml = httpRouteGenerator.generate(ctx);
 
-        assertTrue(yaml.contains(TestMarkerHttpRouteContributor.MARKER));
+        // Fabric8 serializes annotation values with double quotes; check key and value separately
+        assertTrue(yaml.contains("x-discovery-marker") && yaml.contains("rhcl-httproute-test"));
     }
 
     @Test

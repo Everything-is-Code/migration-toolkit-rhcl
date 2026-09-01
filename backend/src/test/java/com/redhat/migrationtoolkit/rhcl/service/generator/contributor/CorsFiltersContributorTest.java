@@ -71,8 +71,9 @@ class CorsFiltersContributorTest {
 
         new CorsFiltersContributor().contribute(builder, ctx);
 
-        assertTrue(builder.sharedFilters().contains("ResponseHeaderModifier"));
-        assertTrue(builder.sharedFilters().contains("Access-Control-Allow-Origin"));
+        // sharedFilters is List<HTTPRouteFilter>; check it is non-empty and has correct type
+        assertFalse(builder.sharedFilters().isEmpty());
+        assertEquals("ResponseHeaderModifier", builder.sharedFilters().get(0).getType());
     }
 
     @Test

@@ -199,27 +199,14 @@ class ArchitectureTest {
 
     // ── Typed YAML migration scaffold (#262) ───────────────────────────────────
     //
-    // Shrinking allowlist: remove each class when its typed-yaml phase lands
-    // (k8s-gateway → istio → kuadrant → httproute). When empty, every generator
-    // and conversion support class must build YAML via Fabric8 models or Kuadrant
+    // Epic complete (phases 0–4): generators build YAML via Fabric8 models or Kuadrant
     // manifest records only. ReadmeSupport is excluded — it emits Markdown, not manifests.
+    // JwtClaimCheckSupport.buildReadmeNotes also emits Markdown (same rationale).
 
-    private static final Set<String> FORMATTED_YAML_GENERATOR_ALLOWLIST = Set.of(
-            "CorsOptionsContributor",
-            "HttpRouteAnnotationsContributor",
-            "HttpRouteBuilder",
-            "MappingRulesContributor",
-            "RetryContributor",
-            "RoutingContributor",
-            "UpstreamContributor"
-    );
+    private static final Set<String> FORMATTED_YAML_GENERATOR_ALLOWLIST = Set.of();
 
     private static final Set<String> FORMATTED_YAML_CONVERSION_ALLOWLIST = Set.of(
-            "HttpRouteSupport",
-            // JwtClaimCheckSupport.buildReadmeNotes emits Markdown (not YAML manifests) — same rationale as ReadmeSupport
-            "JwtClaimCheckSupport",
-            "RoutingSupport",
-            "UpstreamSupport"
+            "JwtClaimCheckSupport"
     );
 
     @ArchTest

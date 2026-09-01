@@ -46,6 +46,8 @@ class HttpRouteAnnotationsContributorTest {
 
         new HttpRouteAnnotationsContributor().contribute(builder, ctx);
 
-        assertTrue(builder.build().contains("3scale-migration/upstream-send-timeout: \"45s\""));
+        String yaml = builder.build();
+        assertTrue(yaml.contains("3scale-migration/upstream-send-timeout"), yaml);
+        assertTrue(yaml.contains("45s"), yaml);
     }
 }

@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service.generator.contributor;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ContributorTestFixtures;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteFilter;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -43,8 +44,9 @@ class HeaderModContributorTest {
         service.policies.add(ContributorTestFixtures.headerModificationPolicy(
                 List.of(Map.of("header", "X-Req", "value", "in", "op", "set")),
                 null));
-        String filters = HeaderModContributor.buildHeaderModificationFilters(service);
-        assertTrue(filters.contains("RequestHeaderModifier"));
+        List<HTTPRouteFilter> filters = HeaderModContributor.buildHeaderModificationFilters(service);
+        assertFalse(filters.isEmpty());
+        assertTrue(filters.stream().anyMatch(f -> "RequestHeaderModifier".equals(f.getType())));
     }
 
     @Test
@@ -55,9 +57,15 @@ class HeaderModContributorTest {
                 List.of(
                         Map.of("header", "X-Del", "op", "delete"),
                         Map.of("header", "X-Liq", "value", "{{x}}", "value_type", "liquid"))));
-        String filters = HeaderModContributor.buildHeaderModificationFilters(service);
-        assertTrue(filters.contains("- X-Del"));
-        assertTrue(filters.contains("liquid template"));
+        List<HTTPRouteFilter> filters = HeaderModContributor.buildHeaderModificationFilters(service);
+        // delete op emits a filter; liquid is skipped (no Gateway API representation)
+        assertFalse(filters.isEmpty());
+        assertTrue(filters.stream().anyMatch(f -> "ResponseHeaderModifier".equals(f.getType())));
+        // liquid header should not appear as a filter name
+        assertTrue(filters.stream()
+                .filter(f -> f.getResponseHeaderModifier() != null)
+                .flatMap(f -> f.getResponseHeaderModifier().getRemove().stream())
+                .anyMatch(name -> "X-Del".equals(name)));
     }
 
     @Test
@@ -68,10 +76,19 @@ class HeaderModContributorTest {
                 List.of(
                         Map.of("header", "X-Resp", "value", "out", "op", "set"),
                         Map.of("header", "X-Remove", "op", "delete"))));
-        String filters = HeaderModContributor.buildHeaderModificationFilters(service);
+        List<HTTPRouteFilter> filters = HeaderModContributor.buildHeaderModificationFilters(service);
 
-        assertTrue(filters.contains("ResponseHeaderModifier"));
-        assertTrue(filters.contains("name: X-Resp"));
-        assertTrue(filters.contains("- X-Remove"));
+        assertFalse(filters.isEmpty());
+        assertTrue(filters.stream().anyMatch(f -> "ResponseHeaderModifier".equals(f.getType())));
+        // X-Resp should be in set
+        assertTrue(filters.stream()
+                .filter(f -> f.getResponseHeaderModifier() != null)
+                .flatMap(f -> f.getResponseHeaderModifier().getSet().stream())
+                .anyMatch(h -> "X-Resp".equals(h.getName())));
+        // X-Remove should be in remove
+        assertTrue(filters.stream()
+                .filter(f -> f.getResponseHeaderModifier() != null)
+                .flatMap(f -> f.getResponseHeaderModifier().getRemove().stream())
+                .anyMatch(name -> "X-Remove".equals(name)));
     }
 }

@@ -219,7 +219,7 @@ public final class RoutingSupport {
         for (String note : bullets.stream().distinct().toList()) {
             body.append("- ").append(note).append('\n');
         }
-        return """
+        return String.format("""
 
 ## WARNING: Routing conversion gaps
 
@@ -229,7 +229,7 @@ Review before apply:
 %s
 JWT-claim routing has no Gateway API equivalent without Authorino claim→header.
 External override hosts do not get a synthetic ServiceEntry in P1 — create mesh resources manually if needed.
-""".formatted(body);
+""", body);
     }
 
     private static String stringOrNull(Object raw) {

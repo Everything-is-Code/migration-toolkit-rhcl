@@ -6,6 +6,12 @@ import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.HttpRouteSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.UpstreamSupport;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPBackendRef;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteFilter;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteMatchBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetry;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRuleBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeouts;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -47,9 +53,10 @@ public class UpstreamContributor implements HttpRouteContributor {
 
     private void contributePathScoped(HttpRouteBuilder builder, ConversionContext ctx, Policy upstream) {
         List<UpstreamSupport.UpstreamRule> rules = UpstreamSupport.parseRules(upstream);
-        String timeoutsBlock = builder.timeoutsBlock();
-        String retryBlock = builder.retryBlock();
-        String sharedFilters = builder.sharedFilters();
+        HTTPRouteTimeouts timeouts = builder.timeouts();
+        HTTPRouteRetry retry = builder.retry();
+        List<HTTPRouteFilter> sharedFilters = builder.sharedFilters();
+
         for (UpstreamSupport.UpstreamRule rule : rules) {
             if (!rule.convertible()) {
                 continue;
@@ -65,17 +72,27 @@ public class UpstreamContributor implements HttpRouteContributor {
             if (match.type() == UpstreamSupport.MatchType.PATH_PREFIX) {
                 builder.addPathForOptions(pathValue);
             }
-            String filtersBlock = HttpRouteSupport.buildRuleFiltersBlock(selected, sharedFilters);
+
             String matchType = match.type() == UpstreamSupport.MatchType.PATH_PREFIX
                     ? "PathPrefix" : "RegularExpression";
-            builder.appendRule("""
-    - matches:
-        - path:
-            type: %s
-            value: %s
-%s%s%s      backendRefs:
-%s""".formatted(matchType, HttpRouteSupport.yamlDoubleQuoted(pathValue), filtersBlock,
-                    timeoutsBlock, retryBlock, HttpRouteSupport.formatBackendRefs(selected)));
+
+            List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
+            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+
+            var httpMatch = new HTTPRouteMatchBuilder()
+                    .withNewPath()
+                    .withType(matchType)
+                    .withValue(pathValue)
+                    .endPath()
+                    .build();
+
+            var ruleBuilder = new HTTPRouteRuleBuilder()
+                    .withMatches(httpMatch)
+                    .withBackendRefs(backendRefs);
+            if (!filters.isEmpty()) ruleBuilder.withFilters(filters);
+            if (timeouts != null) ruleBuilder.withTimeouts(timeouts);
+            if (retry != null) ruleBuilder.withRetry(retry);
+            builder.addRule(ruleBuilder.build());
         }
     }
 }

@@ -31,16 +31,16 @@ class HttpRouteGeneratorTest {
 
         assertNotNull(yaml);
         assertEquals("httproute.yaml", generator.outputKey());
-        assertTrue(yaml.contains("apiVersion: gateway.networking.k8s.io/v1"));
-        assertTrue(yaml.contains("kind: HTTPRoute"));
-        assertTrue(yaml.contains("name: route-api-route"));
-        assertTrue(yaml.contains("namespace: " + GeneratorTestSupport.NAMESPACE));
-        assertTrue(yaml.contains("parentRefs:"));
-        assertTrue(yaml.contains("name: route-api-gateway"));
-        assertTrue(yaml.contains("rules:"));
-        assertTrue(yaml.contains("backendRefs:"));
-        assertTrue(yaml.contains("type: PathPrefix"));
-        assertTrue(yaml.contains("value: \"/api/v1\""));
-        assertTrue(yaml.contains("method: GET"));
+        assertTrue(yaml.contains("gateway.networking.k8s.io/v1"), yaml);
+        assertTrue(yaml.contains("HTTPRoute"), yaml);
+        assertTrue(yaml.contains("route-api-route"), yaml);
+        assertTrue(yaml.contains(GeneratorTestSupport.NAMESPACE), yaml);
+        assertTrue(yaml.contains("parentRefs:"), yaml);
+        assertTrue(yaml.contains("route-api-gateway"), yaml);
+        assertTrue(yaml.contains("rules:"), yaml);
+        assertTrue(yaml.contains("backendRefs:"), yaml);
+        assertTrue(yaml.contains("PathPrefix"), yaml);
+        assertTrue(yaml.contains("/api/v1"), yaml);
+        assertTrue(yaml.contains("GET"), yaml);
     }
 }

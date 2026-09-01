@@ -30,26 +30,25 @@ public class HttpRouteAnnotationsContributor implements HttpRouteContributor {
     @Override
     public void contribute(HttpRouteBuilder builder, ConversionContext ctx) {
         ApiService service = ctx.service;
-        String upstream = buildUpstreamAnnotations(service);
-        if (!upstream.isBlank()) {
-            builder.appendAnnotationBody(upstream);
+        String sendTimeout = resolveSendTimeout(service);
+        if (sendTimeout != null) {
+            builder.addAnnotation("3scale-migration/upstream-send-timeout", sendTimeout + "s");
         }
         Policy contentLimits = policyFinder().findEnabledAny(
                 service, true, "content_limits", "payload_limits");
         if (contentLimits != null) {
             Integer responseBytes = policyConfigSupport().resolveContentLimitBytes(contentLimits, false);
             if (responseBytes != null && responseBytes > 0) {
-                builder.appendAnnotationBody(String.format(
-                        "    3scale-migration/response-content-limit: \"%d\"%n", responseBytes));
+                builder.addAnnotation("3scale-migration/response-content-limit",
+                        String.valueOf(responseBytes));
             }
         }
     }
 
-    private String buildUpstreamAnnotations(ApiService service) {
+    private static String resolveSendTimeout(ApiService service) {
         if (service.policies == null) {
-            return "";
+            return null;
         }
-        Object sendTimeout = null;
         for (Policy p : service.policies) {
             if (!"upstream_connection".equals(p.name)) {
                 continue;
@@ -62,15 +61,9 @@ public class HttpRouteAnnotationsContributor implements HttpRouteContributor {
             }
             Object sendRaw = p.configuration.get("send_timeout");
             if (sendRaw != null) {
-                sendTimeout = sendRaw;
-                break;
+                return sendRaw.toString();
             }
         }
-        if (sendTimeout == null) {
-            return "";
-        }
-        return """
-    3scale-migration/upstream-send-timeout: "%ss"
-""".formatted(sendTimeout);
+        return null;
     }
 }

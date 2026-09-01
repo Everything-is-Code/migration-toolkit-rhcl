@@ -188,7 +188,7 @@ public final class UpstreamSupport {
         for (String note : bullets.stream().distinct().toList()) {
             body.append("- ").append(note).append('\n');
         }
-        return """
+        return String.format("""
 
 ## WARNING: Upstream conversion gaps
 
@@ -198,7 +198,7 @@ Review before apply:
 %s
 Non-approximable PCRE is not silently treated as supported. External override hosts
 do not get a synthetic ServiceEntry in P1 — create mesh resources manually if needed.
-""".formatted(body);
+""", body);
     }
 
     private static List<String> collectOverrideUrls(Policy upstream, List<UpstreamRule> rules) {

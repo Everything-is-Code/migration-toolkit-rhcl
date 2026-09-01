@@ -3,6 +3,7 @@ package com.redhat.migrationtoolkit.rhcl.service.conversion;
 import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPBackendRef;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -57,18 +58,35 @@ class HttpRouteSupportTest {
     }
 
     @Test
-    void formatBackendRefs_weightedWhenMultipleBackends() {
+    void buildBackendRefs_multipleBackendsNullWeight_defaultsToOne() {
+        List<ResolvedBackend> selected = List.of(
+                new ResolvedBackend(BackendType.INTERNAL, "a-backend", "a-se", "a-dr",
+                        null, 8080, false, "/a", null, null),
+                new ResolvedBackend(BackendType.INTERNAL, "b-backend", "b-se", "b-dr",
+                        null, 8080, false, "/b", null, null));
+
+        List<HTTPBackendRef> refs = HttpRouteSupport.buildBackendRefs(selected);
+
+        assertEquals(2, refs.size());
+        assertEquals(1, refs.get(0).getWeight());
+        assertEquals(1, refs.get(1).getWeight());
+    }
+
+    @Test
+    void buildBackendRefs_weightedWhenMultipleBackends() {
         List<ResolvedBackend> selected = List.of(
                 new ResolvedBackend(BackendType.INTERNAL, "a-backend", "a-se", "a-dr",
                         null, 8080, false, "/a", 70, null),
                 new ResolvedBackend(BackendType.INTERNAL, "b-backend", "b-se", "b-dr",
                         null, 8080, false, "/b", 30, null));
 
-        String yaml = HttpRouteSupport.formatBackendRefs(selected);
+        List<HTTPBackendRef> refs = HttpRouteSupport.buildBackendRefs(selected);
 
-        assertTrue(yaml.contains("name: a-backend"));
-        assertTrue(yaml.contains("weight: 70"));
-        assertTrue(yaml.contains("weight: 30"));
+        assertEquals(2, refs.size());
+        assertEquals("a-backend", refs.get(0).getName());
+        assertEquals(70, refs.get(0).getWeight());
+        assertEquals("b-backend", refs.get(1).getName());
+        assertEquals(30, refs.get(1).getWeight());
     }
 
     @Test

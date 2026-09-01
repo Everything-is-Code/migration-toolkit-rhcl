@@ -5,6 +5,12 @@ import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.HttpRouteSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ResolvedBackend;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPBackendRef;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteFilter;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteMatchBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRetry;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteRuleBuilder;
+import io.fabric8.kubernetes.api.model.gatewayapi.v1.HTTPRouteTimeouts;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -25,9 +31,9 @@ public class CorsOptionsContributor implements HttpRouteContributor {
             return;
         }
         ApiService service = ctx.service;
-        String timeoutsBlock = builder.timeoutsBlock();
-        String retryBlock = builder.retryBlock();
-        String sharedFilters = builder.sharedFilters();
+        HTTPRouteTimeouts timeouts = builder.timeouts();
+        HTTPRouteRetry retry = builder.retry();
+        List<HTTPRouteFilter> sharedFilters = builder.sharedFilters();
         List<ResolvedBackend> backends = builder.backends();
 
         Set<String> emittedOptions = new HashSet<>();
@@ -38,21 +44,30 @@ public class CorsOptionsContributor implements HttpRouteContributor {
                 }
             }
         }
+
         for (String path : builder.pathsForOptions()) {
             if (!emittedOptions.add(path)) {
                 continue;
             }
             List<ResolvedBackend> selected = HttpRouteSupport.selectBackendsForPath(backends, path);
-            String filtersBlock = HttpRouteSupport.buildRuleFiltersBlock(selected, sharedFilters);
-            builder.appendRule("""
-    - matches:
-        - path:
-            type: PathPrefix
-            value: "%s"
-          method: OPTIONS
-%s%s%s      backendRefs:
-%s""".formatted(path, filtersBlock, timeoutsBlock, retryBlock,
-                    HttpRouteSupport.formatBackendRefs(selected)));
+            List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
+            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+
+            var match = new HTTPRouteMatchBuilder()
+                    .withNewPath()
+                    .withType("PathPrefix")
+                    .withValue(path)
+                    .endPath()
+                    .withMethod("OPTIONS")
+                    .build();
+
+            var ruleBuilder = new HTTPRouteRuleBuilder()
+                    .withMatches(match)
+                    .withBackendRefs(backendRefs);
+            if (!filters.isEmpty()) ruleBuilder.withFilters(filters);
+            if (timeouts != null) ruleBuilder.withTimeouts(timeouts);
+            if (retry != null) ruleBuilder.withRetry(retry);
+            builder.addRule(ruleBuilder.build());
         }
     }
 }
