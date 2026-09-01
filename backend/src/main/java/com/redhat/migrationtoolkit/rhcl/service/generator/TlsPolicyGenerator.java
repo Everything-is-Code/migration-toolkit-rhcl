@@ -6,6 +6,7 @@ import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TargetRef;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TlsPolicyManifest;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.TlsPolicySpec;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ConversionContext;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.KuadrantManifestSupport;
 import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -43,16 +44,8 @@ public class TlsPolicyGenerator implements ResourceGenerator {
         String kind = (issuerKind != null && !issuerKind.isBlank()) ? issuerKind : "ClusterIssuer";
         String issuer = (issuerName != null && !issuerName.isBlank()) ? issuerName : "letsencrypt-prod";
 
-        if (kind.isBlank() || issuer.isBlank()) {
-            throw new IllegalArgumentException(
-                    "TlsPolicyGenerator: issuerRef requires non-blank kind and name");
-        }
-
-        ManifestMeta meta = new ManifestMeta(
-                name + "-tls-policy",
-                namespace,
-                Map.of("app", name, "migrated-from", "3scale"),
-                null);
+        ManifestMeta meta = KuadrantManifestSupport.meta(
+                name + "-tls-policy", namespace, name, ctx.includeMigratedFromLabel);
 
         TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "Gateway", name + "-gateway");
         IssuerRef issuerRef = new IssuerRef("cert-manager.io", kind, issuer);

@@ -1,6 +1,7 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
 import com.redhat.migrationtoolkit.rhcl.dto.ConversionOptions;
+import com.redhat.migrationtoolkit.rhcl.model.ApplicationPlan;
 import com.redhat.migrationtoolkit.rhcl.model.Authentication;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiKeyManifest;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiKeySpec;
@@ -174,6 +175,36 @@ class KuadrantManifestEquivalenceTest {
         MapEquivalenceSupport.assertEquivalent(fromGeneratorMap, fromRecord);
     }
 
+    @Test
+    void rateLimitPolicy_leakyBucket_recordMatchesGeneratorOutput() {
+        var service = GeneratorTestSupport.basicService("Rate API", "rate-api");
+        service.policies = List.of(GeneratorTestSupport.policyWithConfig("edge_limiting", Map.of(
+                "leaky_bucket_limiters", List.of(
+                        Map.of("rate", 50, "key", Map.of("name", "user"))))));
+        var ctx = GeneratorTestSupport.context(service);
+
+        rateLimitPolicyGenerator.bindManual(RateLimitSupport.forManual());
+        Map<String, Object> fromGenerator = YamlAssertions.parse(rateLimitPolicyGenerator.generate(ctx));
+        Map<String, Object> fromRecord = YamlAssertions.parse(serializer.toYaml(
+                rateLimitPolicyManifestLeaky(ctx)));
+
+        MapEquivalenceSupport.assertEquivalent(fromGenerator, fromRecord);
+    }
+
+    @Test
+    void rateLimitPolicy_planCeiling_recordMatchesGeneratorOutput() {
+        var service = GeneratorTestSupport.basicService("Rate API", "rate-api");
+        service.applicationPlans = List.of(planWithMinuteLimit(42));
+        var ctx = GeneratorTestSupport.context(service);
+
+        rateLimitPolicyGenerator.bindManual(RateLimitSupport.forManual());
+        Map<String, Object> fromGenerator = YamlAssertions.parse(rateLimitPolicyGenerator.generate(ctx));
+        Map<String, Object> fromRecord = YamlAssertions.parse(serializer.toYaml(
+                rateLimitPolicyManifestPlanCeiling(ctx)));
+
+        MapEquivalenceSupport.assertEquivalent(fromGenerator, fromRecord);
+    }
+
     private static String generateAuthPolicy(
             ConversionContext ctx, com.redhat.migrationtoolkit.rhcl.service.generator.contributor.AuthPolicyContributor contributor) {
         AuthPolicyGenerator generator = new AuthPolicyGenerator();
@@ -270,6 +301,34 @@ class KuadrantManifestEquivalenceTest {
                 "RateLimitPolicy",
                 kuadrantMeta(name + "-ratelimit", name),
                 new RateLimitPolicySpec(httpRouteTarget(name), limits));
+    }
+
+    private static RateLimitPolicyManifest rateLimitPolicyManifestLeaky(ConversionContext ctx) {
+        String name = ctx.serviceKebabName;
+        Map<String, LimitDefinition> limits = new LinkedHashMap<>();
+        limits.put("user_1", new LimitDefinition(List.of(new Rate(50, "1s"))));
+        return new RateLimitPolicyManifest(
+                "kuadrant.io/v1",
+                "RateLimitPolicy",
+                kuadrantMeta(name + "-ratelimit", name),
+                new RateLimitPolicySpec(httpRouteTarget(name), limits));
+    }
+
+    private static RateLimitPolicyManifest rateLimitPolicyManifestPlanCeiling(ConversionContext ctx) {
+        String name = ctx.serviceKebabName;
+        Map<String, LimitDefinition> limits = new LinkedHashMap<>();
+        limits.put("global", new LimitDefinition(List.of(new Rate(42, "60s"))));
+        return new RateLimitPolicyManifest(
+                "kuadrant.io/v1",
+                "RateLimitPolicy",
+                kuadrantMeta(name + "-ratelimit", name),
+                new RateLimitPolicySpec(httpRouteTarget(name), limits));
+    }
+
+    private static ApplicationPlan planWithMinuteLimit(int value) {
+        ApplicationPlan plan = new ApplicationPlan();
+        plan.limits = List.of(Map.of("period", "minute", "value", value));
+        return plan;
     }
 
     private static ManifestMeta authMeta(String appLabel) {

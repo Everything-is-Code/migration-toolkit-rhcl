@@ -4,6 +4,7 @@ import com.redhat.migrationtoolkit.rhcl.model.ApiService;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.AuthorizationRule;
 import com.redhat.migrationtoolkit.rhcl.service.PolicyFinder;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ManifestSerializer;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -86,6 +87,18 @@ class JwtClaimCheckSupportTest {
     void buildNamedRule_emptyPatterns_returnsNull() {
         assertNull(JwtClaimCheckSupport.buildNamedRule(List.of()));
         assertNull(JwtClaimCheckSupport.buildNamedRule(null));
+    }
+
+    @Test
+    void buildNamedRule_regexSpecialChars_roundTripsInYaml() {
+        List<JwtClaimCheckSupport.JwtClaimPattern> patterns = List.of(
+                new JwtClaimCheckSupport.JwtClaimPattern("auth.identity.scope", "matches", ".*(?=read)"));
+
+        AuthorizationRule rule = JwtClaimCheckSupport.buildNamedRule(patterns);
+        assertNotNull(rule);
+
+        String yaml = new ManifestSerializer().toYaml(Map.of("jwt-claim-check", rule.value()));
+        assertTrue(yaml.contains(".*(?=read)"), yaml);
     }
 
     @Test
