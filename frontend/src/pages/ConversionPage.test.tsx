@@ -33,6 +33,22 @@ vi.mock('../components/AppStateContext', () => {
   };
 });
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, defaultOrOpts?: string | Record<string, unknown>) => {
+      if (typeof defaultOrOpts === 'string') return defaultOrOpts;
+      if (defaultOrOpts && typeof defaultOrOpts === 'object' && 'message' in defaultOrOpts) {
+        return String(defaultOrOpts.message);
+      }
+      return key;
+    },
+  }),
+}));
+
+vi.mock('../components/conversion/useClearStaleConversionResults', () => ({
+  useClearStaleConversionResults: () => {},
+}));
+
 vi.mock('../components/conversion/ConversionForm', () => ({
   default: ({ onConvert, loading, error }: {
     onConvert: (opts: Record<string, unknown>) => void;
@@ -48,6 +64,15 @@ vi.mock('../components/conversion/ConversionForm', () => ({
         includeDnsPolicy: false, dnsHostname: '', dnsProviderSecretName: '',
       })}>
         Convert
+      </button>
+      <button data-testid="convert-dns-btn" onClick={() => onConvert({
+        isExternal: false, externalBackendUrl: '',
+        loggingTarget: 'gateway', anonymousTarget: 'httproute',
+        ipCheckMode: 'authorizationPolicy', includeMigratedFromLabel: true,
+        includeTlsPolicy: false, tlsIssuerKind: '', tlsIssuerName: '',
+        includeDnsPolicy: true, dnsHostname: '', dnsProviderSecretName: '',
+      })}>
+        Convert DNS
       </button>
       {loading && <span data-testid="loading">Loading...</span>}
       {error && <span data-testid="error">{error}</span>}
@@ -94,6 +119,16 @@ describe('ConversionPage handleConvert', () => {
       await userEvent.click(screen.getByTestId('convert-btn'));
     });
 
-    expect(screen.getByTestId('error')).toBeTruthy();
+    expect(screen.getByTestId('error').textContent).toContain('backend exploded');
+  });
+
+  it('requires dns hostname when includeDnsPolicy is enabled', async () => {
+    render(<ConversionPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('convert-dns-btn'));
+    });
+
+    expect(mockConvert).not.toHaveBeenCalled();
+    expect(screen.getByTestId('error').textContent).toContain('Gateway hostname is required');
   });
 });

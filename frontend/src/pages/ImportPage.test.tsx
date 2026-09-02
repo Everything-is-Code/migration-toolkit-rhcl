@@ -40,8 +40,26 @@ vi.mock('../components/import/ImportResultTable', () => ({
   ),
 }));
 vi.mock('../components/import/NamespaceFormCard', () => ({
-  default: ({ onApply, onDownload }: { onApply: () => void; onDownload: () => void }) => (
+  default: ({
+    onApply,
+    onDownload,
+    packageName,
+    onPackageNameChange,
+    pkgNameError,
+  }: {
+    onApply: () => void;
+    onDownload: () => void;
+    packageName: string;
+    onPackageNameChange: (value: string) => void;
+    pkgNameError: boolean;
+  }) => (
     <div>
+      <input
+        data-testid="package-name"
+        value={packageName}
+        onChange={(e) => onPackageNameChange(e.target.value)}
+      />
+      {pkgNameError && <span data-testid="pkg-name-error">required</span>}
       <button data-testid="apply-btn" onClick={onApply}>Apply</button>
       <button data-testid="download-btn" onClick={onDownload}>Download</button>
     </div>
@@ -129,5 +147,41 @@ describe('ImportPage orchestration', () => {
     });
 
     expect(screen.getByText(/import.errorUpload/)).toBeTruthy();
+  });
+
+  it('blocks apply when package name is empty', async () => {
+    mockUploadZip.mockResolvedValue({
+      data: { files: { 'gateway.yaml': 'kind: Gateway' } },
+    });
+
+    render(<ImportPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('dropzone'));
+    });
+    await act(async () => {
+      await userEvent.clear(screen.getByTestId('package-name'));
+      await userEvent.click(screen.getByTestId('apply-btn'));
+    });
+
+    expect(mockApply).not.toHaveBeenCalled();
+    expect(screen.getByTestId('pkg-name-error')).toBeTruthy();
+  });
+
+  it('blocks download when package name is empty', async () => {
+    mockUploadZip.mockResolvedValue({
+      data: { files: { 'gateway.yaml': 'kind: Gateway' } },
+    });
+
+    render(<ImportPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('dropzone'));
+    });
+    await act(async () => {
+      await userEvent.clear(screen.getByTestId('package-name'));
+      await userEvent.click(screen.getByTestId('download-btn'));
+    });
+
+    expect(mockDownloadZip).not.toHaveBeenCalled();
+    expect(screen.getByTestId('pkg-name-error')).toBeTruthy();
   });
 });
