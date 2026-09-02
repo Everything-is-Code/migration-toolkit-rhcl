@@ -16,8 +16,11 @@ vi.mock('../api/client', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, opts?: Record<string, unknown>) =>
-      opts?.count !== undefined ? `${key}:${opts.count}` : key,
+    t: (key: string, opts?: Record<string, unknown>) => {
+      if (opts?.count !== undefined) return `${key}:${opts.count}`;
+      if (opts?.message !== undefined) return String(opts.message);
+      return key;
+    },
   }),
 }));
 
@@ -127,6 +130,29 @@ describe('HistoryPage orchestration', () => {
     expect(screen.getByText('api-a')).toBeTruthy();
   });
 
+  it('shows error when historyApi.list fails', async () => {
+    mockList.mockRejectedValue({
+      response: { data: { error: 'history load failed' } },
+    });
+
+    render(<HistoryPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('history load failed')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('history-table')).toBeNull();
+  });
+
+  it('reloads history when reload is clicked', async () => {
+    const user = userEvent.setup();
+    render(<HistoryPage />);
+
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByTestId('reload-btn'));
+
+    await waitFor(() => expect(mockList).toHaveBeenCalledTimes(2));
+  });
+
   it('selects rows and deletes via modal confirm', async () => {
     const user = userEvent.setup();
     render(<HistoryPage />);
@@ -143,9 +169,41 @@ describe('HistoryPage orchestration', () => {
       expect(mockDeleteByIds).toHaveBeenCalledWith([1]);
     });
     expect(mockList).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('history.deleteSuccess:1')).toBeTruthy();
   });
 
-  it('toggle all selects every row on current page', async () => {
+  it('closes delete modal without calling API when cancelled', async () => {
+    const user = userEvent.setup();
+    render(<HistoryPage />);
+
+    await waitFor(() => expect(screen.getByTestId('select-1')).toBeTruthy());
+    await user.click(screen.getByTestId('select-1'));
+    await user.click(screen.getByTestId('delete-open-btn'));
+    await user.click(screen.getByTestId('delete-cancel-btn'));
+
+    expect(screen.queryByTestId('delete-modal')).toBeNull();
+    expect(mockDeleteByIds).not.toHaveBeenCalled();
+  });
+
+  it('shows toast when delete fails', async () => {
+    const user = userEvent.setup();
+    mockDeleteByIds.mockRejectedValue({
+      response: { data: { error: 'delete failed' } },
+    });
+
+    render(<HistoryPage />);
+    await waitFor(() => expect(screen.getByTestId('select-1')).toBeTruthy());
+
+    await user.click(screen.getByTestId('select-1'));
+    await user.click(screen.getByTestId('delete-open-btn'));
+    await user.click(screen.getByTestId('delete-confirm-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByText('delete failed')).toBeTruthy();
+    });
+  });
+
+  it('toggle all selects and deselects every row on current page', async () => {
     const user = userEvent.setup();
     render(<HistoryPage />);
 
@@ -155,5 +213,26 @@ describe('HistoryPage orchestration', () => {
     expect(screen.getByTestId('select-1')).toHaveProperty('checked', true);
     expect(screen.getByTestId('select-2')).toHaveProperty('checked', true);
     expect(screen.getByText('Toggle all (2)')).toBeTruthy();
+
+    await user.click(screen.getByTestId('toggle-all-btn'));
+
+    expect(screen.getByTestId('select-1')).toHaveProperty('checked', false);
+    expect(screen.getByTestId('select-2')).toHaveProperty('checked', false);
+    expect(screen.getByText('Toggle all (0)')).toBeTruthy();
+  });
+
+  it('deletes all selected rows after toggle all', async () => {
+    const user = userEvent.setup();
+    render(<HistoryPage />);
+
+    await waitFor(() => expect(screen.getByTestId('toggle-all-btn')).toBeTruthy());
+    await user.click(screen.getByTestId('toggle-all-btn'));
+    await user.click(screen.getByTestId('delete-open-btn'));
+    await user.click(screen.getByTestId('delete-confirm-btn'));
+
+    await waitFor(() => {
+      expect(mockDeleteByIds).toHaveBeenCalledWith([1, 2]);
+    });
+    expect(screen.getByText('history.deleteSuccess:2')).toBeTruthy();
   });
 });

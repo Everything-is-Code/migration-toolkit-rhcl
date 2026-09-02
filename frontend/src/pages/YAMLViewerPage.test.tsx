@@ -2,6 +2,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ConversionResultItem } from '../api/types';
 
 const mockNavigate = vi.fn();
@@ -34,8 +35,23 @@ vi.mock('../components/yaml/YamlFileTabs', () => ({
 }));
 
 vi.mock('../components/yaml/YamlEditorPanel', () => ({
-  default: ({ editedContent }: { editedContent: string }) => (
-    <pre data-testid="yaml-content">{editedContent}</pre>
+  default: ({
+    editedContent,
+    onEdit,
+  }: {
+    editedContent: string;
+    onEdit: (filename: string, value: string) => void;
+  }) => (
+    <div>
+      <pre data-testid="yaml-content">{editedContent}</pre>
+      <button
+        type="button"
+        data-testid="edit-yaml-btn"
+        onClick={() => onEdit('gateway.yaml', 'name: stale-user-edit')}
+      >
+        Edit
+      </button>
+    </div>
   ),
 }));
 
@@ -70,9 +86,13 @@ describe('YAMLViewerPage edits resync', () => {
     expect(screen.getByTestId('yaml-content').textContent).toBe('name: api-a-gateway');
   });
 
-  it('rebuilds edits when conversion results fingerprint changes', () => {
+  it('rebuilds edits when conversion results fingerprint changes', async () => {
+    const user = userEvent.setup();
     const { rerender } = render(<YAMLViewerPage />);
     expect(screen.getByTestId('yaml-content').textContent).toBe('name: api-a-gateway');
+
+    await user.click(screen.getByTestId('edit-yaml-btn'));
+    expect(screen.getByTestId('yaml-content').textContent).toBe('name: stale-user-edit');
 
     mockAppState = {
       conversionResults: [result('api-b', 'name: api-b-gateway', 20)],
