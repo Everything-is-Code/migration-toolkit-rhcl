@@ -1,0 +1,31 @@
+---
+description: Engram memory boundaries for RHCL — OpenSpec is authoritative; dual-write for design/architecture
+alwaysApply: true
+---
+
+# Engram + OpenSpec (RHCL)
+
+Engram MCP is available (project binding is **per-developer** via local `.engram/config.json`, gitignored). Use it proactively — the user must not need to ask.
+
+Canonical SDD store: sibling `../migration-toolkit-sdd/` (OpenSpec). Product `AGENTS.md`: do not use Engram for new SDD artifacts — use OpenSpec.
+
+## Authority
+
+| Knowledge | Authoritative store | Engram |
+|-----------|---------------------|--------|
+| Change specs, tasks, design | SDD `openspec/changes/` … `openspec/specs/` | Never substitute |
+| **Design / architecture decisions** | SDD **`design.md`** | **Also `mem_save` (dual-write)** |
+| Workflow gotchas, CI, preferences | Engram | Primary |
+
+Full policy: `../migration-toolkit-sdd/.cursor/rules/engram.mdc` and `docs/sdd-backlog.md`.
+
+## Dual-write for design / architecture
+
+1. Update SDD `design.md` (OpenSpec change) first.
+2. Then `mem_save` (`type`: architecture/decision, `topic_key`: `rhcl/architecture/<slug>`, link to OpenSpec path in content).
+
+SDD wins on conflict; Engram is for cross-session recall and context injection.
+
+## Proactive use
+
+Save after significant work; search at session start on related topics; `mem_session_summary` before closing substantial sessions.

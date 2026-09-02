@@ -45,3 +45,6 @@ logs/
 
 # Agent skill registry (local index)
 .atl/
+
+# Engram local project binding (per-developer; see .cursor/rules/engram.mdc)
+.engram/
