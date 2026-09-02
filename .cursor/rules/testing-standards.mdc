@@ -43,7 +43,7 @@ Run: `cd backend && mvn test` (unit) / `mvn verify` (+ITs, JaCoCo, Checkstyle, P
 - Setup: `src/test/setup.ts` imports `@testing-library/jest-dom/vitest`.
 - **`@testing-library/react`** + **`user-event`** for component tests; co-locate as `<name>.test.tsx` next to the source file.
 - **Mock conventions:** mock `../api/client` and heavy child components (PatternFly forms, dropzones); keep the page orchestrator under test. Mock `react-i18next` with `t: (key) => key`.
-- **Coverage today (orchestration RTL):** `ImportPage`, `ConversionPage` (incl. DNS validation), `ConnectionPage`, `RouteErrorBoundary`, plus smoke tests for `AppLayout`, `AppStateContext`, `ConversionPolicySettings`, `ClusterVersionsPanel`.
+- **Coverage today (orchestration RTL):** `ImportPage` (incl. empty package name guards), `ConversionPage` (DNS + API error message), `ConnectionPage` (mount, refresh, error message), `RouteErrorBoundary` (retry + pathname recovery), `AppLayout` (nav/masthead survives route throw), plus smoke tests for `AppStateContext`, `ConversionPolicySettings`, `ClusterVersionsPanel`.
 - Utils/API: `vi.mock('axios')` or `vi.mock('../api/client')`; `describe`/`it` + `beforeEach`/`cleanup()`.
 
 Run: `cd frontend && npm test` / `npm run test:coverage` / `npm run typecheck` / `npm run lint`.

@@ -35,8 +35,13 @@ vi.mock('../components/AppStateContext', () => {
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, defaultOrOpts?: string | Record<string, unknown>) =>
-      typeof defaultOrOpts === 'string' ? defaultOrOpts : key,
+    t: (key: string, defaultOrOpts?: string | Record<string, unknown>) => {
+      if (typeof defaultOrOpts === 'string') return defaultOrOpts;
+      if (defaultOrOpts && typeof defaultOrOpts === 'object' && 'message' in defaultOrOpts) {
+        return String(defaultOrOpts.message);
+      }
+      return key;
+    },
   }),
 }));
 
@@ -114,7 +119,7 @@ describe('ConversionPage handleConvert', () => {
       await userEvent.click(screen.getByTestId('convert-btn'));
     });
 
-    expect(screen.getByTestId('error')).toBeTruthy();
+    expect(screen.getByTestId('error').textContent).toContain('backend exploded');
   });
 
   it('requires dns hostname when includeDnsPolicy is enabled', async () => {
