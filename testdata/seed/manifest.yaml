@@ -1,0 +1,3 @@
+version: 1
+# Optional cluster_profile overrides for parity IT (#288). Default: auto
+profiles: {}

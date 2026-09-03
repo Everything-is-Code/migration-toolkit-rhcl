@@ -33,6 +33,17 @@ Multi-backend also uses `rhcl_seed_orders` + `rhcl_seed_catalog_be` (paths `/`, 
 
 Source of truth: [`catalog.yaml`](./catalog.yaml).
 
+Parity harness (epic [#278](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/278)):
+
+| File | Role |
+|------|------|
+| [`catalog.yaml`](./catalog.yaml) | Seeder + product definitions |
+| [`manifest.yaml`](./manifest.yaml) | Version + optional cluster profile overrides |
+| [`expectations.yaml`](./expectations.yaml) | Shared YAML fragment contract (BE IT + Playwright) |
+| [`../exports/`](../exports/) | Frozen `ApiService` JSON per `system_name` (refresh via script) |
+
+`SeedCatalogIntegrityTest` (backend) asserts `catalog.yaml` keys match `expectations.yaml`. Export file presence is enabled when `testdata/exports/*.json` land (#280).
+
 ### APIcast name notes
 
 | Seed `policy_names` entry | RHCL converter accepts |
