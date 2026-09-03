@@ -372,6 +372,86 @@ products:
       - "auth: oidc"
       - "conversion: AuthPolicy JWT"
 
+  # ── multi-policy chains (intentional; E2E + parity matrix) ──
+
+  - system_name: rhcl_seed_claim_role_chain
+    name: RHCL Seed Claim Role Chain
+    description: OIDC + jwt_claim_check + keycloak_role_check policy chain
+    auth_mode: oidc
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [jwt_claim_check, keycloak_role_check]
+    oidc:
+      realm_url: "https://sso.example.com/auth/realms/rhcl-seed"
+      zync_client_id: zync-admin
+      zync_client_secret: ZyncSecret123-for-rhsso
+      redirect_url: "https://rhcl-seed-claim-role-chain.example.com/callback"
+      standard_flow: true
+      service_accounts: true
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-claim-role-chain-app
+        plan: basic
+        redirect_url: "https://rhcl-seed-claim-role-chain.example.com/callback"
+    coverage:
+      - "policy chain: jwt_claim_check + keycloak_role_check"
+      - "conversion: AuthPolicy JWT claim + keycloak role patterns"
+      - "e2e: frontend/e2e/yaml-expectations.ts rhcl_seed_claim_role_chain"
+
+  - system_name: rhcl_seed_claim_cache_chain
+    name: RHCL Seed Claim Cache Chain
+    description: OIDC + jwt_claim_check + caching (3scale Auth Caching) chain
+    auth_mode: oidc
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [jwt_claim_check, caching]
+    oidc:
+      realm_url: "https://sso.example.com/auth/realms/rhcl-seed"
+      zync_client_id: zync-admin
+      zync_client_secret: ZyncSecret123-for-rhsso
+      redirect_url: "https://rhcl-seed-claim-cache-chain.example.com/callback"
+      standard_flow: true
+      service_accounts: true
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-claim-cache-chain-app
+        plan: basic
+        redirect_url: "https://rhcl-seed-claim-cache-chain.example.com/callback"
+    coverage:
+      - "policy chain: jwt_claim_check + caching"
+      - "conversion: AuthPolicy JWT claim + cache block"
+      - "e2e: frontend/e2e/yaml-expectations.ts rhcl_seed_claim_cache_chain"
+
+  - system_name: rhcl_seed_auth_chain
+    name: RHCL Seed Auth Chain
+    description: OIDC + jwt_claim_check + ip_check (AuthPolicy + AuthorizationPolicy)
+    auth_mode: oidc
+    backend_refs: [rhcl_seed_upstream]
+    policy_names: [jwt_claim_check, ip_check]
+    oidc:
+      realm_url: "https://sso.example.com/auth/realms/rhcl-seed"
+      zync_client_id: zync-admin
+      zync_client_secret: ZyncSecret123-for-rhsso
+      redirect_url: "https://rhcl-seed-auth-chain.example.com/callback"
+      standard_flow: true
+      service_accounts: true
+    plans:
+      - system_name: basic
+        name: Basic
+        limit_value: 1000
+    applications:
+      - name: rhcl-auth-chain-app
+        plan: basic
+        redirect_url: "https://rhcl-seed-auth-chain.example.com/callback"
+    coverage:
+      - "policy chain: jwt_claim_check + ip_check"
+      - "conversion: AuthPolicy claim patterns + AuthorizationPolicy IP allowlist"
+      - "e2e: frontend/e2e/yaml-expectations.ts rhcl_seed_auth_chain"
+
   # ── multi-backend path-first routing ──
   # Seeder assigns paths / , /backend-2 , /backend-3 by backend_refs order.
   - system_name: rhcl_seed_multi_backend

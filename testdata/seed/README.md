@@ -1,6 +1,6 @@
 # 3scale seed fixtures for RHCL conversion cases
 
-Reusable lab data for the Migration Toolkit: **one product + one focused policy** (or auth / multi-backend pattern) per implemented conversion path.
+Reusable lab data for the Migration Toolkit: **one product + one focused policy** (or auth / multi-backend / **multi-policy chain** pattern) per implemented conversion path.
 
 ## Catalog
 
@@ -23,6 +23,9 @@ Reusable lab data for the Migration Toolkit: **one product + one focused policy*
 | `rhcl_seed_retry` | api_key | `retry` | HTTPRoute retry / EnvoyFilter fallback |
 | `rhcl_seed_keycloak_roles` | oidc | `keycloak_role_check` | AuthPolicy role patterns |
 | `rhcl_seed_oidc_jwt` | oidc | _(none)_ | AuthPolicy JWT only |
+| `rhcl_seed_claim_role_chain` | oidc | `jwt_claim_check` + `keycloak_role_check` | AuthPolicy claim + role chain |
+| `rhcl_seed_claim_cache_chain` | oidc | `jwt_claim_check` + `caching` | AuthPolicy claim + cache chain |
+| `rhcl_seed_auth_chain` | oidc | `jwt_claim_check` + `ip_check` | AuthPolicy + AuthorizationPolicy chain |
 | `rhcl_seed_multi_backend` | api_key | 3 backends | Path-first multi-backend routing |
 
 Shared upstream: `rhcl_seed_upstream` → `https://httpbin.org:443`.  
@@ -80,4 +83,4 @@ Policy default configs live in `3scaleextract/internal/seed/policies.go` (`polic
 
 ## Extending
 
-Add a product block to `catalog.yaml` (keep **one policy** per product for isolation, except intentional multi-backend / auth-only cases). Add a matching entry in `policyConfigurations` when the policy needs non-empty config. Rebuild `threescale-seed` only when `policies.go` changes.
+Add a product block to `catalog.yaml` (keep **one policy** per product for isolation, except intentional multi-backend / auth-only / **multi-policy chain** cases). Chain products may list multiple `policy_names`; ensure matching defaults exist in `3scaleextract/internal/seed/policies.go` when non-empty configs are required. Rebuild `threescale-seed` only when `policies.go` changes.
