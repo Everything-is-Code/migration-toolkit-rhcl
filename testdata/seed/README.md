@@ -33,6 +33,8 @@ Multi-backend also uses `rhcl_seed_orders` + `rhcl_seed_catalog_be` (paths `/`, 
 
 Source of truth: [`catalog.yaml`](./catalog.yaml).
 
+[`PARITY_MATRIX.md`](./PARITY_MATRIX.md) — epic #278 traceability, issue creation script, per-product table.
+
 Parity harness (epic [#278](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/278)):
 
 | File | Role |
