@@ -3,10 +3,10 @@ import { apiErrorI18nMessage, apiErrorI18nMessageAsync } from '../utils/apiError
 import { PageSection, PageSectionVariants, Title, Card, CardBody, Button, Alert, Stack, StackItem } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import { importApi, downloadApi, applyApi } from '../api/client';
-import { fixHttpRoutePort } from '../utils/fixHttpRoutePort';
 import styles from '../components/import/import.module.css';
 import type { YamlFile, EditMap, ApplyResult, TestInfo } from '../components/import/importUtils';
-import { parseTestInfo, detectExternalBackend, normalizeApiVersions, deriveEdits } from '../components/import/importUtils';
+import { parseTestInfo, detectExternalBackend, deriveEdits } from '../components/import/importUtils';
+import { buildApplyPayload } from '../utils/clusterApply';
 import TestInfoPanel from '../components/import/TestInfoPanel';
 import YamlDropzone from '../components/import/YamlDropzone';
 import YamlDiffViewer from '../components/import/YamlDiffViewer';
@@ -63,22 +63,20 @@ const ImportPage: React.FC = () => {
   };
 
   const applyNamespace = () => {
-    const isExternal = detectExternalBackend(edits);
-    const updated: EditMap = {};
-    let portConverted = false;
-    files.forEach(f => {
-      let yaml = normalizeApiVersions(edits[f.name] ?? f.content)
-        .replace(/^(\s*namespace:\s*).+$/gm, `$1${namespace}`);
-      if (isExternal && f.name === 'httproute.yaml') {
-        const fixed = fixHttpRoutePort(yaml);
-        if (fixed !== yaml) { portConverted = true; yaml = fixed; }
-      }
-      updated[f.name] = yaml;
-    });
+    const raw: EditMap = {};
+    files.forEach(f => { raw[f.name] = edits[f.name] ?? f.content; });
+    const beforeRoute = raw['httproute.yaml'];
+    const updated = buildApplyPayload(raw, namespace);
     setEdits(updated);
-    if (portConverted) setPortFixNotice('portFixed443');
-    else if (isExternal) setPortFixNotice('portAlready443');
-    else setPortFixNotice(null);
+    if (detectExternalBackend(raw)) {
+      if (beforeRoute && updated['httproute.yaml'] !== beforeRoute) {
+        setPortFixNotice('portFixed443');
+      } else {
+        setPortFixNotice('portAlready443');
+      }
+    } else {
+      setPortFixNotice(null);
+    }
   };
 
   const handlePackageNameChange = (newPkg: string) => {
@@ -105,8 +103,9 @@ const ImportPage: React.FC = () => {
   const handleApply = async () => {
     if (!packageName.trim()) { setPkgNameError(true); return; }
     setApplying(true); setApplyResults(null); setError(null); setTestInfo(null);
-    const yamlFiles: Record<string, string> = {};
-    files.forEach(f => { yamlFiles[f.name] = edits[f.name] ?? f.content; });
+    const raw: Record<string, string> = {};
+    files.forEach(f => { raw[f.name] = edits[f.name] ?? f.content; });
+    const yamlFiles = buildApplyPayload(raw, namespace);
     try {
       const res = await applyApi.apply(namespace, yamlFiles, 'IMPORT', packageName || undefined);
       const results: ApplyResult[] = res.data?.results ?? [];

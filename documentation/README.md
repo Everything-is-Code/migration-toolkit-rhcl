@@ -12,7 +12,7 @@ User and operator guides for **Migration Toolkit for Red Hat Connectivity Link**
 
 **Also see**
 
-- [CONTRIBUTING.md](../CONTRIBUTING.md) — local dev, tests, PR conventions
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — local dev (`oc login` before backend start), tests, PR conventions
 - [AGENTS.md](../AGENTS.md) — agent map, SDD workflow
 - [SECURITY.md](../SECURITY.md) — vulnerability reporting
 - [docs/technical-specifications.md](../docs/technical-specifications.md) — pointer to SDD technical audit

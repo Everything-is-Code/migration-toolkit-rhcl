@@ -18,7 +18,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('../utils/fixHttpRoutePort', () => ({
-  fixHttpRoutePort: (yaml: string) => yaml,
+  fixHttpRoutePort: (yaml: string) => yaml.replace('port: 80', 'port: 443'),
 }));
 
 vi.mock('../components/import/TestInfoPanel', () => ({
@@ -43,15 +43,19 @@ vi.mock('../components/import/NamespaceFormCard', () => ({
   default: ({
     onApply,
     onDownload,
+    onApplyNamespace,
     packageName,
     onPackageNameChange,
     pkgNameError,
+    portFixNotice,
   }: {
     onApply: () => void;
     onDownload: () => void;
+    onApplyNamespace: () => void;
     packageName: string;
     onPackageNameChange: (value: string) => void;
     pkgNameError: boolean;
+    portFixNotice: string | null;
   }) => (
     <div>
       <input
@@ -60,6 +64,8 @@ vi.mock('../components/import/NamespaceFormCard', () => ({
         onChange={(e) => onPackageNameChange(e.target.value)}
       />
       {pkgNameError && <span data-testid="pkg-name-error">required</span>}
+      {portFixNotice && <span data-testid="port-fix-notice">{portFixNotice}</span>}
+      <button data-testid="apply-ns-btn" onClick={onApplyNamespace}>Apply NS</button>
       <button data-testid="apply-btn" onClick={onApply}>Apply</button>
       <button data-testid="download-btn" onClick={onDownload}>Download</button>
     </div>
@@ -183,5 +189,46 @@ describe('ImportPage orchestration', () => {
 
     expect(mockDownloadZip).not.toHaveBeenCalled();
     expect(screen.getByTestId('pkg-name-error')).toBeTruthy();
+  });
+
+  it('runs applyNamespace and sets port fix notice for external backend', async () => {
+    mockUploadZip.mockResolvedValue({
+      data: {
+        files: {
+          'serviceentry.yaml': 'kind: ServiceEntry',
+          'httproute.yaml': 'port: 80\n',
+        },
+      },
+    });
+
+    render(<ImportPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('dropzone'));
+    });
+    expect(screen.getByTestId('port-fix-notice')).toHaveTextContent('portFixExternal');
+
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('apply-ns-btn'));
+    });
+    expect(screen.getByTestId('port-fix-notice')).toHaveTextContent('portFixed443');
+  });
+
+  it('shows partial apply results when apply API error includes results payload', async () => {
+    mockUploadZip.mockResolvedValue({
+      data: { files: { 'gateway.yaml': 'kind: Gateway' } },
+    });
+    mockApply.mockRejectedValue({
+      response: { data: { results: [{ resource: 'gateway.yaml', success: false }] } },
+    });
+
+    render(<ImportPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('dropzone'));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('apply-btn'));
+    });
+
+    expect(screen.getByTestId('result-table')).toBeTruthy();
   });
 });

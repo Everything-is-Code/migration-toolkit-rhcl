@@ -165,6 +165,12 @@ export interface ValidationResult {
   items: ValidationItem[];
 }
 
+/** Validation run keyed to conversionResultsFingerprint at validate time. */
+export interface ValidationSnapshot {
+  fingerprint: string;
+  results: Record<string, ValidationResult>;
+}
+
 export interface FailureDetail {
   fileName: string;
   kind: string;
