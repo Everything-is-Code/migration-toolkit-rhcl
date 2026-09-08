@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { ApiService, ConversionResultItem } from '../../api/types';
 import {
   buildEditsFromResults,
+  clearValidationSnapshotIfStale,
   conversionResultsFingerprint,
+  hashYamlFiles,
   nextStateAfterServiceSelect,
   resultsMatchSelection,
   shouldClearConversionResults,
@@ -70,8 +72,15 @@ describe('conversionResultsFingerprint', () => {
   });
 
   it('changes when historyId changes', () => {
-    const before = conversionResultsFingerprint([result('svc1', { historyId: 1 })]);
-    const after = conversionResultsFingerprint([result('svc1', { historyId: 2 })]);
+    const yaml = { 'gateway.yaml': `name: svc1-gateway` };
+    const before = conversionResultsFingerprint([result('svc1', { historyId: 1, yamlFiles: yaml })]);
+    const after = conversionResultsFingerprint([result('svc1', { historyId: 2, yamlFiles: yaml })]);
+    expect(before).not.toBe(after);
+  });
+
+  it('changes when yaml content changes', () => {
+    const before = conversionResultsFingerprint([result('svc1', { yamlFiles: { 'gateway.yaml': 'v1' } })]);
+    const after = conversionResultsFingerprint([result('svc1', { yamlFiles: { 'gateway.yaml': 'v2' } })]);
     expect(before).not.toBe(after);
   });
 
@@ -79,7 +88,9 @@ describe('conversionResultsFingerprint', () => {
     const r = result('svc1', { packageName: 'fallback-pkg' });
     // Simulate missing historyId for fingerprint fallback (API may omit on failure paths).
     const withoutHistory = { ...r, historyId: undefined as unknown as number };
-    expect(conversionResultsFingerprint([withoutHistory])).toBe('svc1:fallback-pkg');
+    expect(conversionResultsFingerprint([withoutHistory])).toBe(
+      `svc1:fallback-pkg:${hashYamlFiles(withoutHistory.yamlFiles)}`,
+    );
   });
 });
 
@@ -115,6 +126,24 @@ describe('resultsMatchSelection', () => {
 
   it('matches when results are empty', () => {
     expect(resultsMatchSelection([], [svc('a')])).toBe(true);
+  });
+});
+
+describe('clearValidationSnapshotIfStale', () => {
+  it('keeps snapshot when fingerprint matches', () => {
+    const results = [result('svc1', { historyId: 1 })];
+    const snapshot = { fingerprint: conversionResultsFingerprint(results), results: {} };
+    expect(clearValidationSnapshotIfStale(snapshot, conversionResultsFingerprint(results))).toBe(snapshot);
+  });
+
+  it('clears snapshot when fingerprint mismatches', () => {
+    const results = [result('svc1', { historyId: 1 })];
+    const snapshot = { fingerprint: conversionResultsFingerprint(results), results: {} };
+    expect(clearValidationSnapshotIfStale(snapshot, conversionResultsFingerprint([result('svc1', { historyId: 2 })]))).toBeNull();
+  });
+
+  it('returns null when snapshot is null', () => {
+    expect(clearValidationSnapshotIfStale(null, conversionResultsFingerprint([result('svc1')]))).toBeNull();
   });
 });
 

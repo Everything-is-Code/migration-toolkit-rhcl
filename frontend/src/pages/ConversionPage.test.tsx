@@ -26,6 +26,7 @@ vi.mock('../components/AppStateContext', () => {
     namespace: 'test-ns',
     clusterVersions: null,
     clusterProfile: 'auto' as const,
+    validationSnapshot: null,
   };
   return {
     useAppState: () => ({ appState: state, setAppState: vi.fn() }),

@@ -82,6 +82,10 @@ Input: Admin Portal URL, Personal Access Token, tenant (optional), target namesp
 
 Backend 3scale calls include `GET /admin/api/services.json`, backends, proxy configs, policies.
 
+The same **Connection** page also loads OpenShift cluster versions (OCP, Gateway API, Kuadrant/OSSM) for compatibility gating and Apply. In **local development**, the backend reads your workstation kubeconfig — run `oc login` **before** `mvn quarkus:dev`, and **restart the backend** if you log in or change context afterward. If the cluster is unreachable, the UI shows **OpenShift cluster not reachable**; use **Refresh versions** after fixing login. See [CONTRIBUTING.md — Backend](../CONTRIBUTING.md#backend) and [Deployment — Local development (cluster access)](deployment.md#local-development-cluster-access).
+
+When running **in-cluster** (Helm / S2I), the pod ServiceAccount provides API access; no local `oc login` is required on the workstation except for `oc`/`helm` install itself.
+
 ### 2. API list
 
 Service basics, backend private endpoint, mapping rules, metrics, policies, auth type (API Key / OIDC / JWT, …).
@@ -119,11 +123,19 @@ Replace `REPLACE_ME` in `secret.yaml` before apply.
 
 **External backends:** URL scheme from 3scale (`http://` → port 80, no TLS; `https://` → 443 + TLS) drives `DestinationRule` / `ServiceEntry` consistency.
 
-### 5–7. Preview, validation, ZIP download
+### 5–7. Preview, validation, download, and direct apply
 
 In-browser YAML editor; syntax/CRD/namespace/reference/secret checks; ZIP download (e.g. `customer-api.zip`).
 
-### 8. ZIP import / apply
+On the **Download** page you can also **Apply to cluster** when:
+
+- The backend can reach OpenShift (`clusterReachable` on Connection)
+- Validation has been run without **ERROR** items for the current conversion
+- No `REPLACE_ME` placeholders remain in secrets (update via YAML Viewer first)
+
+Apply uses namespace from Connection setup, records history with `source: CONVERT`, and shows per-file results inline. See [#313](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/313).
+
+### 8. ZIP import / apply (alternate path)
 
 Upload ZIP, edit YAML, bulk namespace replace, cluster apply via backend. Auto RBAC (`migration-tool-istio-manager`), apiVersion normalization, history export. Curl test command with custom path.
 

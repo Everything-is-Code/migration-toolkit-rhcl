@@ -1,4 +1,4 @@
-import type { ApiService, ConversionResultItem } from '../../api/types';
+import type { ApiService, ConversionResultItem, ValidationSnapshot } from '../../api/types';
 
 /** True when confirming a different service than the current selection (id change). */
 export function shouldClearConversionResults(prevIds: string[], nextId: string): boolean {
@@ -27,11 +27,30 @@ export function nextStateAfterServiceSelect(
 
 /**
  * Stable fingerprint for conversion results — ignores array identity.
- * Format: serviceId:historyId|packageName joined by `|`.
+ * Format: serviceId:historyId:yamlHash joined by `|`.
+ * yamlHash changes when YAML content is edited so validation snapshots invalidate (#313).
  */
+export function hashYamlFiles(yamlFiles: Record<string, string> | undefined): string {
+  if (!yamlFiles || Object.keys(yamlFiles).length === 0) {
+    return '0';
+  }
+  const serialized = Object.entries(yamlFiles)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, content]) => `${name}\0${content}`)
+    .join('\0');
+  let hash = 5381;
+  for (let i = 0; i < serialized.length; i++) {
+    hash = ((hash << 5) + hash) ^ serialized.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function conversionResultsFingerprint(results: ConversionResultItem[]): string {
   return results
-    .map(r => `${r.serviceId}:${r.historyId ?? r.packageName ?? ''}`)
+    .map(r => {
+      const id = `${r.serviceId}:${r.historyId ?? r.packageName ?? ''}`;
+      return `${id}:${hashYamlFiles(r.yamlFiles)}`;
+    })
     .join('|');
 }
 
@@ -52,6 +71,20 @@ export function buildEditsFromResults(
  * True when there are no stale results for the current selection.
  * Empty results always match. Otherwise selectedServices[0].id must appear in results.
  */
+/** Drop validation snapshot when conversion fingerprint no longer matches (#313). */
+export function clearValidationSnapshotIfStale(
+  snapshot: ValidationSnapshot | null,
+  fingerprint: string,
+): ValidationSnapshot | null {
+  if (!snapshot) {
+    return null;
+  }
+  if (snapshot.fingerprint !== fingerprint) {
+    return null;
+  }
+  return snapshot;
+}
+
 export function resultsMatchSelection(
   results: ConversionResultItem[],
   selected: ApiService[],

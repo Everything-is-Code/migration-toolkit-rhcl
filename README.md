@@ -43,8 +43,12 @@ Full options (local chart, GitOps, OpenShift S2I): **[documentation/deployment.m
 | Maven | 3.9+ |
 | Node.js | 22 |
 | PostgreSQL | localhost:5432 |
+| `oc` CLI | Matching OCP (local dev cluster access) |
+
+Run `oc login` **before** `mvn quarkus:dev`; restart the backend after login or context changes. Details: [CONTRIBUTING.md](CONTRIBUTING.md#backend).
 
 ```bash
+oc login <api-url> --token=<token>
 cd backend && mvn quarkus:dev
 
 cd frontend
