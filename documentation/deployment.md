@@ -2,6 +2,21 @@
 
 Install paths and maintainer operations. For local development, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+## Local development (cluster access)
+
+When you run the backend on your workstation (`mvn quarkus:dev`), it uses the Quarkus Kubernetes client with your local kubeconfig (`~/.kube/config`, or `KUBECONFIG`). Cluster features — Connection version detect, Compatibility gating, Gateway info, namespace setup, and **Apply to cluster** — require a working OpenShift session **before** dev mode starts.
+
+```bash
+oc login <api-url> --token=<token>   # or your usual login flow
+oc whoami
+
+cd backend && mvn quarkus:dev
+```
+
+If you run `oc login`, switch context, or refresh tokens **while the backend is already running**, restart `mvn quarkus:dev`. Otherwise the UI shows **OpenShift cluster not reachable**, `/api/cluster/versions` soft-fails to defaults, and Apply stays disabled until you refresh versions on Connection after a restart.
+
+Lab clusters with self-signed API certificates may need `quarkus.kubernetes-client.trust-certs=true` in `backend/src/main/resources/application.properties`. Full local setup: [CONTRIBUTING.md — Backend](../CONTRIBUTING.md#backend).
+
 ## Prerequisites (cluster)
 
 | Component | Version | Notes |

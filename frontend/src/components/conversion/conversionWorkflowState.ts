@@ -1,4 +1,4 @@
-import type { ApiService, ConversionResultItem } from '../../api/types';
+import type { ApiService, ConversionResultItem, ValidationSnapshot } from '../../api/types';
 
 /** True when confirming a different service than the current selection (id change). */
 export function shouldClearConversionResults(prevIds: string[], nextId: string): boolean {
@@ -52,6 +52,20 @@ export function buildEditsFromResults(
  * True when there are no stale results for the current selection.
  * Empty results always match. Otherwise selectedServices[0].id must appear in results.
  */
+/** Drop validation snapshot when conversion fingerprint no longer matches (#313). */
+export function clearValidationSnapshotIfStale(
+  snapshot: ValidationSnapshot | null,
+  fingerprint: string,
+): ValidationSnapshot | null {
+  if (!snapshot) {
+    return null;
+  }
+  if (snapshot.fingerprint !== fingerprint) {
+    return null;
+  }
+  return snapshot;
+}
+
 export function resultsMatchSelection(
   results: ConversionResultItem[],
   selected: ApiService[],

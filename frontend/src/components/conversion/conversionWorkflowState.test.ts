@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ApiService, ConversionResultItem } from '../../api/types';
 import {
   buildEditsFromResults,
+  clearValidationSnapshotIfStale,
   conversionResultsFingerprint,
   nextStateAfterServiceSelect,
   resultsMatchSelection,
@@ -115,6 +116,22 @@ describe('resultsMatchSelection', () => {
 
   it('matches when results are empty', () => {
     expect(resultsMatchSelection([], [svc('a')])).toBe(true);
+  });
+});
+
+describe('clearValidationSnapshotIfStale', () => {
+  it('keeps snapshot when fingerprint matches', () => {
+    const snapshot = { fingerprint: 'svc1:1', results: {} };
+    expect(clearValidationSnapshotIfStale(snapshot, 'svc1:1')).toBe(snapshot);
+  });
+
+  it('clears snapshot when fingerprint mismatches', () => {
+    const snapshot = { fingerprint: 'svc1:1', results: {} };
+    expect(clearValidationSnapshotIfStale(snapshot, 'svc1:2')).toBeNull();
+  });
+
+  it('returns null when snapshot is null', () => {
+    expect(clearValidationSnapshotIfStale(null, 'svc1:1')).toBeNull();
   });
 });
 

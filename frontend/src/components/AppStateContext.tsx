@@ -5,6 +5,7 @@ import {
   ConversionResultItem,
   ClusterVersionsResponse,
   ClusterProfile,
+  ValidationSnapshot,
 } from '../api/types';
 import { loadPersistedConnection, savePersistedConnection } from '../utils/appStateStorage';
 
@@ -17,6 +18,8 @@ export interface AppState {
   clusterVersions: ClusterVersionsResponse | null;
   /** Selected profile override (auto | ocp-4.19 | ocp-4.21). */
   clusterProfile: ClusterProfile;
+  /** Last validation run for the current conversion fingerprint (#313). */
+  validationSnapshot: ValidationSnapshot | null;
 }
 
 // TODO(#172): consider narrower setters (e.g. setConnection, setConversionResults) to
@@ -47,6 +50,7 @@ export const AppStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       namespace: persisted?.namespace || 'default',
       clusterVersions: null,
       clusterProfile: persisted?.clusterProfile || 'auto',
+      validationSnapshot: null,
     };
   });
 

@@ -15,18 +15,25 @@ Code owners: see [`.github/CODEOWNERS`](.github/CODEOWNERS) (`@pcastelo`, `@fmen
 | Node.js | **26** | Frontend (matches `frontend/Dockerfile.ci`) |
 | npm | 9+ | Frontend deps |
 | Docker / Podman | Latest | Optional local image builds |
-| `oc` CLI | Matching OCP | Cluster deploy via `deploy/install.sh` |
+| `oc` CLI | Matching OCP | Local dev cluster access; cluster deploy via `deploy/install.sh` |
 
 Backend Quarkus platform version is **`3.27.5.1`** (`quarkus.platform.version` in `backend/pom.xml`).
 
 ### Backend
 
+The backend uses the Quarkus Kubernetes client with your local kubeconfig (`~/.kube/config`, or `KUBECONFIG`). **Log in to the target OpenShift cluster before starting dev mode**, and **restart the backend** if you run `oc login` (or switch context) while it is already running — otherwise Connection shows “cluster not reachable”, cluster version detect soft-fails, and Apply is disabled.
+
 ```bash
+oc login <api-url> --token=<token>   # or your usual login flow
+oc whoami                            # sanity check
+
 cd backend
 mvn quarkus:dev
 ```
 
 PostgreSQL must be reachable on `localhost:5432` (see `backend/src/main/resources/application.properties`).
+
+Lab clusters with self-signed API certificates may also need `quarkus.kubernetes-client.trust-certs=true` in `backend/src/main/resources/application.properties` (or an equivalent env override).
 
 ### Frontend
 

@@ -20,6 +20,8 @@ import { validationApi } from '../api/client';
 import { ValidationResult } from '../api/types';
 import { useAppState } from '../components/AppStateContext';
 import { useClearStaleConversionResults } from '../components/conversion/useClearStaleConversionResults';
+import { useClearStaleValidationSnapshot } from '../components/conversion/useClearStaleValidationSnapshot';
+import { conversionResultsFingerprint } from '../components/conversion/conversionWorkflowState';
 import { useNavigate } from 'react-router-dom';
 import { PF_DANGER, PF_SUCCESS, PF_WARNING } from '../styles/pfTokens';
 import styles from '../styles/shared.module.css';
@@ -34,8 +36,9 @@ const StatusIcon: React.FC<{ status: string }> = ({ status }) => {
 };
 
 const ValidationPage: React.FC = () => {
-  const { appState } = useAppState();
+  const { appState, setAppState } = useAppState();
   useClearStaleConversionResults();
+  useClearStaleValidationSnapshot();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -46,23 +49,31 @@ const ValidationPage: React.FC = () => {
     setLoading(true);
     setError(null);
     const all: { service: string; result: ValidationResult }[] = [];
+    const snapshotResults: Record<string, ValidationResult> = {};
 
     for (const convResult of appState.conversionResults) {
       if (!convResult.yamlFiles) continue;
       try {
         const resp = await validationApi.validate(convResult.yamlFiles);
         all.push({ service: convResult.serviceName, result: resp.data });
+        snapshotResults[convResult.serviceId] = resp.data;
       } catch (e: unknown) {
-        all.push({
-          service: convResult.serviceName,
-          result: {
-            valid: false,
-            items: [{ check: 'API Error', status: 'ERROR', message: apiErrorI18nMessage(e, t, t('validation.errorFallback')) }],
-          },
-        });
+        const failed: ValidationResult = {
+          valid: false,
+          items: [{ check: 'API Error', status: 'ERROR', message: apiErrorI18nMessage(e, t, t('validation.errorFallback')) }],
+        };
+        all.push({ service: convResult.serviceName, result: failed });
+        snapshotResults[convResult.serviceId] = failed;
       }
     }
     setResults(all);
+    setAppState(prev => ({
+      ...prev,
+      validationSnapshot: {
+        fingerprint: conversionResultsFingerprint(prev.conversionResults),
+        results: snapshotResults,
+      },
+    }));
     setLoading(false);
   };
 
