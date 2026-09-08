@@ -150,4 +150,87 @@ describe('DownloadPage apply flow', () => {
     render(<DownloadPage />);
     expect(screen.getByTestId('download.step1')).toBeTruthy();
   });
+
+  it('disables apply when validation snapshot has ERROR for service', () => {
+    mockAppState.validationSnapshot = {
+      fingerprint: 'svc1:10',
+      results: {
+        svc1: { valid: false, items: [{ check: 'schema', status: 'ERROR', message: 'invalid' }] },
+      },
+    };
+    render(<DownloadPage />);
+    expect(screen.getByRole('button', { name: 'download.btnApplyCluster' })).toBeDisabled();
+  });
+
+  it('shows warning when conversion results have no yaml files', () => {
+    mockAppState.conversionResults = [{
+      ...result({ 'gateway.yaml': 'kind: Gateway\n' }),
+      yamlFiles: undefined,
+    }];
+    render(<DownloadPage />);
+    expect(screen.getByText('download.warningTitle')).toBeTruthy();
+  });
+
+  it('shows apply error when apply API fails without partial results', async () => {
+    mockApply.mockRejectedValue(new Error('cluster unreachable'));
+    render(<DownloadPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.btnApplyCluster' }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.applyConfirmAction' }));
+    });
+    expect(screen.getByText('download.errorApply')).toBeTruthy();
+  });
+
+  it('shows partial apply results when API error includes results payload', async () => {
+    mockApply.mockRejectedValue({
+      response: { data: { results: [{ fileName: 'gateway.yaml', success: false, message: 'denied' }] } },
+    });
+    render(<DownloadPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.btnApplyCluster' }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.applyConfirmAction' }));
+    });
+    expect(screen.getByTestId('result-table')).toBeTruthy();
+  });
+
+  it('does not call apply when confirm modal is cancelled', async () => {
+    render(<DownloadPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.btnApplyCluster' }));
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.applyConfirmCancel' }));
+    });
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('downloads zip for a conversion result', async () => {
+    const blob = new Blob(['zip'], { type: 'application/zip' });
+    mockDownloadZip.mockResolvedValue({ data: blob });
+    const mockCreateObjectURL = vi.fn().mockReturnValue('blob:mock');
+    const mockRevokeObjectURL = vi.fn();
+    globalThis.URL.createObjectURL = mockCreateObjectURL;
+    globalThis.URL.revokeObjectURL = mockRevokeObjectURL;
+
+    render(<DownloadPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.btnDownloadZip' }));
+    });
+
+    expect(mockDownloadZip).toHaveBeenCalledWith('my-api', expect.objectContaining({ 'gateway.yaml': expect.any(String) }));
+    expect(mockCreateObjectURL).toHaveBeenCalled();
+  });
+
+  it('shows download error when zip download fails', async () => {
+    mockDownloadZip.mockRejectedValue(new Error('download failed'));
+    render(<DownloadPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.btnDownloadZip' }));
+    });
+    expect(screen.getByText('download.errorDownload')).toBeTruthy();
+  });
 });

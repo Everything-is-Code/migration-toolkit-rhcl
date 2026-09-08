@@ -69,9 +69,34 @@ describe('getApplyGuardrails', () => {
     expect(g).toEqual({ enabled: false, reasonKey: 'download.applyDisabledCluster' });
   });
 
+  it('disables when yamlFiles is empty', () => {
+    const g = getApplyGuardrails({ ...baseResult(), yamlFiles: {} }, baseState());
+    expect(g.reasonKey).toBe('download.applyDisabledNoYaml');
+  });
+
   it('disables when validation snapshot is missing', () => {
     const g = getApplyGuardrails(baseResult(), baseState({ validationSnapshot: null }));
     expect(g.reasonKey).toBe('download.applyDisabledValidationMissing');
+  });
+
+  it('disables when validation snapshot fingerprint is stale', () => {
+    const g = getApplyGuardrails(baseResult(), baseState({
+      validationSnapshot: {
+        fingerprint: 'stale-fingerprint',
+        results: { svc1: { valid: true, items: [{ check: 'ok', status: 'OK', message: 'ok' }] } },
+      },
+    }));
+    expect(g.reasonKey).toBe('download.applyDisabledValidationMissing');
+  });
+
+  it('disables when service validation is missing from snapshot', () => {
+    const g = getApplyGuardrails(baseResult(), baseState({
+      validationSnapshot: {
+        fingerprint: 'svc1:1',
+        results: {},
+      },
+    }));
+    expect(g.reasonKey).toBe('download.applyDisabledValidationError');
   });
 
   it('disables when validation has ERROR', () => {
