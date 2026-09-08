@@ -3,6 +3,7 @@ import { render, screen, act, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import type { ConversionResultItem, ClusterVersionsResponse } from '../api/types';
+import { conversionResultsFingerprint } from '../components/conversion/conversionWorkflowState';
 
 const mockApply = vi.fn();
 const mockDownloadZip = vi.fn();
@@ -95,13 +96,13 @@ describe('DownloadPage apply flow', () => {
         retriesSupported: false,
       },
     };
+    mockAppState.conversionResults = [result({ 'gateway.yaml': 'kind: Gateway\n' })];
     mockAppState.validationSnapshot = {
-      fingerprint: 'svc1:10',
+      fingerprint: conversionResultsFingerprint(mockAppState.conversionResults),
       results: {
         svc1: { valid: true, items: [{ check: 'ok', status: 'OK', message: 'ok' }] },
       },
     };
-    mockAppState.conversionResults = [result({ 'gateway.yaml': 'kind: Gateway\n' })];
   });
 
   afterEach(() => cleanup());
@@ -146,6 +147,40 @@ describe('DownloadPage apply flow', () => {
     expect(screen.getByTestId('result-table')).toBeTruthy();
   });
 
+  it('uses namespace override from confirm modal in apply call and payload', async () => {
+    const yaml = { 'gateway.yaml': 'kind: Gateway\nmetadata:\n  namespace: old\n' };
+    mockAppState.conversionResults = [result(yaml)];
+    mockAppState.validationSnapshot = {
+      fingerprint: conversionResultsFingerprint(mockAppState.conversionResults),
+      results: {
+        svc1: { valid: true, items: [{ check: 'ok', status: 'OK', message: 'ok' }] },
+      },
+    };
+    mockApply.mockResolvedValue({
+      data: { results: [{ fileName: 'gateway.yaml', success: true, message: 'ok' }] },
+    });
+    render(<DownloadPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.btnApplyCluster' }));
+    });
+    await act(async () => {
+      const input = screen.getByDisplayValue('test-ns');
+      await userEvent.clear(input);
+      await userEvent.type(input, 'prod-ns');
+    });
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.applyConfirmAction' }));
+    });
+    expect(mockApply).toHaveBeenCalledWith(
+      'prod-ns',
+      expect.objectContaining({
+        'gateway.yaml': expect.stringContaining('namespace: prod-ns'),
+      }),
+      'CONVERT',
+      'my-api',
+    );
+  });
+
   it('shows next steps with direct apply mention', () => {
     render(<DownloadPage />);
     expect(screen.getByTestId('download.step1')).toBeTruthy();
@@ -153,7 +188,7 @@ describe('DownloadPage apply flow', () => {
 
   it('disables apply when validation snapshot has ERROR for service', () => {
     mockAppState.validationSnapshot = {
-      fingerprint: 'svc1:10',
+      fingerprint: conversionResultsFingerprint(mockAppState.conversionResults),
       results: {
         svc1: { valid: false, items: [{ check: 'schema', status: 'ERROR', message: 'invalid' }] },
       },
@@ -165,10 +200,37 @@ describe('DownloadPage apply flow', () => {
   it('shows warning when conversion results have no yaml files', () => {
     mockAppState.conversionResults = [{
       ...result({ 'gateway.yaml': 'kind: Gateway\n' }),
-      yamlFiles: undefined,
+      yamlFiles: {},
     }];
     render(<DownloadPage />);
     expect(screen.getByText('download.warningTitle')).toBeTruthy();
+  });
+
+  it('disables apply when YAML was edited after validation', () => {
+    const validatedYaml = { 'gateway.yaml': 'kind: Gateway\n' };
+    const editedYaml = { 'gateway.yaml': 'kind: Gateway\nbroken: true\n' };
+    mockAppState.conversionResults = [result(editedYaml)];
+    mockAppState.validationSnapshot = {
+      fingerprint: conversionResultsFingerprint([result(validatedYaml)]),
+      results: {
+        svc1: { valid: true, items: [{ check: 'ok', status: 'OK', message: 'ok' }] },
+      },
+    };
+    render(<DownloadPage />);
+    expect(screen.getByRole('button', { name: 'download.btnApplyCluster' })).toBeDisabled();
+  });
+
+  it('aborts apply when guardrails fail at confirm time', async () => {
+    render(<DownloadPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.btnApplyCluster' }));
+    });
+    mockAppState.validationSnapshot = null;
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'download.applyConfirmAction' }));
+    });
+    expect(mockApply).not.toHaveBeenCalled();
+    expect(screen.getByText('download.applyDisabledValidationMissing')).toBeTruthy();
   });
 
   it('shows apply error when apply API fails without partial results', async () => {

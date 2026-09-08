@@ -27,11 +27,30 @@ export function nextStateAfterServiceSelect(
 
 /**
  * Stable fingerprint for conversion results — ignores array identity.
- * Format: serviceId:historyId|packageName joined by `|`.
+ * Format: serviceId:historyId:yamlHash joined by `|`.
+ * yamlHash changes when YAML content is edited so validation snapshots invalidate (#313).
  */
+export function hashYamlFiles(yamlFiles: Record<string, string> | undefined): string {
+  if (!yamlFiles || Object.keys(yamlFiles).length === 0) {
+    return '0';
+  }
+  const serialized = Object.entries(yamlFiles)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, content]) => `${name}\0${content}`)
+    .join('\0');
+  let hash = 5381;
+  for (let i = 0; i < serialized.length; i++) {
+    hash = ((hash << 5) + hash) ^ serialized.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export function conversionResultsFingerprint(results: ConversionResultItem[]): string {
   return results
-    .map(r => `${r.serviceId}:${r.historyId ?? r.packageName ?? ''}`)
+    .map(r => {
+      const id = `${r.serviceId}:${r.historyId ?? r.packageName ?? ''}`;
+      return `${id}:${hashYamlFiles(r.yamlFiles)}`;
+    })
     .join('|');
 }
 

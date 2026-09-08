@@ -3,6 +3,7 @@ import { render, screen, act, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import type { ConversionResultItem } from '../api/types';
+import { conversionResultsFingerprint } from '../components/conversion/conversionWorkflowState';
 
 const mockValidate = vi.fn();
 const mockSetAppState = vi.fn();
@@ -79,7 +80,7 @@ describe('ValidationPage snapshot persistence', () => {
     expect(typeof updater).toBe('function');
     const next = updater!(mockAppState);
     expect(next.validationSnapshot).toEqual({
-      fingerprint: 'svc1:10',
+      fingerprint: conversionResultsFingerprint([conversionResult()]),
       results: {
         svc1: { valid: true, items: [{ check: 'yaml', status: 'OK', message: 'ok' }] },
       },

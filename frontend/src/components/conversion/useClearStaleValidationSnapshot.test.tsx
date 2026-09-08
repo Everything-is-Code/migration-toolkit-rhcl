@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ConversionResultItem, ValidationSnapshot } from '../../api/types';
 import { AppStateProvider, useAppState } from '../AppStateContext';
+import { conversionResultsFingerprint } from './conversionWorkflowState';
 import { useClearStaleValidationSnapshot } from './useClearStaleValidationSnapshot';
 
 vi.mock('../../utils/appStateStorage', () => ({
@@ -66,7 +67,7 @@ function createWrapper(
 describe('useClearStaleValidationSnapshot', () => {
   it('clears validation snapshot when conversion fingerprint changes', async () => {
     const staleSnapshot: ValidationSnapshot = {
-      fingerprint: 'svc1:99',
+      fingerprint: 'stale-fingerprint',
       results: { svc1: { valid: true, items: [{ check: 'ok', status: 'OK', message: 'ok' }] } },
     };
 
@@ -85,7 +86,7 @@ describe('useClearStaleValidationSnapshot', () => {
 
   it('keeps validation snapshot when fingerprint matches', async () => {
     const snapshot: ValidationSnapshot = {
-      fingerprint: 'svc1:10',
+      fingerprint: conversionResultsFingerprint([conversionResult()]),
       results: { svc1: { valid: true, items: [{ check: 'ok', status: 'OK', message: 'ok' }] } },
     };
 

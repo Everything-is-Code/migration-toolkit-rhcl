@@ -44,6 +44,8 @@ const DownloadPage: React.FC = () => {
   const [applying, setApplying] = useState<Record<string, boolean>>({});
   const [applyResults, setApplyResults] = useState<Record<string, ApplyResult[]>>({});
   const [confirmTarget, setConfirmTarget] = useState<ConversionResultItem | null>(null);
+  const [applyConfirmNamespace, setApplyConfirmNamespace] = useState('');
+  const [appliedNamespaces, setAppliedNamespaces] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const results = appState.conversionResults.filter(r => r.yamlFiles && Object.keys(r.yamlFiles).length > 0);
@@ -79,14 +81,26 @@ const DownloadPage: React.FC = () => {
     if (!confirmTarget?.yamlFiles) {
       return;
     }
+    const guardrails = getApplyGuardrails(confirmTarget, appState);
+    if (!guardrails.enabled) {
+      setError(t(guardrails.reasonKey!));
+      setConfirmTarget(null);
+      setApplyConfirmNamespace('');
+      return;
+    }
+    const namespace = applyConfirmNamespace.trim();
+    if (!namespace) {
+      return;
+    }
     const { serviceId, packageName, yamlFiles } = confirmTarget;
     setApplying(prev => ({ ...prev, [serviceId]: true }));
     setError(null);
     try {
-      const payload = buildApplyPayload(yamlFiles, appState.namespace);
-      const res = await applyApi.apply(appState.namespace, payload, 'CONVERT', packageName || undefined);
+      const payload = buildApplyPayload(yamlFiles, namespace);
+      const res = await applyApi.apply(namespace, payload, 'CONVERT', packageName || undefined);
       const applyRes: ApplyResult[] = res.data?.results ?? [];
       setApplyResults(prev => ({ ...prev, [serviceId]: applyRes }));
+      setAppliedNamespaces(prev => ({ ...prev, [serviceId]: namespace }));
     } catch (e: unknown) {
       const data = (e && typeof e === 'object' && 'response' in e)
         ? (e as { response?: { data?: { results?: ApplyResult[] } } }).response?.data
@@ -100,7 +114,13 @@ const DownloadPage: React.FC = () => {
     } finally {
       setApplying(prev => ({ ...prev, [serviceId]: false }));
       setConfirmTarget(null);
+      setApplyConfirmNamespace('');
     }
+  };
+
+  const openApplyConfirm = (result: ConversionResultItem) => {
+    setConfirmTarget(result);
+    setApplyConfirmNamespace(appState.namespace);
   };
 
   const renderApplyButton = (result: ConversionResultItem) => {
@@ -109,7 +129,7 @@ const DownloadPage: React.FC = () => {
     const button = (
       <Button
         variant="secondary"
-        onClick={() => setConfirmTarget(result)}
+        onClick={() => openApplyConfirm(result)}
         isDisabled={!guardrails.enabled || isApplying}
         icon={<PlayIcon />}
       >
@@ -229,7 +249,7 @@ const DownloadPage: React.FC = () => {
           {Object.entries(applyResults).map(([serviceId, rows]) => (
             rows.length > 0 ? (
               <StackItem key={serviceId}>
-                <ImportResultTable results={rows} namespace={appState.namespace} />
+                <ImportResultTable results={rows} namespace={appliedNamespaces[serviceId] ?? appState.namespace} />
               </StackItem>
             ) : null
           ))}
@@ -257,11 +277,15 @@ const DownloadPage: React.FC = () => {
 
       <ApplyConfirmModal
         isOpen={confirmTarget !== null}
-        namespace={appState.namespace}
+        namespace={applyConfirmNamespace}
         packageName={confirmTarget?.packageName ?? ''}
         fileCount={confirmTarget?.yamlFiles ? Object.keys(confirmTarget.yamlFiles).length : 0}
         applying={confirmTarget ? Boolean(applying[confirmTarget.serviceId]) : false}
-        onClose={() => setConfirmTarget(null)}
+        onNamespaceChange={setApplyConfirmNamespace}
+        onClose={() => {
+          setConfirmTarget(null);
+          setApplyConfirmNamespace('');
+        }}
         onConfirm={handleApplyConfirm}
       />
     </>

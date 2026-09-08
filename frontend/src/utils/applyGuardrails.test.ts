@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AppState } from '../components/AppStateContext';
-import type { ConversionResultItem } from '../api/types';
+import type { ConversionResultItem, ValidationResult } from '../api/types';
+import { conversionResultsFingerprint } from '../components/conversion/conversionWorkflowState';
 import { getApplyGuardrails } from './applyGuardrails';
 
 const baseResult = (): ConversionResultItem => ({
@@ -13,36 +14,46 @@ const baseResult = (): ConversionResultItem => ({
   yamlFiles: { 'gateway.yaml': 'kind: Gateway\n' },
 });
 
-const baseState = (overrides: Partial<AppState> = {}): AppState => ({
-  connection: { url: '', accessToken: '', tenant: '', connected: false },
-  selectedServices: [],
-  conversionResults: [baseResult()],
-  namespace: 'default',
-  clusterVersions: {
-    profile: 'auto',
-    source: 'detected',
-    ocp: '4.16',
-    gatewayApi: '1.2',
-    kuadrant: '1.0',
-    ossm: null,
-    ossmExpectedForOcp: null,
-    capabilities: {
-      clusterReachable: true,
-      corsNative: false,
-      kuadrantPresent: true,
-      ossmPresent: false,
-      ossmMatchesOcp: true,
-      timeoutsSupported: false,
-      retriesSupported: false,
-    },
+const snapshotFor = (
+  results: ConversionResultItem[],
+  resultsOverride?: Record<string, ValidationResult>,
+): NonNullable<AppState['validationSnapshot']> => ({
+  fingerprint: conversionResultsFingerprint(results),
+  results: resultsOverride ?? {
+    svc1: { valid: true, items: [{ check: 'ok', status: 'OK' as const, message: 'ok' }] },
   },
-  clusterProfile: 'auto',
-  validationSnapshot: {
-    fingerprint: 'svc1:1',
-    results: { svc1: { valid: true, items: [{ check: 'ok', status: 'OK', message: 'ok' }] } },
-  },
-  ...overrides,
 });
+
+const baseState = (overrides: Partial<AppState> = {}): AppState => {
+  const conversionResults = overrides.conversionResults ?? [baseResult()];
+  return {
+    connection: { url: '', accessToken: '', tenant: '', connected: false },
+    selectedServices: [],
+    conversionResults,
+    namespace: 'default',
+    clusterVersions: {
+      profile: 'auto',
+      source: 'detected',
+      ocp: '4.16',
+      gatewayApi: '1.2',
+      kuadrant: '1.0',
+      ossm: null,
+      ossmExpectedForOcp: null,
+      capabilities: {
+        clusterReachable: true,
+        corsNative: false,
+        kuadrantPresent: true,
+        ossmPresent: false,
+        ossmMatchesOcp: true,
+        timeoutsSupported: false,
+        retriesSupported: false,
+      },
+    },
+    clusterProfile: 'auto',
+    validationSnapshot: snapshotFor(conversionResults),
+    ...overrides,
+  };
+};
 
 describe('getApplyGuardrails', () => {
   it('disables when cluster is not reachable', () => {
@@ -90,21 +101,36 @@ describe('getApplyGuardrails', () => {
   });
 
   it('disables when service validation is missing from snapshot', () => {
+    const results = [baseResult()];
     const g = getApplyGuardrails(baseResult(), baseState({
+      conversionResults: results,
       validationSnapshot: {
-        fingerprint: 'svc1:1',
+        ...snapshotFor(results),
         results: {},
       },
     }));
     expect(g.reasonKey).toBe('download.applyDisabledValidationError');
   });
 
+  it('disables when YAML was edited after validation', () => {
+    const validatedYaml = { 'gateway.yaml': 'kind: Gateway\n' };
+    const editedYaml = { 'gateway.yaml': 'kind: Gateway\nbroken: true\n' };
+    const validatedResult = { ...baseResult(), yamlFiles: validatedYaml };
+    const editedResult = { ...baseResult(), yamlFiles: editedYaml };
+    const g = getApplyGuardrails(editedResult, baseState({
+      conversionResults: [editedResult],
+      validationSnapshot: snapshotFor([validatedResult]),
+    }));
+    expect(g.reasonKey).toBe('download.applyDisabledValidationMissing');
+  });
+
   it('disables when validation has ERROR', () => {
+    const results = [baseResult()];
     const g = getApplyGuardrails(baseResult(), baseState({
-      validationSnapshot: {
-        fingerprint: 'svc1:1',
-        results: { svc1: { valid: false, items: [{ check: 'x', status: 'ERROR', message: 'bad' }] } },
-      },
+      conversionResults: results,
+      validationSnapshot: snapshotFor(results, {
+        svc1: { valid: false, items: [{ check: 'x', status: 'ERROR' as const, message: 'bad' }] },
+      }),
     }));
     expect(g.reasonKey).toBe('download.applyDisabledValidationError');
   });
@@ -118,7 +144,11 @@ describe('getApplyGuardrails', () => {
   });
 
   it('enables when all guardrails pass', () => {
-    const g = getApplyGuardrails(baseResult(), baseState());
+    const results = [baseResult()];
+    const g = getApplyGuardrails(baseResult(), baseState({
+      conversionResults: results,
+      validationSnapshot: snapshotFor(results),
+    }));
     expect(g).toEqual({ enabled: true, reasonKey: null });
   });
 });

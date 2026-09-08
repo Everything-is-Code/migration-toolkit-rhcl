@@ -17,6 +17,16 @@ describe('buildApplyPayload', () => {
     expect(out['gateway.yaml']).toContain('namespace: target-ns');
   });
 
+  it('overrides every namespace field in the payload', () => {
+    const out = buildApplyPayload({
+      'gateway.yaml': 'metadata:\n  namespace: staging\n',
+      'secret.yaml': 'metadata:\n  namespace: staging\n',
+    }, 'prod-ns');
+    expect(out['gateway.yaml']).toContain('namespace: prod-ns');
+    expect(out['secret.yaml']).toContain('namespace: prod-ns');
+    expect(out['gateway.yaml']).not.toContain('namespace: staging');
+  });
+
   it('fixes httproute port for external backends', () => {
     const route = `
 spec:
