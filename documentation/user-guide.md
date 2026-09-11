@@ -38,9 +38,9 @@ End-user workflow, features, and architecture overview for the Migration Toolkit
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18, PatternFly 5, Vite, TypeScript, react-i18next, Vitest |
-| Backend | Quarkus 3.27.x (Java 21), RESTEasy Reactive, Hibernate ORM Panache |
+| Backend | Quarkus 3.39.x (Java 21), RESTEasy Reactive, Hibernate ORM Panache |
 | Database | PostgreSQL (Helm chart or CrunchyData Operator) |
-| Kubernetes client | Fabric8 Kubernetes Client 6.7.x |
+| Kubernetes client | Fabric8 Kubernetes Client 7.8.x |
 | OpenAPI | SmallRye OpenAPI + Swagger UI |
 | DB migrations | Flyway V1–V9 |
 | Deployment | Helm (preferred), OpenShift S2I, Quay images |
