@@ -9,7 +9,7 @@ Short map for automated agents and humans working in this repository.
 
 | Path | Role |
 |------|------|
-| `backend/` | Quarkus 3.27.x (Java 21) REST API, Flyway, tests |
+| `backend/` | Quarkus 3.39.x (Java 21) REST API, Flyway, tests |
 | `frontend/` | React + PatternFly + Vite SPA — `components/<domain>/` + thin `pages/` orchestrators; `AppStateContext` for workflow state |
 | `deploy/` | OpenShift S2I manifests + `install.sh` |
 | `helm/` | Helm chart packaging |

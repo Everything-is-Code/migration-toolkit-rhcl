@@ -17,7 +17,7 @@ Code owners: see [`.github/CODEOWNERS`](.github/CODEOWNERS) (`@pcastelo`, `@fmen
 | Docker / Podman | Latest | Optional local image builds |
 | `oc` CLI | Matching OCP | Local dev cluster access; cluster deploy via `deploy/install.sh` |
 
-Backend Quarkus platform version is **`3.27.5.1`** (`quarkus.platform.version` in `backend/pom.xml`).
+Backend Quarkus platform version is **`3.39.2`** (`quarkus.platform.version` in `backend/pom.xml`).
 
 ### Backend
 
