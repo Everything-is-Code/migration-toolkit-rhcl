@@ -98,4 +98,23 @@ public final class ConversionContext {
                 && opts.dnsHostname != null
                 && !opts.dnsHostname.isBlank();
     }
+
+    /**
+     * Gateway listener for HTTPRoute parentRef. Use {@code https} when exposing a public hostname
+     * (DNSPolicy) or terminating TLS via TLSPolicy — 3scale migrations are HTTPS-first.
+     */
+    public String gatewayListenerSection() {
+        if (emitDnsPolicy() || options.includeTlsPolicy) {
+            return "https";
+        }
+        return "http";
+    }
+
+    /** HTTPRoute {@code spec.hostnames} when DNSPolicy supplies a public hostname. */
+    public String routeHostname() {
+        if (!emitDnsPolicy()) {
+            return null;
+        }
+        return options.dnsHostname.trim();
+    }
 }

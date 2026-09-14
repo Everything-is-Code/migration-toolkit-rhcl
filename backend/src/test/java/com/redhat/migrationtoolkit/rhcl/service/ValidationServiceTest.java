@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -301,6 +302,53 @@ class ValidationServiceTest {
         ValidationResult result = service.validate(Map.of());
         assertTrue(result.items.isEmpty());
         assertTrue(result.valid);
+    }
+
+    @Test
+    void validate_duplicateFiltersKeyInHttpRoute_error() {
+        String httprouteYaml = """
+                apiVersion: gateway.networking.k8s.io/v1
+                kind: HTTPRoute
+                metadata:
+                  name: rhcl-seed-cors-route
+                  namespace: test-ns
+                spec:
+                  rules:
+                  - backendRefs:
+                    - name: rhcl-seed-cors-backend
+                      port: 443
+                    filters:
+                    - type: URLRewrite
+                      urlRewrite:
+                        hostname: httpbin.org
+                    filters:
+                    - type: CORS
+                      cors:
+                        allowOrigins:
+                        - "*"
+                    matches:
+                    - method: GET
+                      path:
+                        type: PathPrefix
+                        value: /
+                """;
+        ValidationResult result = service.validate(Map.of("httproute.yaml", httprouteYaml));
+        assertFalse(result.valid);
+        assertTrue(result.items.stream().anyMatch(i -> "ERROR".equals(i.status)
+                && i.check.startsWith("YAML Structure:")
+                && i.message.contains("filters")));
+    }
+
+    @Test
+    void findDuplicateMappingKeys_detectsSiblingDuplicates() {
+        Set<String> duplicates = ValidationService.findDuplicateMappingKeys("""
+                rules:
+                - filters:
+                  - type: A
+                  filters:
+                  - type: B
+                """);
+        assertTrue(duplicates.contains("filters"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

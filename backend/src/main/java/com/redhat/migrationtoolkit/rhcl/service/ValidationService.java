@@ -8,15 +8,22 @@ import org.jboss.logging.Logger;
 import org.yaml.snakeyaml.Yaml;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class ValidationService {
 
     private static final Logger LOG = Logger.getLogger(ValidationService.class);
+
+    private static final Pattern DOCUMENT_SEPARATOR = Pattern.compile("^---\\s*$");
+    private static final Pattern QUOTED_KEY = Pattern.compile("^\"(.+)\"$|^'(.*)'$");
 
     private static final Set<String> KNOWN_CRDS = Set.of(
             "gateway.networking.k8s.io/v1",
@@ -59,6 +66,7 @@ public class ValidationService {
             }
 
             result.items.addAll(validateYamlSyntax(filename, docs));
+            result.items.addAll(validateDuplicateYamlKeys(filename, content));
             result.items.addAll(validateCrd(filename, docs));
             result.items.addAll(validateNamespace(filename, docs));
             result.items.addAll(validateReferences(filename, content, docs, yamlFiles));
@@ -81,6 +89,118 @@ public class ValidationService {
             }
         }
         return docs;
+    }
+
+    /** Detect duplicate mapping keys at the same indent (SnakeYAML load silently keeps the last). */
+    static List<ValidationItem> validateDuplicateYamlKeys(String filename, String content) {
+        List<ValidationItem> items = new ArrayList<>();
+        int docIndex = 0;
+        for (String doc : splitYamlDocuments(content)) {
+            docIndex++;
+            Set<String> duplicateKeys = findDuplicateMappingKeys(doc);
+            if (duplicateKeys.isEmpty()) {
+                continue;
+            }
+            String label = docIndex > 1 ? filename + " (document " + docIndex + ")" : filename;
+            String keys = String.join(", ", duplicateKeys);
+            items.add(new ValidationItem(
+                    "YAML Structure: " + label,
+                    "ERROR",
+                    "Duplicate mapping key(s) at the same level: " + keys));
+        }
+        if (items.isEmpty()) {
+            items.add(new ValidationItem("YAML Structure: " + filename, "OK", "No duplicate mapping keys"));
+        }
+        return items;
+    }
+
+    static List<String> splitYamlDocuments(String content) {
+        List<String> docs = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        for (String line : content.split("\n", -1)) {
+            if (DOCUMENT_SEPARATOR.matcher(line).matches()) {
+                if (!current.isEmpty()) {
+                    docs.add(current.toString());
+                    current = new StringBuilder();
+                }
+                continue;
+            }
+            if (!current.isEmpty()) {
+                current.append('\n');
+            }
+            current.append(line);
+        }
+        if (!current.isEmpty()) {
+            docs.add(current.toString());
+        }
+        return docs.isEmpty() ? List.of(content) : docs;
+    }
+
+    static Set<String> findDuplicateMappingKeys(String yamlDocument) {
+        Set<String> duplicates = new LinkedHashSet<>();
+        Map<Integer, Set<String>> keysAtIndent = new HashMap<>();
+        for (String line : yamlDocument.split("\n")) {
+            if (line.isBlank()) {
+                continue;
+            }
+            String trimmed = line.trim();
+            if (trimmed.startsWith("#")) {
+                continue;
+            }
+            int indent = leadingSpaces(line);
+            keysAtIndent.keySet().removeIf(level -> level > indent);
+
+            MappingKey mappingKey = extractMappingKey(line, indent);
+            if (mappingKey == null) {
+                continue;
+            }
+            Set<String> siblings = keysAtIndent.computeIfAbsent(mappingKey.indent, k -> new HashSet<>());
+            if (!siblings.add(mappingKey.key)) {
+                duplicates.add(mappingKey.key);
+            }
+        }
+        return duplicates;
+    }
+
+    private static int leadingSpaces(String line) {
+        int count = 0;
+        while (count < line.length() && line.charAt(count) == ' ') {
+            count++;
+        }
+        return count;
+    }
+
+    private record MappingKey(int indent, String key) {}
+
+    private static MappingKey extractMappingKey(String line, int lineIndent) {
+        String trimmed = line.substring(lineIndent).trim();
+        if (trimmed.startsWith("- ")) {
+            String afterDash = trimmed.substring(2).trim();
+            int colon = afterDash.indexOf(':');
+            if (colon <= 0) {
+                return null;
+            }
+            String key = normalizeKey(afterDash.substring(0, colon).trim());
+            return key.isEmpty() ? null : new MappingKey(lineIndent + 2, key);
+        }
+        if (trimmed.startsWith("-")) {
+            return null;
+        }
+        int colon = trimmed.indexOf(':');
+        if (colon <= 0) {
+            return null;
+        }
+        String key = normalizeKey(trimmed.substring(0, colon).trim());
+        return key.isEmpty() ? null : new MappingKey(lineIndent, key);
+    }
+
+    private static String normalizeKey(String raw) {
+        var quoted = QUOTED_KEY.matcher(raw);
+        if (quoted.matches()) {
+            String inner = quoted.group(1) != null ? quoted.group(1) : quoted.group(2);
+            return inner != null ? inner : raw;
+        }
+        return raw;
     }
 
     private List<ValidationItem> validateYamlSyntax(String filename, List<Map<String, Object>> docs) {

@@ -42,12 +42,16 @@ public final class HttpRouteBuilder {
     /** Raw YAML fragment for non-standard {@code type: CORS} filter (Istio/EnvoyProxy extension). */
     private String rawCorsFilterYaml;
     private final List<String> yamlCommentLines = new ArrayList<>();
+    private final String gatewaySectionName;
+    private final String routeHostname;
 
     public HttpRouteBuilder(ConversionContext ctx) {
         this.name = ctx.serviceKebabName;
         this.namespace = ctx.namespace;
         this.includeMigratedFromLabel = ctx.includeMigratedFromLabel;
         this.backends = ctx.resolvedBackends;
+        this.gatewaySectionName = ctx.gatewayListenerSection();
+        this.routeHostname = ctx.routeHostname();
     }
 
     public String name() {
@@ -173,12 +177,14 @@ public final class HttpRouteBuilder {
 
         allAnnotations.forEach(meta::addToAnnotations);
 
-        var specNested = meta.endMetadata()
-                .withNewSpec()
-                .addNewParentRef()
+        var specNested = meta.endMetadata().withNewSpec();
+        if (routeHostname != null) {
+            specNested.withHostnames(routeHostname);
+        }
+        specNested.addNewParentRef()
                 .withName(name + "-gateway")
                 .withNamespace(namespace)
-                .withSectionName("http")
+                .withSectionName(gatewaySectionName)
                 .endParentRef();
 
         if (!rules.isEmpty()) {
@@ -241,13 +247,15 @@ public final class HttpRouteBuilder {
             return yaml;
         }
 
-        String[] ruleBlocks = rulesBody.split("(?=  - )", -1);
+        // Split only on top-level rule list items (^  - ), not nested backendRefs/matches entries.
+        String[] ruleBlocks = rulesBody.split("(?m)^  - ", -1);
         StringBuilder merged = new StringBuilder(beforeRules.length() + rulesBody.length() + indented.length() * 4);
         merged.append(beforeRules);
         for (String ruleBlock : ruleBlocks) {
-            if (!ruleBlock.isEmpty()) {
-                merged.append(injectCorsIntoRule(ruleBlock, indented, filtersMarker, matchesMarker));
+            if (ruleBlock.isEmpty()) {
+                continue;
             }
+            merged.append("  - ").append(injectCorsIntoRule(ruleBlock, indented, filtersMarker, matchesMarker));
         }
         return merged.toString();
     }
@@ -255,7 +263,7 @@ public final class HttpRouteBuilder {
     private static String injectCorsIntoRule(
             String ruleYaml, String indentedCors, String filtersMarker, String matchesMarker) {
         if (ruleYaml.contains(filtersMarker)) {
-            return ruleYaml.replace(matchesMarker, indentedCors + matchesMarker);
+            return ruleYaml.replace(filtersMarker, filtersMarker + indentedCors);
         }
         return ruleYaml.replace(matchesMarker, filtersMarker + indentedCors + matchesMarker);
     }

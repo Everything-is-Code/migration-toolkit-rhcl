@@ -51,7 +51,10 @@ public final class IstioManifestSupport {
             if (chunk == null || chunk.isBlank()) {
                 continue;
             }
-            String trimmed = chunk.stripTrailing();
+            String trimmed = stripLeadingDocumentMarker(chunk.stripTrailing());
+            if (trimmed.isEmpty()) {
+                continue;
+            }
             if (joined.length() > 0) {
                 if (joined.charAt(joined.length() - 1) != '\n') {
                     joined.append('\n');
@@ -64,5 +67,17 @@ public final class IstioManifestSupport {
             joined.append('\n');
         }
         return joined.toString();
+    }
+
+    static String stripLeadingDocumentMarker(String yaml) {
+        if (yaml == null || yaml.isBlank()) {
+            return "";
+        }
+        String trimmed = yaml.stripLeading();
+        if (trimmed.startsWith("---")) {
+            int lineBreak = trimmed.indexOf('\n');
+            trimmed = lineBreak >= 0 ? trimmed.substring(lineBreak + 1).stripLeading() : "";
+        }
+        return trimmed;
     }
 }
