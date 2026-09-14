@@ -46,6 +46,8 @@ Parity harness (epic [#278](https://github.com/Everything-is-Code/migration-tool
 
 `SeedCatalogIntegrityTest` (backend) asserts `catalog.yaml` keys match `expectations.yaml`. Export file presence is enabled when `testdata/exports/*.json` land (#280).
 
+Shell tooling uses the same product list: `scripts/verify-seed-catalog-products.sh` (catalog parse ↔ expectations keys).
+
 ### APIcast name notes
 
 | Seed `policy_names` entry | RHCL converter accepts |

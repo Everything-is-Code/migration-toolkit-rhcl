@@ -4,6 +4,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=lib/seed-catalog-products.sh
+source "${ROOT}/scripts/lib/seed-catalog-products.sh"
 CATALOG="${ROOT}/testdata/seed/catalog.yaml"
 OUT_DIR="${ROOT}/testdata/exports"
 API_BASE="${MIGRATION_API_URL:-http://localhost:8080}"
@@ -39,7 +41,7 @@ fi
 
 mkdir -p "${OUT_DIR}"
 
-mapfile -t SYSTEM_NAMES < <(grep -E '^\s+system_name: rhcl_seed_' "${CATALOG}" | awk '{print $2}')
+mapfile -t SYSTEM_NAMES < <(list_seed_catalog_products "${CATALOG}")
 
 for name in "${SYSTEM_NAMES[@]}"; do
   echo "Resolving service id for ${name}..."

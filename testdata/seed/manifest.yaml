@@ -1,3 +1,5 @@
 version: 1
-# Optional cluster_profile overrides for parity IT (#288). Default: auto
+# P1 manifest: version + optional cluster_profile overrides (#288).
+# Product index is convention-based (catalog.yaml → expectations.yaml → exports/*.json);
+# per-product policies and output files are not duplicated here (see design.md).
 profiles: {}

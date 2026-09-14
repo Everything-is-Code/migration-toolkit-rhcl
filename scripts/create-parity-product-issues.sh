@@ -68,4 +68,4 @@ EOF
   echo "Created: ${url}"
 done
 
-echo "Done. Update PARITY_MATRIX.md product table with new issue numbers."
+echo "Done. New issues use label parity-matrix; see testdata/seed/PARITY_MATRIX.md for the product table."
