@@ -24,6 +24,22 @@ class IstioManifestSupportTest {
     }
 
     @Test
+    void stripLeadingDocumentMarker_nullOrBlank_returnsEmpty() {
+        assertEquals("", IstioManifestSupport.stripLeadingDocumentMarker(null));
+        assertEquals("", IstioManifestSupport.stripLeadingDocumentMarker("   "));
+    }
+
+    @Test
+    void stripLeadingDocumentMarker_markerOnly_returnsEmpty() {
+        assertEquals("", IstioManifestSupport.stripLeadingDocumentMarker("---"));
+    }
+
+    @Test
+    void stripLeadingDocumentMarker_withoutMarker_leavesContent() {
+        assertEquals("kind: Service", IstioManifestSupport.stripLeadingDocumentMarker("kind: Service"));
+    }
+
+    @Test
     void joinYamlChunks_stripsLeadingMarkerFromSecondChunk() {
         String first = "apiVersion: networking.istio.io/v1alpha3\nkind: ServiceEntry\n";
         String second = "---\napiVersion: v1\nkind: Service\n";

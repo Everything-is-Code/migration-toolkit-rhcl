@@ -55,7 +55,10 @@ class GatewayGeneratorTest {
         java.util.List<Map<String, Object>> listeners = (java.util.List<Map<String, Object>>) spec.get("listeners");
         assertEquals(2, listeners.size());
         assertEquals("HTTP", listeners.get(0).get("protocol"));
+        assertEquals(8080, ((Number) listeners.get(0).get("port")).intValue(),
+                "HTTP listener uses GATEWAY_HTTP_LISTENER_PORT for OpenShift / Connectivity Link");
         assertEquals("HTTPS", listeners.get(1).get("protocol"));
+        assertEquals(443, ((Number) listeners.get(1).get("port")).intValue());
     }
 
     @Test

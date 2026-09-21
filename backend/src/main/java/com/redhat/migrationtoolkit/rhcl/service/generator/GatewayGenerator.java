@@ -67,6 +67,7 @@ public class GatewayGenerator implements ResourceGenerator {
         return serializer().toYaml(gateway);
     }
 
+    /** HTTP listener on {@link ConversionConstants#GATEWAY_HTTP_LISTENER_PORT} (8080) for OCP / Connectivity Link. */
     private static Listener httpListener(String hostname) {
         ListenerBuilder builder = new ListenerBuilder()
                 .withName("http")
@@ -83,6 +84,10 @@ public class GatewayGenerator implements ResourceGenerator {
         return builder.build();
     }
 
+    /**
+     * HTTPS listener always present. {@code tls.certificateRefs} only when TLSPolicy is opted in;
+     * otherwise TLS is expected at the platform edge (OpenShift Route / load balancer) — see #337.
+     */
     private static Listener httpsListener(String name, String hostname, boolean includeTlsPolicy) {
         ListenerBuilder builder = new ListenerBuilder()
                 .withName("https")

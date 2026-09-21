@@ -2174,6 +2174,27 @@ class ConversionServiceTest {
     }
 
     @Test
+    void convert_tlsPolicyOn_withoutDns_httprouteUsesHttpsSectionWithoutHostnames() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        ConversionOptions opts = new ConversionOptions();
+        opts.includeTlsPolicy = true;
+        opts.tlsIssuerKind = "ClusterIssuer";
+        opts.tlsIssuerName = "letsencrypt-prod";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("sectionName: \"https\"") || httproute.contains("sectionName: https"),
+                () -> "TLSPolicy alone attaches HTTPRoute to HTTPS listener:\n" + httproute);
+        assertFalse(httproute.contains("hostnames:"),
+                "hostnames require DNSPolicy; TLS-only path must not invent hostnames");
+        assertTrue(files.containsKey("tlspolicy.yaml"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> httpsTls = (Map<String, Object>) gatewayListeners(files.get("gateway.yaml")).get(1).get("tls");
+        assertNotNull(httpsTls, "TLSPolicy on must emit Gateway certificateRefs");
+    }
+
+    @Test
     void convert_tlsPolicyOn_emitsTlsPolicyWithIssuerRef() {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");

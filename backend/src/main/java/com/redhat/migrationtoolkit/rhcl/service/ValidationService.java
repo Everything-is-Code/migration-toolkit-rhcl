@@ -91,7 +91,11 @@ public class ValidationService {
         return docs;
     }
 
-    /** Detect duplicate mapping keys at the same indent (SnakeYAML load silently keeps the last). */
+    /**
+     * Detect duplicate mapping keys at the same indent (SnakeYAML load silently keeps the last).
+     * Indent-heuristic only — not a full YAML AST; good enough for K8s block-style dups (#332).
+     * May miss flow-style / exotic formatting.
+     */
     static List<ValidationItem> validateDuplicateYamlKeys(String filename, String content) {
         List<ValidationItem> items = new ArrayList<>();
         int docIndex = 0;

@@ -115,9 +115,11 @@ Core package files (always or conditional — full matrix in [conversion archite
 
 Replace `REPLACE_ME` in `secret.yaml` before apply.
 
-**TLSPolicy (opt-in):** cert-manager `issuerRef`; Gateway https listener references `{name}-tls` Secret (created by cert-manager after apply).
+**Gateway listeners (defaults):** HTTP listener uses port **8080** (OpenShift / Connectivity Link Istio integration — not port 80). HTTPS listener is always emitted on **443**; without TLSPolicy it has **no** `certificateRefs` (TLS terminates at the platform edge / OpenShift Route). Follow-ups: configurable exposure [#333](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/333), Route emission [#335](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/335), HTTPS section mismatch [#337](https://github.com/Everything-is-Code/migration-toolkit-rhcl/issues/337).
 
-**DNSPolicy (opt-in):** Gateway listeners get `hostname`; `GET /api/cluster/domain` prefills `{kebabName}.{clusterDomain}` (domain already includes `apps.`).
+**TLSPolicy (opt-in):** cert-manager `issuerRef`; Gateway https listener then references `{name}-tls` Secret (created by cert-manager after apply). HTTPRoute attaches to the `https` section when TLSPolicy and/or DNSPolicy is enabled.
+
+**DNSPolicy (opt-in):** Gateway listeners get `hostname`; HTTPRoute gets `spec.hostnames`; `GET /api/cluster/domain` prefills `{kebabName}.{clusterDomain}` (domain already includes `apps.`).
 
 **IP check:** Prefer `authorizationPolicy` mode (Istio `remoteIpBlocks`) for end-client IP allowlists; OPA mode uses Authorino `input.source.address`.
 

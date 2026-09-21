@@ -102,6 +102,7 @@ public final class ConversionContext {
     /**
      * Gateway listener for HTTPRoute parentRef. Use {@code https} when exposing a public hostname
      * (DNSPolicy) or terminating TLS via TLSPolicy — 3scale migrations are HTTPS-first.
+     * TLS-only (no DNS) sets {@code sectionName: https} without {@code spec.hostnames}.
      */
     public String gatewayListenerSection() {
         if (emitDnsPolicy() || options.includeTlsPolicy) {
