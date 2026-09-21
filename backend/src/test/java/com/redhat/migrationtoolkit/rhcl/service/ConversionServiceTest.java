@@ -445,6 +445,29 @@ class ConversionServiceTest {
     }
 
     @Test
+    void convert_externalBackend_corsNative_singleFiltersKeyPerRule() {
+        ApiService svc = basicService("RHCL Seed CORS", "rhcl_seed_cors");
+        svc.authentication = auth("api_key");
+        svc.backends = List.of(backend("upstream", "rhcl_seed_upstream", "https://httpbin.org:443", "/"));
+        svc.mappingRules = List.of(mappingRule("GET", "/"));
+        svc.policies = List.of(corsPolicy(
+                List.of("*"),
+                List.of("GET", "POST", "OPTIONS"),
+                List.of("Authorization", "Content-Type"),
+                true,
+                600));
+
+        ConversionOptions opts = new ConversionOptions();
+        opts.corsNative = true;
+        String httproute = service.convert(svc, "fmeneses-rhcl-test", null, opts).get("httproute.yaml");
+
+        assertTrue(httproute.contains("URLRewrite") || httproute.contains("urlRewrite"), httproute);
+        assertTrue(httproute.contains("type: CORS"), httproute);
+        assertTrue(httproute.contains("httpbin.org"), httproute);
+        assertFiltersKeyOncePerRule(httproute);
+    }
+
+    @Test
     void convert_corsNativeFromProfile421_matrixOnly_noClusterSideEffects() {
         // Profile override only widens emit caps; convert path needs no Kubernetes client.
         var caps = ClusterVersionService.capabilitiesFrom("4.21.0", "1.3.0", null, null, null);
@@ -2151,6 +2174,27 @@ class ConversionServiceTest {
     }
 
     @Test
+    void convert_tlsPolicyOn_withoutDns_httprouteUsesHttpsSectionWithoutHostnames() {
+        ApiService svc = basicService("my-api", "my-api");
+        svc.authentication = auth("jwt");
+        ConversionOptions opts = new ConversionOptions();
+        opts.includeTlsPolicy = true;
+        opts.tlsIssuerKind = "ClusterIssuer";
+        opts.tlsIssuerName = "letsencrypt-prod";
+        Map<String, String> files = service.convert(svc, "ns", null, opts);
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("sectionName: \"https\"") || httproute.contains("sectionName: https"),
+                () -> "TLSPolicy alone attaches HTTPRoute to HTTPS listener:\n" + httproute);
+        assertFalse(httproute.contains("hostnames:"),
+                "hostnames require DNSPolicy; TLS-only path must not invent hostnames");
+        assertTrue(files.containsKey("tlspolicy.yaml"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> httpsTls = (Map<String, Object>) gatewayListeners(files.get("gateway.yaml")).get(1).get("tls");
+        assertNotNull(httpsTls, "TLSPolicy on must emit Gateway certificateRefs");
+    }
+
+    @Test
     void convert_tlsPolicyOn_emitsTlsPolicyWithIssuerRef() {
         ApiService svc = basicService("my-api", "my-api");
         svc.authentication = auth("jwt");
@@ -2238,6 +2282,17 @@ class ConversionServiceTest {
         assertFalse(dns.toLowerCase().contains("accesskey"));
         assertFalse(dns.toLowerCase().contains("secretkey"));
         assertFalse(dns.contains("AWS_ACCESS"));
+
+        String httproute = files.get("httproute.yaml");
+        assertTrue(httproute.contains("sectionName: \"https\"") || httproute.contains("sectionName: https"),
+                () -> "HTTPRoute must attach to HTTPS listener when DNSPolicy sets a public hostname:\n" + httproute);
+        assertTrue(httproute.contains("hostnames:"));
+        assertTrue(httproute.contains("my-api.apps.cluster.example.com"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> httpsTls = (Map<String, Object>) gatewayListeners(gw).get(1).get("tls");
+        assertNull(httpsTls,
+                "HTTPS listener must omit certificateRefs until TLSPolicy is enabled (platform TLS)");
     }
 
     @Test
@@ -2590,5 +2645,16 @@ class ConversionServiceTest {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> gatewayListeners(String yaml) {
         return (List<Map<String, Object>>) gatewaySpec(parseGateway(yaml)).get("listeners");
+    }
+
+    /** Each HTTPRoute rule must expose exactly one {@code filters:} mapping key (#332). */
+    private static void assertFiltersKeyOncePerRule(String httprouteYaml) {
+        String[] ruleBlocks = httprouteYaml.split("(?m)^  - backendRefs:");
+        assertTrue(ruleBlocks.length > 1, "expected rules with backendRefs");
+        for (int i = 1; i < ruleBlocks.length; i++) {
+            int filtersKeys = ruleBlocks[i].split("(?m)^    filters:", -1).length - 1;
+            assertEquals(1, filtersKeys,
+                    "rule must have exactly one filters: key, got " + filtersKeys + " in:\n" + ruleBlocks[i]);
+        }
     }
 }

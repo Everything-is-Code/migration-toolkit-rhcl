@@ -44,7 +44,7 @@ public class GatewayGenerator implements ResourceGenerator {
 
         List<Listener> listeners = new ArrayList<>();
         listeners.add(httpListener(hostname));
-        listeners.add(httpsListener(name, hostname));
+        listeners.add(httpsListener(name, hostname, ctx.options.includeTlsPolicy));
 
         var metadata = new GatewayBuilder()
                 .withApiVersion("gateway.networking.k8s.io/v1")
@@ -67,11 +67,12 @@ public class GatewayGenerator implements ResourceGenerator {
         return serializer().toYaml(gateway);
     }
 
+    /** HTTP listener on {@link ConversionConstants#GATEWAY_HTTP_LISTENER_PORT} (8080) for OCP / Connectivity Link. */
     private static Listener httpListener(String hostname) {
         ListenerBuilder builder = new ListenerBuilder()
                 .withName("http")
                 .withProtocol("HTTP")
-                .withPort(ConversionConstants.DEFAULT_HTTP_PORT)
+                .withPort(ConversionConstants.GATEWAY_HTTP_LISTENER_PORT)
                 .withNewAllowedRoutes()
                 .withNewNamespaces()
                 .withFrom("Same")
@@ -83,18 +84,24 @@ public class GatewayGenerator implements ResourceGenerator {
         return builder.build();
     }
 
-    private static Listener httpsListener(String name, String hostname) {
+    /**
+     * HTTPS listener always present. {@code tls.certificateRefs} only when TLSPolicy is opted in;
+     * otherwise TLS is expected at the platform edge (OpenShift Route / load balancer) — see #337.
+     */
+    private static Listener httpsListener(String name, String hostname, boolean includeTlsPolicy) {
         ListenerBuilder builder = new ListenerBuilder()
                 .withName("https")
                 .withProtocol("HTTPS")
-                .withPort(ConversionConstants.DEFAULT_HTTPS_PORT)
-                .withNewTls()
-                .withMode("Terminate")
-                .addNewCertificateRef()
-                .withName(name + "-tls")
-                .endCertificateRef()
-                .endTls()
-                .withNewAllowedRoutes()
+                .withPort(ConversionConstants.DEFAULT_HTTPS_PORT);
+        if (includeTlsPolicy) {
+            builder.withNewTls()
+                    .withMode("Terminate")
+                    .addNewCertificateRef()
+                    .withName(name + "-tls")
+                    .endCertificateRef()
+                    .endTls();
+        }
+        builder.withNewAllowedRoutes()
                 .withNewNamespaces()
                 .withFrom("Same")
                 .endNamespaces()

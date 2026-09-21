@@ -4,7 +4,9 @@ import com.redhat.migrationtoolkit.rhcl.dto.ValidationResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -301,6 +303,113 @@ class ValidationServiceTest {
         ValidationResult result = service.validate(Map.of());
         assertTrue(result.items.isEmpty());
         assertTrue(result.valid);
+    }
+
+    @Test
+    void validate_duplicateFiltersKeyInHttpRoute_error() {
+        String httprouteYaml = """
+                apiVersion: gateway.networking.k8s.io/v1
+                kind: HTTPRoute
+                metadata:
+                  name: rhcl-seed-cors-route
+                  namespace: test-ns
+                spec:
+                  rules:
+                  - backendRefs:
+                    - name: rhcl-seed-cors-backend
+                      port: 443
+                    filters:
+                    - type: URLRewrite
+                      urlRewrite:
+                        hostname: httpbin.org
+                    filters:
+                    - type: CORS
+                      cors:
+                        allowOrigins:
+                        - "*"
+                    matches:
+                    - method: GET
+                      path:
+                        type: PathPrefix
+                        value: /
+                """;
+        ValidationResult result = service.validate(Map.of("httproute.yaml", httprouteYaml));
+        assertFalse(result.valid);
+        assertTrue(result.items.stream().anyMatch(i -> "ERROR".equals(i.status)
+                && i.check.startsWith("YAML Structure:")
+                && i.message.contains("filters")));
+    }
+
+    @Test
+    void findDuplicateMappingKeys_detectsSiblingDuplicates() {
+        Set<String> duplicates = ValidationService.findDuplicateMappingKeys("""
+                rules:
+                - filters:
+                  - type: A
+                  filters:
+                  - type: B
+                """);
+        assertTrue(duplicates.contains("filters"));
+    }
+
+    @Test
+    void findDuplicateMappingKeys_detectsQuotedKeyDuplicates() {
+        Set<String> duplicates = ValidationService.findDuplicateMappingKeys("""
+                metadata:
+                  "name": first
+                  'name': second
+                """);
+        assertTrue(duplicates.contains("name"), "quoted keys normalize to the same mapping key");
+    }
+
+    @Test
+    void findDuplicateMappingKeys_ignoresCommentsAndBlankLines() {
+        Set<String> duplicates = ValidationService.findDuplicateMappingKeys("""
+                kind: Gateway
+                # name: ignored
+                metadata:
+                  name: ok
+
+                  namespace: ns
+                """);
+        assertTrue(duplicates.isEmpty());
+    }
+
+    @Test
+    void findDuplicateMappingKeys_skipsBareListScalars() {
+        Set<String> duplicates = ValidationService.findDuplicateMappingKeys("""
+                items:
+                - plain-value
+                - another
+                """);
+        assertTrue(duplicates.isEmpty());
+    }
+
+    @Test
+    void validateDuplicateYamlKeys_labelsSecondDocument() {
+        String multi = """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: a
+                ---
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: b
+                  name: c
+                """;
+        var items = ValidationService.validateDuplicateYamlKeys("multi.yaml", multi);
+        assertTrue(items.stream().anyMatch(i -> "ERROR".equals(i.status)
+                && i.check.contains("document 2")
+                && i.message.contains("name")));
+    }
+
+    @Test
+    void splitYamlDocuments_handlesLeadingSeparatorAndEmptyTail() {
+        List<String> docs = ValidationService.splitYamlDocuments("---\nkind: A\n---\n");
+        assertFalse(docs.isEmpty());
+        assertTrue(docs.get(0).contains("kind: A"));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

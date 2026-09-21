@@ -21,6 +21,30 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class HttpRouteBuilderTest {
 
     @Test
+    void build_withDnsPolicy_usesHttpsListenerAndHostname() {
+        ApiService service = new ApiService();
+        service.name = "demo-api";
+        service.systemName = "demo-api";
+        ConversionOptions options = new ConversionOptions();
+        options.includeDnsPolicy = true;
+        options.dnsHostname = "demo-api.apps.example.com";
+        ConversionContext ctx = ConversionContext.build(
+                service, "ns", null, options, new BackendResolver());
+        HttpRouteBuilder builder = new HttpRouteBuilder(ctx);
+        builder.addRule(new HTTPRouteRuleBuilder()
+                .withMatches(new HTTPRouteMatchBuilder()
+                        .withNewPath().withType("PathPrefix").withValue("/").endPath()
+                        .build())
+                .build());
+
+        String yaml = builder.build();
+
+        assertTrue(yaml.contains("sectionName"), yaml);
+        assertTrue(yaml.contains("https"), yaml);
+        assertTrue(yaml.contains("demo-api.apps.example.com"), yaml);
+    }
+
+    @Test
     void build_assemblesMetadataAndRules() {
         ApiService service = new ApiService();
         service.name = "demo-api";
@@ -115,6 +139,7 @@ class HttpRouteBuilderTest {
         // Both filter types appear before matches
         assertTrue(merged.indexOf("type: CORS") < merged.indexOf("matches:"), merged);
         assertTrue(merged.indexOf("type: URLRewrite") < merged.indexOf("matches:"), merged);
+        assertEquals(1, merged.split("(?m)^    filters:", -1).length - 1, merged);
     }
 
     @Test

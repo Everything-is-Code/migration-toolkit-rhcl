@@ -17,6 +17,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class IstioManifestSupportTest {
 
     @Test
+    void stripLeadingDocumentMarker_removesDuplicateDocumentSeparator() {
+        String chunk = "---\napiVersion: v1\nkind: Service\n";
+
+        assertEquals("apiVersion: v1\nkind: Service\n", IstioManifestSupport.stripLeadingDocumentMarker(chunk));
+    }
+
+    @Test
+    void stripLeadingDocumentMarker_nullOrBlank_returnsEmpty() {
+        assertEquals("", IstioManifestSupport.stripLeadingDocumentMarker(null));
+        assertEquals("", IstioManifestSupport.stripLeadingDocumentMarker("   "));
+    }
+
+    @Test
+    void stripLeadingDocumentMarker_markerOnly_returnsEmpty() {
+        assertEquals("", IstioManifestSupport.stripLeadingDocumentMarker("---"));
+    }
+
+    @Test
+    void stripLeadingDocumentMarker_withoutMarker_leavesContent() {
+        assertEquals("kind: Service", IstioManifestSupport.stripLeadingDocumentMarker("kind: Service"));
+    }
+
+    @Test
+    void joinYamlChunks_stripsLeadingMarkerFromSecondChunk() {
+        String first = "apiVersion: networking.istio.io/v1alpha3\nkind: ServiceEntry\n";
+        String second = "---\napiVersion: v1\nkind: Service\n";
+
+        String joined = IstioManifestSupport.joinYamlChunks(first, second);
+
+        assertFalse(joined.contains("---\n---"));
+        assertEquals(2, YamlAssertions.parseDocuments(joined).size());
+    }
+
+    @Test
     void joinYamlChunks_insertsNewlineBeforeDocumentSeparator() {
         String first = """
                 apiVersion: networking.istio.io/v1alpha3

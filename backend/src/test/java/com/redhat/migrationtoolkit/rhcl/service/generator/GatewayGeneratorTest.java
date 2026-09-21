@@ -55,7 +55,42 @@ class GatewayGeneratorTest {
         java.util.List<Map<String, Object>> listeners = (java.util.List<Map<String, Object>>) spec.get("listeners");
         assertEquals(2, listeners.size());
         assertEquals("HTTP", listeners.get(0).get("protocol"));
+        assertEquals(8080, ((Number) listeners.get(0).get("port")).intValue(),
+                "HTTP listener uses GATEWAY_HTTP_LISTENER_PORT for OpenShift / Connectivity Link");
         assertEquals("HTTPS", listeners.get(1).get("protocol"));
+        assertEquals(443, ((Number) listeners.get(1).get("port")).intValue());
+    }
+
+    @Test
+    void generate_withoutTlsPolicy_httpsListenerOmitsCertificateRefs() {
+        ApiService service = GeneratorTestSupport.basicService("Plain API", "plain-api");
+        ConversionContext ctx = GeneratorTestSupport.context(service);
+
+        String yaml = generator.generate(ctx);
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> listeners =
+                (java.util.List<Map<String, Object>>) ((Map<String, Object>) YamlAssertions.parse(yaml).get("spec"))
+                        .get("listeners");
+
+        assertNull(listeners.get(1).get("tls"),
+                "HTTPS listener must not reference a TLS Secret until TLSPolicy is enabled");
+    }
+
+    @Test
+    void generate_withTlsPolicy_httpsListenerReferencesTlsSecret() {
+        ApiService service = GeneratorTestSupport.basicService("TLS API", "tls-api");
+        ConversionOptions options = new ConversionOptions();
+        options.includeTlsPolicy = true;
+        ConversionContext ctx = GeneratorTestSupport.context(service, options);
+
+        String yaml = generator.generate(ctx);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> tls = (Map<String, Object>) ((java.util.List<Map<String, Object>>)
+                ((Map<String, Object>) YamlAssertions.parse(yaml).get("spec")).get("listeners")).get(1).get("tls");
+        @SuppressWarnings("unchecked")
+        java.util.List<Map<String, Object>> certRefs = (java.util.List<Map<String, Object>>) tls.get("certificateRefs");
+
+        assertEquals("tls-api-tls", certRefs.get(0).get("name"));
     }
 
     @Test

@@ -19,6 +19,13 @@ public final class ConversionConstants {
     /** Default port for http:// external backends. */
     public static final int DEFAULT_HTTP_PORT = 80;
 
+    /**
+     * Gateway API HTTP listener port for Istio / Connectivity Link on OpenShift
+     * (matches platform ingress integration; HTTPS listener stays on 443).
+     * Intentional global default for this toolkit — not gated by cluster profile yet (#333).
+     */
+    public static final int GATEWAY_HTTP_LISTENER_PORT = 8080;
+
     /** Default port for https:// external backends (and Gateway HTTPS listener). */
     public static final int DEFAULT_HTTPS_PORT = 443;
 
