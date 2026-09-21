@@ -14,7 +14,7 @@
     <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <quarkus.platform.version>3.39.1</quarkus.platform.version>
+    <quarkus.platform.version>3.39.4</quarkus.platform.version>
     <!-- Keep in sync with io.fabric8:kubernetes-client from quarkus-kubernetes-client (mvn dependency:tree). -->
     <fabric8.version>7.8.0</fabric8.version>
     <surefire-plugin.version>3.5.6</surefire-plugin.version>
@@ -147,7 +147,7 @@
     <dependency>
       <groupId>com.microsoft.playwright</groupId>
       <artifactId>playwright</artifactId>
-      <version>1.46.0</version>
+      <version>1.63.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -170,7 +170,7 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>build-helper-maven-plugin</artifactId>
-        <version>3.6.1</version>
+        <version>3.6.2</version>
         <executions>
           <execution>
             <id>add-e2e-test-sources</id>
@@ -440,7 +440,7 @@
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
-        <version>3.6.3</version>
+        <version>3.6.4</version>
         <executions>
           <execution>
             <id>generate-report</id>

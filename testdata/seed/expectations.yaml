@@ -1,0 +1,196 @@
+version: 1
+defaultNamespace: seed-parity-ns
+products:
+  rhcl_seed_cors:
+    productLabel: RHCL Seed CORS
+    files:
+      gateway.yaml:
+        mustContain: ["kind: Gateway"]
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+      policy.yaml:
+        mustContain: ["kind: AuthPolicy"]
+
+  rhcl_seed_headers:
+    productLabel: RHCL Seed Headers
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute", "ResponseHeaderModifier"]
+      policy.yaml:
+        mustContain: ["kind: AuthPolicy"]
+
+  rhcl_seed_header_modification:
+    productLabel: RHCL Seed Header Modification Alias
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute", "ResponseHeaderModifier"]
+      policy.yaml:
+        mustContain: ["kind: AuthPolicy"]
+
+  rhcl_seed_ip_check:
+    productLabel: RHCL Seed IP Check
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+      policy.yaml:
+        mustContain: ["kind: AuthPolicy"]
+
+  rhcl_seed_edge_limiting:
+    productLabel: RHCL Seed Edge Limiting
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+      ratelimitpolicy.yaml:
+        mustContain: ["kind: RateLimitPolicy"]
+
+  rhcl_seed_token_introspection:
+    productLabel: RHCL Seed Token Introspection
+    files:
+      policy.yaml:
+        mustContain: ["oauth2Introspection"]
+      secret.yaml:
+        mustContain: ["kind: Secret"]
+
+  rhcl_seed_app_id:
+    productLabel: RHCL Seed App ID Auth
+    files:
+      secret.yaml:
+        mustContain: ["kind: Secret"]
+      policy.yaml:
+        mustContain: ["kind: AuthPolicy"]
+
+  rhcl_seed_logging:
+    productLabel: RHCL Seed Logging
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+      telemetry.yaml:
+        mustContain: ["kind: Telemetry"]
+
+  rhcl_seed_anonymous:
+    productLabel: RHCL Seed Anonymous
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+      policy.yaml:
+        mustContain: ["anonymous"]
+
+  rhcl_seed_url_rewriting:
+    productLabel: RHCL Seed URL Rewriting
+    files:
+      envoyfilter-url-rewriting.yaml:
+        mustContain: ["kind: EnvoyFilter"]
+
+  rhcl_seed_auth_caching:
+    productLabel: RHCL Seed Auth Caching
+    files:
+      policy.yaml:
+        mustContain: ["cache", "kind: AuthPolicy"]
+
+  rhcl_seed_jwt_claim_check:
+    productLabel: RHCL Seed JWT Claim Check
+    files:
+      policy.yaml:
+        mustContain: ["jwt-claim-check", "patternMatching"]
+
+  rhcl_seed_upstream_connection:
+    productLabel: RHCL Seed Upstream Connection
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+
+  rhcl_seed_content_limits:
+    productLabel: RHCL Seed Content Limits
+    files:
+      envoyfilter-content-limits.yaml:
+        mustContain: ["kind: EnvoyFilter"]
+
+  rhcl_seed_retry:
+    productLabel: RHCL Seed Retry
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+
+  rhcl_seed_keycloak_roles:
+    productLabel: RHCL Seed Keycloak Role Check
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute"]
+      policy.yaml:
+        mustContain:
+          - keycloak-role-check
+          - auth.identity.realm_access.roles
+          - rhcl-demo-user
+        mustNotContain:
+          - jwt-claim-check
+
+  rhcl_seed_oidc_jwt:
+    productLabel: RHCL Seed OIDC JWT Auth
+    files:
+      policy.yaml:
+        mustContain: ["issuerUrl", "kind: AuthPolicy"]
+
+  rhcl_seed_claim_role_chain:
+    productLabel: RHCL Seed Claim Role Chain
+    files:
+      httproute.yaml:
+        mustContain: ["rhcl-seed-claim-role-chain-route", "kind: HTTPRoute"]
+        mustNotContain: ["rhcl-seed-claim-cache-chain"]
+      policy.yaml:
+        mustContain:
+          - rhcl-seed-claim-role-chain-auth
+          - jwt-claim-check
+          - keycloak-role-check
+          - auth.identity.role
+          - rhcl-demo-user
+      secret.yaml:
+        mustContain: ["kind: Secret"]
+      configmap.yaml:
+        mustContain: ["kind: ConfigMap"]
+      apiproduct.yaml:
+        mustContain: ["kind: APIProduct"]
+
+  rhcl_seed_claim_cache_chain:
+    productLabel: RHCL Seed Claim Cache Chain
+    files:
+      httproute.yaml:
+        mustContain: ["rhcl-seed-claim-cache-chain-route"]
+        mustNotContain: ["rhcl-seed-claim-role-chain"]
+      policy.yaml:
+        mustContain:
+          - rhcl-seed-claim-cache-chain-auth
+          - jwt-claim-check
+          - cache
+      secret.yaml:
+        mustContain: ["kind: Secret"]
+      configmap.yaml:
+        mustContain: ["kind: ConfigMap"]
+      apiproduct.yaml:
+        mustContain: ["kind: APIProduct"]
+
+  rhcl_seed_auth_chain:
+    productLabel: RHCL Seed Auth Chain
+    files:
+      httproute.yaml:
+        mustContain: ["rhcl-seed-auth-chain-route"]
+      policy.yaml:
+        mustContain:
+          - rhcl-seed-auth-chain-auth
+          - jwt-claim-check
+          - auth.identity.role
+      authorizationpolicy.yaml:
+        mustContain:
+          - rhcl-seed-auth-chain-ip-check
+          - "remoteIpBlocks:"
+          - 10.0.0.0/8
+          - 192.168.0.0/16
+        mustNotContain:
+          - 'remoteIpBlocks:\n        - "'
+
+  rhcl_seed_multi_backend:
+    productLabel: RHCL Seed Multi Backend
+    files:
+      httproute.yaml:
+        mustContain: ["kind: HTTPRoute", "backendRefs"]
+      serviceentry.yaml:
+        mustContain: ["kind: ServiceEntry"]

@@ -1,0 +1,28 @@
+name: Seed parity — product slice
+description: Track export fixture + conversion IT for one rhcl_seed_* product (epic #278)
+title: "parity(rhcl_seed_NAME): export fixture + conversion IT"
+labels:
+  - parity-matrix
+  - area/testing
+  - testing
+body:
+  - type: markdown
+    value: |
+      Part of epic #278. Parent batch issues: #280 (exports), #281 (SeedCatalogConversionIT).
+      See [`testdata/seed/PARITY_MATRIX.md`](../../testdata/seed/PARITY_MATRIX.md).
+  - type: input
+    id: system_name
+    attributes:
+      label: system_name
+      description: e.g. rhcl_seed_cors
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      options:
+        - label: "`testdata/exports/{system_name}.json` committed"
+        - label: "`expectations.yaml` fragments verified against conversion output"
+        - label: "`SeedCatalogConversionIT` green for this product"
+        - label: "Playwright row added/updated (P2 #283) if applicable"
