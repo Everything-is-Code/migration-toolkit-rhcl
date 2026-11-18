@@ -169,6 +169,23 @@ class HttpRouteSupportTest {
     }
 
     @Test
+    void buildBackendRefs_setsNamespaceOnlyWhenItDiffersFromTheRoute() {
+        ResolvedBackend remote = new ResolvedBackend(
+                BackendType.INTERNAL, "accounts", "accounts-se", "accounts-dr",
+                null, 8080, false, "/", 1,
+                "http://accounts.neuralbank-stack.svc.cluster.local:8080");
+        ResolvedBackend local = new ResolvedBackend(
+                BackendType.INTERNAL, "local", "local-se", "local-dr",
+                null, 8080, false, "/", 1,
+                "http://local.business-apis.svc.cluster.local:8080");
+
+        List<HTTPBackendRef> refs = HttpRouteSupport.buildBackendRefs(List.of(remote, local), "business-apis");
+
+        assertEquals("neuralbank-stack", refs.get(0).getNamespace());
+        assertNull(refs.get(1).getNamespace());
+    }
+
+    @Test
     void collectMappingRulePaths_emptyRules_addsRoot() {
         ApiService service = ConversionSupportTestFixtures.apiService("demo-api");
         LinkedHashSet<String> paths = new LinkedHashSet<>();

@@ -36,5 +36,32 @@ class PublicHostTest {
         assertEquals("/api/v1/customers", PublicHost.stripUsagePrefix("/customers/api/v1/customers", "/customers"));
         assertEquals("/api/v1/loans", PublicHost.stripUsagePrefix("/api/v1/loans", "/"));
         assertEquals("/", PublicHost.stripUsagePrefix("/usage", "/usage"));
+        assertEquals("/api/v1/loans", PublicHost.stripUsagePrefix("/customers/api/v1/loans", "/customers/"));
+        assertEquals("/other", PublicHost.stripUsagePrefix("/other", "/customers"));
+        assertNull(PublicHost.stripUsagePrefix(null, "/customers"));
+        assertEquals("/api", PublicHost.stripUsagePrefix("/api", null));
+        assertEquals("/api", PublicHost.stripUsagePrefix("/api", "  "));
+    }
+
+    @Test
+    void fromIssuer_rejectsMissingPiecesAndNonAppsHosts() {
+        assertNull(PublicHost.fromIssuer(null, "demo", "ns"));
+        assertNull(PublicHost.fromIssuer("https://rhbk.apps.example.com/realms/nb", null, "ns"));
+        assertNull(PublicHost.fromIssuer("https://rhbk.apps.example.com/realms/nb", " ", "ns"));
+        assertNull(PublicHost.fromIssuer("https://rhbk.apps.example.com/realms/nb", "demo", null));
+        assertNull(PublicHost.fromIssuer("https://rhbk.apps.example.com/realms/nb", "demo", " "));
+        assertNull(PublicHost.fromIssuer("http://", "demo", "ns"));
+        assertNull(PublicHost.fromIssuer("http://.apps.example.com/realms/nb", "demo", "ns"));
+        assertNull(PublicHost.fromIssuer("http://localhost/realms/nb", "demo", "ns"));
+        assertNull(PublicHost.fromIssuer("://bad host", "demo", "ns"));
+    }
+
+    @Test
+    void namespaceOf_rejectsUrlsWithoutAClusterServiceHost() {
+        assertNull(PublicHost.namespaceOf(null));
+        assertNull(PublicHost.namespaceOf("  "));
+        assertNull(PublicHost.namespaceOf("http://"));
+        assertNull(PublicHost.namespaceOf("not a uri"));
+        assertNull(PublicHost.namespaceOf("http://api.example.com/v1"));
     }
 }

@@ -63,8 +63,9 @@ import java.util.stream.Collectors;
 public class ApplyController {
 
     private static final Logger LOG = Logger.getLogger(ApplyController.class);
-    private static final int OPENAPI_ATTEMPTS = 15;
-    private static final Duration OPENAPI_INTERVAL = Duration.ofSeconds(2);
+    /** Package-visible so tests can probe the wait without the production 30s budget. */
+    static int openApiAttempts = 15;
+    static Duration openApiInterval = Duration.ofSeconds(2);
 
     @Inject
     KubernetesClient client;
@@ -497,7 +498,7 @@ public class ApplyController {
             return;
         }
         HttpClient http = openApiClient();
-        for (int attempt = 1; attempt <= OPENAPI_ATTEMPTS; attempt++) {
+        for (int attempt = 1; attempt <= openApiAttempts; attempt++) {
             try {
                 HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                         .timeout(Duration.ofSeconds(5))
@@ -508,12 +509,12 @@ public class ApplyController {
                     LOG.infof("OpenAPI spec reachable (%d) at %s", status, url);
                     return;
                 }
-                LOG.infof("OpenAPI spec not ready, status %d (%d/%d)", status, attempt, OPENAPI_ATTEMPTS);
+                LOG.infof("OpenAPI spec not ready, status %d (%d/%d)", status, attempt, openApiAttempts);
             } catch (Exception e) {
-                LOG.infof("OpenAPI spec not ready (%d/%d): %s", attempt, OPENAPI_ATTEMPTS, e.getMessage());
+                LOG.infof("OpenAPI spec not ready (%d/%d): %s", attempt, openApiAttempts, e.getMessage());
             }
             try {
-                Thread.sleep(OPENAPI_INTERVAL.toMillis());
+                Thread.sleep(openApiInterval.toMillis());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;

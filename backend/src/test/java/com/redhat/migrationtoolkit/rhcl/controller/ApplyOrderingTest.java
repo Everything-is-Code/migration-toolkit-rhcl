@@ -10,6 +10,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApplyOrderingTest {
@@ -85,5 +86,54 @@ class ApplyOrderingTest {
                 ApplyController.openApiSpecUrl("  openAPISpecURL: \"https://api.example.com/q/openapi?format=json\"\n"));
         assertEquals("https://api.example.com/q/openapi?format=json",
                 ApplyController.openApiSpecUrl("openAPISpecURL: https://api.example.com/q/openapi?format=json\n"));
+        assertNull(ApplyController.openApiSpecUrl(null));
+        assertNull(ApplyController.openApiSpecUrl("kind: ConfigMap\n"));
+    }
+
+    @Test
+    void targetNamespace_withoutMetadata_usesFallback() {
+        GenericKubernetesResource resource = new GenericKubernetesResource();
+        assertEquals("business-apis", ApplyController.targetNamespace(resource, "business-apis"));
+    }
+
+    @Test
+    void applyRank_coversRouteSuffixesAndDefault() {
+        assertEquals(5, ApplyController.applyRank(null));
+        assertEquals(2, ApplyController.applyRank("charts/route.yml"));
+        assertEquals(2, ApplyController.applyRank("charts/route.yaml"));
+        assertEquals(8, ApplyController.applyRank("APIProduct.yaml"));
+        assertEquals(5, ApplyController.applyRank("secret.yaml"));
+    }
+
+    @Test
+    void normalizeApiVersion_promotesKuadrantAndOutdentsApiKeyCredentials() {
+        String kuadrant = """
+                apiVersion: kuadrant.io/v1beta2
+                kind: RateLimitPolicy
+                ---
+                apiVersion: kuadrant.io/v1beta1
+                kind: AuthPolicy
+                """;
+        String promoted = ApplyController.normalizeApiVersion(kuadrant);
+        assertTrue(promoted.contains("apiVersion: kuadrant.io/v1\nkind: RateLimitPolicy"));
+        assertTrue(promoted.contains("apiVersion: kuadrant.io/v1\nkind: AuthPolicy"));
+
+        String grant = "apiVersion: gateway.networking.k8s.io/v1beta1\r\nkind: ReferenceGrant\r\n";
+        assertTrue(ApplyController.normalizeApiVersion(grant).contains("gateway.networking.k8s.io/v1beta1\r\nkind: ReferenceGrant"));
+
+        String gateway = "apiVersion: gateway.networking.k8s.io/v1beta1\r\nkind: Gateway\r\n";
+        assertTrue(ApplyController.normalizeApiVersion(gateway).contains("apiVersion: gateway.networking.k8s.io/v1\r\nkind: Gateway"));
+
+        String apiKey = """
+                spec:
+                  apiKey:
+                    selector:
+                      name: token
+                    credentials:
+                      name: api-key
+                """;
+        String fixed = ApplyController.normalizeApiVersion(apiKey);
+        assertTrue(fixed.contains("\n  credentials:\n"));
+        assertFalse(fixed.contains("\n    credentials:\n"));
     }
 }

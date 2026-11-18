@@ -994,5 +994,100 @@ class ThreeScaleExportServiceTest {
                 .getMappingRules(eq("7"), anyString(), anyInt(), eq(ThreeScaleExportService.LIST_PAGE_SIZE));
     }
 
+    @Test
+    void exportService_appliesIssuerAndProductionProxyRules() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubOidcExport(client, "8");
+        org.mockito.Mockito.when(client.getProxy(eq("8"), anyString())).thenReturn(Map.of(
+                "proxy", Map.of("oidc_issuer_endpoint", "https://rhbk.apps.example.com/realms/nb")));
+        org.mockito.Mockito.when(client.getProxyConfig(eq("8"), anyString())).thenReturn(proxyConfig("/api/v1/customers"));
+
+        ApiService exported = service.exportService(client, "https://3scale.example", "tok-issuer", "8");
+
+        assertEquals("https://rhbk.apps.example.com/realms/nb", exported.authentication.oidcIssuerEndpoint);
+        assertEquals(1, exported.mappingRules.size());
+        assertEquals("/api/v1/customers", exported.mappingRules.get(0).pattern);
+        org.mockito.Mockito.verify(client, org.mockito.Mockito.never()).getSandboxProxyConfig(anyString(), anyString());
+    }
+
+    @Test
+    void exportService_fallsBackToSandboxWhenProductionProxyConfigFails() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubOidcExport(client, "9");
+        org.mockito.Mockito.when(client.getProxy(eq("9"), anyString()))
+                .thenThrow(new RuntimeException("proxy down"));
+        org.mockito.Mockito.when(client.getProxyConfig(eq("9"), anyString()))
+                .thenThrow(new RuntimeException("production down"));
+        org.mockito.Mockito.when(client.getSandboxProxyConfig(eq("9"), anyString()))
+                .thenReturn(proxyConfig("/api/v1/loans"));
+
+        ApiService exported = service.exportService(client, "https://3scale.example", "tok-sandbox", "9");
+
+        assertNull(exported.authentication.oidcIssuerEndpoint);
+        assertEquals("/api/v1/loans", exported.mappingRules.get(0).pattern);
+    }
+
+    @Test
+    void exportService_ignoresBlankIssuerAndEmptySandbox() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubOidcExport(client, "10");
+        org.mockito.Mockito.when(client.getProxy(eq("10"), anyString())).thenReturn(Map.of(
+                "proxy", Map.of("oidc_issuer_endpoint", "  ")));
+        org.mockito.Mockito.when(client.getProxyConfig(eq("10"), anyString()))
+                .thenThrow(new RuntimeException("production down"));
+        org.mockito.Mockito.when(client.getSandboxProxyConfig(eq("10"), anyString()))
+                .thenThrow(new RuntimeException("sandbox down"));
+
+        ApiService exported = service.exportService(client, "https://3scale.example", "tok-blank", "10");
+
+        assertNull(exported.authentication.oidcIssuerEndpoint);
+        assertTrue(exported.mappingRules.isEmpty());
+    }
+
+    @Test
+    void exportService_ignoresNonMapProxyAndNonStringIssuer() {
+        com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client =
+                org.mockito.Mockito.mock(com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient.class);
+        stubOidcExport(client, "11");
+        org.mockito.Mockito.when(client.getProxy(eq("11"), anyString()))
+                .thenReturn(Map.of("proxy", "not-a-map"));
+        org.mockito.Mockito.when(client.getProxyConfig(eq("11"), anyString())).thenReturn(Map.of());
+
+        ApiService first = service.exportService(client, "https://3scale.example", "tok-nonmap", "11");
+        assertNull(first.authentication.oidcIssuerEndpoint);
+        assertTrue(first.mappingRules.isEmpty());
+
+        service.clearExportCache();
+        org.mockito.Mockito.when(client.getProxy(eq("11"), anyString())).thenReturn(Map.of(
+                "proxy", Map.of("oidc_issuer_endpoint", 12)));
+        ApiService second = service.exportService(client, "https://3scale.example", "tok-number", "11");
+        assertNull(second.authentication.oidcIssuerEndpoint);
+    }
+
+    private static void stubOidcExport(
+            com.redhat.migrationtoolkit.rhcl.client.ThreeScaleClient client, String serviceId) {
+        stubMinimalExport(client, serviceId, "Oidc");
+        org.mockito.Mockito.when(client.getService(eq(serviceId), anyString()))
+                .thenReturn(Map.of("service", Map.of(
+                        "id", Integer.parseInt(serviceId),
+                        "name", "Oidc",
+                        "system_name", "oidc_" + serviceId,
+                        "backend_version", "oidc")));
+    }
+
+    private static Map<String, Object> proxyConfig(String pattern) {
+        return Map.of("proxy_config", Map.of(
+                "content", Map.of(
+                        "proxy", Map.of(
+                                "proxy_rules", List.of(Map.of("proxy_rule", Map.of(
+                                        "owner_type", "Backend",
+                                        "pattern", pattern,
+                                        "http_method", "GET",
+                                        "metric_system_name", "hits")))))));
+    }
+
 
 }
