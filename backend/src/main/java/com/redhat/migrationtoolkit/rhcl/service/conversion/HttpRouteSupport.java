@@ -76,16 +76,25 @@ public final class HttpRouteSupport {
         return path.equals(mount) || path.startsWith(mount.endsWith("/") ? mount : mount + "/");
     }
 
+    public static List<HTTPBackendRef> buildBackendRefs(List<ResolvedBackend> selected) {
+        return buildBackendRefs(selected, null);
+    }
+
     /**
      * Build typed Fabric8 {@link HTTPBackendRef} list from resolved backends.
+     * A Service in another namespace is named explicitly so a ReferenceGrant can allow it.
      */
-    public static List<HTTPBackendRef> buildBackendRefs(List<ResolvedBackend> selected) {
+    public static List<HTTPBackendRef> buildBackendRefs(List<ResolvedBackend> selected, String routeNamespace) {
         boolean weighted = selected.size() > 1;
         List<HTTPBackendRef> refs = new ArrayList<>();
         for (ResolvedBackend backend : selected) {
             var refBuilder = new HTTPBackendRefBuilder()
                     .withName(backend.refName)
                     .withPort(backend.port);
+            String backendNs = PublicHost.namespaceOf(backend.privateEndpoint);
+            if (routeNamespace != null && backendNs != null && !backendNs.equals(routeNamespace)) {
+                refBuilder.withNamespace(backendNs);
+            }
             if (weighted) {
                 refBuilder.withWeight(backend.weight != null ? backend.weight : 1);
             }

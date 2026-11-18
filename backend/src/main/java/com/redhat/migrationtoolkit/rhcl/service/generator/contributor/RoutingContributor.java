@@ -69,17 +69,17 @@ public class RoutingContributor implements HttpRouteContributor {
 
             if ("or".equals(rule.combineOp())) {
                 for (MatchOp op : convertible) {
-                    emitRule(builder, List.of(op), selected, sharedFilters, timeouts, retry);
+                    emitRule(builder, List.of(op), selected, sharedFilters, timeouts, retry, ctx.namespace);
                 }
             } else {
-                emitRule(builder, convertible, selected, sharedFilters, timeouts, retry);
+                emitRule(builder, convertible, selected, sharedFilters, timeouts, retry, ctx.namespace);
             }
         }
     }
 
     private static void emitRule(HttpRouteBuilder builder, List<MatchOp> ops,
             List<ResolvedBackend> selected, List<HTTPRouteFilter> sharedFilters,
-            HTTPRouteTimeouts timeouts, HTTPRouteRetry retry) {
+            HTTPRouteTimeouts timeouts, HTTPRouteRetry retry, String routeNamespace) {
         // Register paths for OPTIONS rules
         for (MatchOp op : ops) {
             if (op.kind() == MatchKind.PATH) {
@@ -94,7 +94,7 @@ public class RoutingContributor implements HttpRouteContributor {
         }
 
         List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
-        List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+        List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected, routeNamespace);
 
         var ruleBuilder = new HTTPRouteRuleBuilder()
                 .withMatches(match)

@@ -48,7 +48,7 @@ public class MappingRulesContributor implements HttpRouteContributor {
 
                 List<ResolvedBackend> selected = HttpRouteSupport.selectBackendsForPath(backends, path);
                 List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
-                List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+                List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected, ctx.namespace);
 
                 var match = new HTTPRouteMatchBuilder()
                         .withNewPath()
@@ -76,7 +76,7 @@ public class MappingRulesContributor implements HttpRouteContributor {
             builder.addPathForOptions("/");
             List<ResolvedBackend> selected = HttpRouteSupport.selectBackendsForPath(backends, "/");
             List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
-            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected, ctx.namespace);
 
             var match = new HTTPRouteMatchBuilder()
                     .withNewPath()

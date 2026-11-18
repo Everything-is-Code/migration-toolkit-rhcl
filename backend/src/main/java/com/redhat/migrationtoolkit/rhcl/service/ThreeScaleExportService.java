@@ -528,7 +528,47 @@ public class ThreeScaleExportService {
             }
         }
 
+        completeFromProxy(client, service, accessToken);
         return service;
+    }
+
+    private void completeFromProxy(ThreeScaleClient client, ApiService service, String accessToken) {
+        applyIssuer(client, service, accessToken);
+        if (service.mappingRules == null || service.mappingRules.isEmpty()) {
+            service.mappingRules = rulesFromProxyConfig(client, service, accessToken);
+        }
+    }
+
+    private void applyIssuer(ThreeScaleClient client, ApiService service, String accessToken) {
+        if (service.authentication == null) {
+            return;
+        }
+        try {
+            Map<String, Object> wrapper = client.getProxy(service.id, accessToken);
+            Object proxyObj = wrapper != null ? wrapper.get("proxy") : null;
+            if (!(proxyObj instanceof Map<?, ?> proxy)) {
+                return;
+            }
+            Object issuer = proxy.get("oidc_issuer_endpoint");
+            if (issuer instanceof String value && !value.isBlank()) {
+                service.authentication.oidcIssuerEndpoint = value;
+            }
+        } catch (Exception e) {
+            LOG.warnf("Failed to read OIDC issuer for service %s: %s", service.id, e.getMessage());
+        }
+    }
+
+    private List<MappingRule> rulesFromProxyConfig(ThreeScaleClient client, ApiService service, String accessToken) {
+        Map<String, Object> config = safeGetProxyConfig(client, service.id, accessToken);
+        if (config == null) {
+            try {
+                config = client.getSandboxProxyConfig(service.id, accessToken);
+            } catch (Exception e) {
+                LOG.warnf("Failed to read sandbox proxy config for service %s: %s", service.id, e.getMessage());
+                return Collections.emptyList();
+            }
+        }
+        return ProxyConfigRules.fromProxyConfig(config, service.backends);
     }
 
     @SuppressWarnings("unchecked")

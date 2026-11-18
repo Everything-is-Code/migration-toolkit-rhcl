@@ -50,12 +50,18 @@ const ConversionPage: React.FC = () => {
         ));
         return;
       }
+      const namespace = (options.namespace ?? '').trim() || appState.namespace.trim();
+      if (!namespace) {
+        setError(t('conversion.namespaceHelper'));
+        return;
+      }
+      setAppState(prev => ({ ...prev, namespace }));
       const supportedPolicies = await loadSupportedPolicies();
       const resp = await conversionApi.convert({
         threescaleUrl: appState.connection.url,
         accessToken: appState.connection.accessToken,
         tenant: appState.connection.tenant,
-        namespace: appState.namespace,
+        namespace,
         serviceIds: appState.selectedServices.map(s => s.id),
         externalBackendUrl: options.isExternal && options.externalBackendUrl
           ? options.externalBackendUrl
@@ -122,6 +128,8 @@ const ConversionPage: React.FC = () => {
               progress={progress}
               selectedServices={appState.selectedServices}
               conversionResults={appState.conversionResults}
+              namespace={appState.namespace}
+              onNamespaceChange={(namespace) => setAppState(prev => ({ ...prev, namespace }))}
               onConvert={handleConvert}
               onBack={() => navigate('/compatibility')}
             />

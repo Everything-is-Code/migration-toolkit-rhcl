@@ -1,5 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.service.generator;
 
+import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiProductDocumentation;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiProductManifest;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ApiProductSpec;
 import com.redhat.migrationtoolkit.rhcl.model.kuadrant.ManifestMeta;
@@ -43,13 +44,19 @@ public class ApiProductGenerator implements ResourceGenerator {
         ManifestMeta meta = KuadrantManifestSupport.meta(name, namespace, name, ctx.includeMigratedFromLabel);
 
         TargetRef targetRef = new TargetRef("gateway.networking.k8s.io", "HTTPRoute", name + "-route");
+        String host = ctx.publicHostname();
+        ApiProductDocumentation documentation = null;
+        if (host != null) {
+            documentation = new ApiProductDocumentation("https://" + host + "/q/openapi?format=json");
+        }
         ApiProductSpec spec = new ApiProductSpec(
                 displayName,
                 description,
                 "automatic",
                 "Published",
                 targetRef,
-                "v1");
+                "v1",
+                documentation);
 
         ApiProductManifest manifest = new ApiProductManifest(
                 "devportal.kuadrant.io/v1alpha1", "APIProduct", meta, spec);

@@ -1,5 +1,6 @@
 package com.redhat.migrationtoolkit.rhcl.model.kuadrant;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonPropertyOrder({
@@ -8,7 +9,8 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
         "approvalMode",
         "publishStatus",
         "targetRef",
-        "version"
+        "version",
+        "documentation"
 })
 public record ApiProductSpec(
         String displayName,
@@ -16,6 +18,11 @@ public record ApiProductSpec(
         String approvalMode,
         String publishStatus,
         TargetRef targetRef,
-        String version
+        String version,
+        @JsonInclude(JsonInclude.Include.NON_NULL) ApiProductDocumentation documentation
 ) {
+    public ApiProductSpec(String displayName, String description, String approvalMode,
+            String publishStatus, TargetRef targetRef, String version) {
+        this(displayName, description, approvalMode, publishStatus, targetRef, version, null);
+    }
 }

@@ -12,6 +12,11 @@ import {
   Spinner,
   Progress,
   Button,
+  FormGroup,
+  TextInput,
+  FormHelperText,
+  HelperText,
+  HelperTextItem,
 } from '@patternfly/react-core';
 import { useTranslation } from 'react-i18next';
 import ConversionBackendSettings from './ConversionBackendSettings';
@@ -27,11 +32,16 @@ interface Props {
   progress: number;
   selectedServices: ApiService[];
   conversionResults: ConversionResultItem[];
+  namespace: string;
+  onNamespaceChange: (value: string) => void;
   onConvert: (options: ConversionFormOptions) => void;
   onBack: () => void;
 }
 
-const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedServices, conversionResults, onConvert, onBack }) => {
+const ConversionForm: React.FC<Props> = ({
+  loading, error, progress, selectedServices, conversionResults,
+  namespace, onNamespaceChange, onConvert, onBack,
+}) => {
   const { t } = useTranslation();
 
   const [isExternal, setIsExternal] = useState(false);
@@ -71,6 +81,7 @@ const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedSer
       includeDnsPolicy,
       dnsHostname,
       dnsProviderSecretName,
+      namespace: namespace.trim(),
     });
   };
 
@@ -101,6 +112,21 @@ const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedSer
             </DataListItem>
           ))}
         </DataList>
+
+        <FormGroup label={t('connection.labelNamespace')} isRequired fieldId="target-namespace">
+          <TextInput
+            id="target-namespace"
+            value={namespace}
+            onChange={(_e, val) => onNamespaceChange(val)}
+            placeholder="business-apis"
+            isRequired
+          />
+          <FormHelperText>
+            <HelperText>
+              <HelperTextItem>{t('conversion.namespaceHelper')}</HelperTextItem>
+            </HelperText>
+          </FormHelperText>
+        </FormGroup>
 
         <ConversionBackendSettings
           isExternal={isExternal}
@@ -154,7 +180,7 @@ const ConversionForm: React.FC<Props> = ({ loading, error, progress, selectedSer
           <Button variant="secondary" onClick={onBack}>
             {t('conversion.btnBack')}
           </Button>
-          <Button variant="primary" onClick={handleConvertClick} isDisabled={loading}>
+          <Button variant="primary" onClick={handleConvertClick} isDisabled={loading || !namespace.trim()}>
             {loading
               ? t('conversion.btnConverting')
               : results.length > 0

@@ -133,6 +133,7 @@
     "warningTitle": "APIが選択されていません",
     "goToApiList": "API選択へ戻る",
     "targetTitle": "変換対象 API",
+    "namespaceHelper": "すべてのマニフェストに書き込まれます。別ネームスペースのバックエンド Service はそのネームスペースのまま残り、ReferenceGrant はそこに作成されます。",
     "ariaTarget": "変換対象",
     "progressTitle": "変換処理中...",
     "converting": "変換処理中...",

@@ -117,4 +117,14 @@ public interface ThreeScaleClient {
             @QueryParam("page") @DefaultValue("1") int page,
             @QueryParam("per_page")
             @DefaultValue(ConversionConstants.LIST_PAGE_SIZE_DEFAULT) int perPage);
+
+    @GET
+    @Path("/admin/api/services/{serviceId}/proxy.json")
+    Map<String, Object> getProxy(@PathParam("serviceId") String serviceId,
+                                 @QueryParam("access_token") String accessToken);
+
+    @GET
+    @Path("/admin/api/services/{serviceId}/proxy/configs/sandbox/latest.json")
+    Map<String, Object> getSandboxProxyConfig(@PathParam("serviceId") String serviceId,
+                                              @QueryParam("access_token") String accessToken);
 }

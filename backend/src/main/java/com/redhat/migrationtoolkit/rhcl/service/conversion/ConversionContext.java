@@ -111,11 +111,20 @@ public final class ConversionContext {
         return "http";
     }
 
-    /** HTTPRoute {@code spec.hostnames} when DNSPolicy supplies a public hostname. */
+    /** HTTPRoute {@code spec.hostnames}. DNSPolicy wins; otherwise the OpenShift apps host from the OIDC issuer. */
     public String routeHostname() {
-        if (!emitDnsPolicy()) {
-            return null;
+        return publicHostname();
+    }
+
+    /**
+     * Public hostname shared by the Gateway listener, HTTPRoute, OpenShift Route, and APIProduct URL.
+     */
+    public String publicHostname() {
+        if (emitDnsPolicy()) {
+            return options.dnsHostname.trim();
         }
-        return options.dnsHostname.trim();
+        String issuer = service != null && service.authentication != null
+                ? service.authentication.oidcIssuerEndpoint : null;
+        return PublicHost.fromIssuer(issuer, serviceKebabName, namespace);
     }
 }

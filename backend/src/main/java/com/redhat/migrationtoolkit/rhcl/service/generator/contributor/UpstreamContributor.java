@@ -77,7 +77,7 @@ public class UpstreamContributor implements HttpRouteContributor {
                     ? "PathPrefix" : "RegularExpression";
 
             List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
-            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected, ctx.namespace);
 
             var httpMatch = new HTTPRouteMatchBuilder()
                     .withNewPath()
