@@ -21,6 +21,9 @@ import io.fabric8.kubernetes.client.dsl.base.PatchContext;
 import io.fabric8.kubernetes.client.dsl.base.PatchType;
 import io.fabric8.kubernetes.client.dsl.base.ResourceDefinitionContext;
 import io.fabric8.kubernetes.client.utils.Serialization;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.Consumes;
@@ -36,8 +39,16 @@ import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -52,6 +63,9 @@ import java.util.stream.Collectors;
 public class ApplyController {
 
     private static final Logger LOG = Logger.getLogger(ApplyController.class);
+    /** Package-visible so tests can probe the wait without the production 30s budget. */
+    static int openApiAttempts = 15;
+    static Duration openApiInterval = Duration.ofSeconds(2);
 
     @Inject
     KubernetesClient client;
@@ -106,6 +120,8 @@ public class ApplyController {
         try {
             ensureNamespace(namespace);
             ensureRbac(namespace);
+            Set<String> ensured = new HashSet<>();
+            ensured.add(namespace);
 
             PatchContext ctx = new PatchContext.Builder()
                     .withPatchType(PatchType.SERVER_SIDE_APPLY)
@@ -117,7 +133,7 @@ public class ApplyController {
             List<ResourceResult> resourceResults = new ArrayList<>();
             Map<String, String> exportedYamls = new LinkedHashMap<>();
 
-            for (Map.Entry<String, String> entry : request.files().entrySet()) {
+            for (Map.Entry<String, String> entry : orderedFiles(request.files())) {
                 String fileName = entry.getKey();
                 String lower = fileName.toLowerCase();
                 if (!lower.endsWith(".yaml") && !lower.endsWith(".yml")) {
@@ -125,6 +141,9 @@ public class ApplyController {
                     continue;
                 }
                 String yaml = entry.getValue();
+                if (lower.contains("apiproduct")) {
+                    waitForOpenApi(openApiSpecUrl(yaml));
+                }
                 try {
                     List<GenericKubernetesResource> items = splitYamlDocs(normalizeApiVersion(yaml)).stream()
                             .filter(doc -> !doc.isBlank())
@@ -138,10 +157,12 @@ public class ApplyController {
                     for (GenericKubernetesResource gkr : items) {
                         String kind = gkr.getKind();
                         String name = gkr.getMetadata() != null ? gkr.getMetadata().getName() : "unknown";
-                        // Always override with the request namespace (handles stale/missing namespace in YAML)
-                        String ns = namespace;
-                        if (gkr.getMetadata() != null) {
-                            gkr.getMetadata().setNamespace(ns);
+                        // Keep a namespace already written in the manifest (ReferenceGrant lives
+                        // in the backend namespace). The request namespace is only the fallback.
+                        String ns = targetNamespace(gkr, namespace);
+                        if (ensured.add(ns)) {
+                            ensureNamespace(ns);
+                            ensureRbac(ns);
                         }
                         try {
                             ResourceDefinitionContext rdc = buildRdc(gkr.getApiVersion(), kind);
@@ -416,21 +437,137 @@ public class ApplyController {
         }
     }
 
+    static String targetNamespace(GenericKubernetesResource gkr, String fallback) {
+        if (gkr.getMetadata() == null) {
+            return fallback;
+        }
+        String declared = gkr.getMetadata().getNamespace();
+        if (declared != null && !declared.isBlank()) {
+            return declared;
+        }
+        gkr.getMetadata().setNamespace(fallback);
+        return fallback;
+    }
+
+    static List<Map.Entry<String, String>> orderedFiles(Map<String, String> files) {
+        List<Map.Entry<String, String>> ordered = new ArrayList<>(files.entrySet());
+        ordered.sort(Comparator.comparingInt(e -> applyRank(e.getKey())));
+        return ordered;
+    }
+
+    static int applyRank(String fileName) {
+        String n = fileName == null ? "" : fileName.toLowerCase();
+        if (n.contains("apiproduct")) {
+            return 8;
+        }
+        if (n.contains("referencegrant")) {
+            return 0;
+        }
+        if (n.contains("gateway")) {
+            return 1;
+        }
+        if (n.contains("httproute") || n.contains("docs-route")) {
+            return 3;
+        }
+        if (n.equals("route.yaml") || n.equals("route.yml") || n.endsWith("/route.yaml") || n.endsWith("/route.yml")) {
+            return 2;
+        }
+        return 5;
+    }
+
+    static String openApiSpecUrl(String yaml) {
+        if (yaml == null) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("(?m)^\\s*openAPISpecURL:\\s*\"(https?://[^\"]+)\"")
+                .matcher(yaml);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        matcher = Pattern.compile("(?m)^\\s*openAPISpecURL:\\s*(https?://\\S+)").matcher(yaml);
+        return matcher.find() ? matcher.group(1) : null;
+    }
+
+    /**
+     * The developer-portal controller fetches openAPISpecURL once, on create, and keeps a
+     * failed status until the APIProduct spec changes. Wait until the docs route answers
+     * before that first fetch.
+     */
+    void waitForOpenApi(String url) {
+        if (url == null || url.isBlank()) {
+            return;
+        }
+        HttpClient http = openApiClient();
+        for (int attempt = 1; attempt <= openApiAttempts; attempt++) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                        .timeout(Duration.ofSeconds(5))
+                        .GET()
+                        .build();
+                int status = http.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+                if (status >= 200 && status < 300) {
+                    LOG.infof("OpenAPI spec reachable (%d) at %s", status, url);
+                    return;
+                }
+                LOG.infof("OpenAPI spec not ready, status %d (%d/%d)", status, attempt, openApiAttempts);
+            } catch (Exception e) {
+                LOG.infof("OpenAPI spec not ready (%d/%d): %s", attempt, openApiAttempts, e.getMessage());
+            }
+            try {
+                Thread.sleep(openApiInterval.toMillis());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        LOG.warnf("Applying APIProduct before OpenAPI spec returned 200: %s", url);
+    }
+
+    private static HttpClient openApiClient() {
+        try {
+            TrustManager[] trustAll = new TrustManager[] {
+                    new X509TrustManager() {
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                        }
+
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return new X509Certificate[0];
+                        }
+                    }
+            };
+            SSLContext ssl = SSLContext.getInstance("TLS");
+            ssl.init(null, trustAll, new SecureRandom());
+            return HttpClient.newBuilder()
+                    .sslContext(ssl)
+                    .connectTimeout(Duration.ofSeconds(3))
+                    .followRedirects(HttpClient.Redirect.NORMAL)
+                    .build();
+        } catch (Exception e) {
+            return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+        }
+    }
+
     private List<String> splitYamlDocs(String yaml) {
         return Arrays.asList(yaml.split("(?m)^---\\s*$"));
     }
 
-    private String normalizeApiVersion(String yaml) {
+    static String normalizeApiVersion(String yaml) {
         String result = yaml
                 .replace("apiVersion: kuadrant.io/v1beta2", "apiVersion: kuadrant.io/v1")
-                .replace("apiVersion: kuadrant.io/v1beta1", "apiVersion: kuadrant.io/v1")
-                .replace("apiVersion: gateway.networking.k8s.io/v1beta1",
-                        "apiVersion: gateway.networking.k8s.io/v1");
+                .replace("apiVersion: kuadrant.io/v1beta1", "apiVersion: kuadrant.io/v1");
+        // ReferenceGrant is served only as v1beta1 on current Gateway API installs.
+        // Gateway and HTTPRoute at v1beta1 are promoted to v1.
+        result = result.replaceAll(
+                "(?m)^apiVersion: gateway\\.networking\\.k8s\\.io/v1beta1(?=\\r?\\nkind: (?!ReferenceGrant\\b))",
+                "apiVersion: gateway.networking.k8s.io/v1");
         result = moveCredentialsOutOfApiKey(result);
         return result;
     }
 
-    private String moveCredentialsOutOfApiKey(String yaml) {
+    private static String moveCredentialsOutOfApiKey(String yaml) {
         Pattern pattern = Pattern.compile(
             "(?m)(^([ \\t]+)apiKey:\\n"
             + "(?:\\2[ \\t]+(?!credentials:).*\\n)*)"

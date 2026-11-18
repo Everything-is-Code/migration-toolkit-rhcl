@@ -105,14 +105,14 @@ public class BackendResolver {
         String refName;
         String seName;
         String drName;
-        if (multi && backendSys != null) {
-            refName = productName + "-" + backendSys + "-backend";
-            seName = productName + "-" + backendSys + "-external";
-            drName = productName + "-" + backendSys + "-backend-tls";
-        } else if (type == BackendType.INTERNAL && internalService != null) {
+        if (type == BackendType.INTERNAL && internalService != null) {
             refName = internalService;
             seName = productName + "-external";
             drName = productName + "-backend-tls";
+        } else if (multi && backendSys != null) {
+            refName = productName + "-" + backendSys + "-backend";
+            seName = productName + "-" + backendSys + "-external";
+            drName = productName + "-" + backendSys + "-backend-tls";
         } else {
             refName = productName + "-backend";
             seName = productName + "-external";

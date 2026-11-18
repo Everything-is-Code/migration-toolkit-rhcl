@@ -133,6 +133,7 @@
     "warningTitle": "No APIs selected",
     "goToApiList": "Back to API selection",
     "targetTitle": "Target APIs",
+    "namespaceHelper": "Written into every manifest. A backend Service in another namespace keeps that namespace, and the ReferenceGrant is created there.",
     "ariaTarget": "Target APIs",
     "progressTitle": "Converting...",
     "converting": "Converting...",

@@ -40,7 +40,7 @@ public class GatewayGenerator implements ResourceGenerator {
     public String generate(ConversionContext ctx) {
         String name = ctx.serviceKebabName;
         String namespace = ctx.namespace;
-        String hostname = resolveHostname(ctx);
+        String hostname = ctx.publicHostname();
 
         List<Listener> listeners = new ArrayList<>();
         listeners.add(httpListener(hostname));
@@ -110,17 +110,6 @@ public class GatewayGenerator implements ResourceGenerator {
             builder.withHostname(hostname);
         }
         return builder.build();
-    }
-
-    private static String resolveHostname(ConversionContext ctx) {
-        if (!ctx.emitDnsPolicy()) {
-            return null;
-        }
-        String hostname = ctx.options.dnsHostname;
-        if (hostname == null || hostname.isBlank()) {
-            return null;
-        }
-        return hostname.trim();
     }
 
     private ManifestSerializer serializer() {

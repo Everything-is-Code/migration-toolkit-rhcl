@@ -51,7 +51,7 @@ public class CorsOptionsContributor implements HttpRouteContributor {
             }
             List<ResolvedBackend> selected = HttpRouteSupport.selectBackendsForPath(backends, path);
             List<HTTPRouteFilter> filters = HttpRouteSupport.buildRuleFilters(selected, sharedFilters);
-            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected);
+            List<HTTPBackendRef> backendRefs = HttpRouteSupport.buildBackendRefs(selected, ctx.namespace);
 
             var match = new HTTPRouteMatchBuilder()
                     .withNewPath()

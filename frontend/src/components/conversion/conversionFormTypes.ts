@@ -15,4 +15,6 @@ export interface ConversionFormOptions {
   includeDnsPolicy: boolean;
   dnsHostname: string;
   dnsProviderSecretName: string;
+  /** Target namespace written into the generated manifests. */
+  namespace?: string;
 }

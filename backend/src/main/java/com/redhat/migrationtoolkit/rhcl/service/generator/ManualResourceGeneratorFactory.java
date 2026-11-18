@@ -21,6 +21,8 @@ final class ManualResourceGeneratorFactory {
 
         List<ResourceGenerator> generators = new ArrayList<>();
         generators.add(new GatewayGenerator());
+        generators.add(new ReferenceGrantGenerator());
+        generators.add(new OpenShiftRouteGenerator());
 
         HttpRouteGenerator httpRoute = new HttpRouteGenerator();
         httpRoute.bindManualContributors(ManualHttpRouteContributorFactory.create());
@@ -36,6 +38,7 @@ final class ManualResourceGeneratorFactory {
 
         generators.add(new ConfigMapGenerator());
         generators.add(new ApiProductGenerator());
+        generators.add(new DocsRouteGenerator());
 
         ApiKeyGenerator apiKey = new ApiKeyGenerator();
         generators.add(apiKey);
