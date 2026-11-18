@@ -1,4 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const harness = vi.hoisted(() => ({
+  namespace: 'test-ns',
+  setAppState: vi.fn(),
+}));
 import { render, screen, act, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
@@ -23,13 +28,13 @@ vi.mock('../components/AppStateContext', () => {
     connection: { url: 'https://3scale.example.com', accessToken: 'tok', tenant: 't', connected: true },
     selectedServices: [{ id: 1, name: 'Svc1', systemName: 'svc1', policies: [] }],
     conversionResults: [],
-    namespace: 'test-ns',
+    get namespace() { return harness.namespace; },
     clusterVersions: null,
     clusterProfile: 'auto' as const,
     validationSnapshot: null,
   };
   return {
-    useAppState: () => ({ appState: state, setAppState: vi.fn() }),
+    useAppState: () => ({ appState: state, setAppState: harness.setAppState }),
     AppStateProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   };
 });
@@ -75,6 +80,26 @@ vi.mock('../components/conversion/ConversionForm', () => ({
       })}>
         Convert DNS
       </button>
+      <button data-testid="convert-explicit-ns" onClick={() => onConvert({
+        isExternal: false, externalBackendUrl: '',
+        loggingTarget: 'gateway', anonymousTarget: 'httproute',
+        ipCheckMode: 'authorizationPolicy', includeMigratedFromLabel: true,
+        includeTlsPolicy: false, tlsIssuerKind: '', tlsIssuerName: '',
+        includeDnsPolicy: false, dnsHostname: '', dnsProviderSecretName: '',
+        namespace: '  business-apis  ',
+      })}>
+        Convert explicit namespace
+      </button>
+      <button data-testid="convert-blank-ns" onClick={() => onConvert({
+        isExternal: false, externalBackendUrl: '',
+        loggingTarget: 'gateway', anonymousTarget: 'httproute',
+        ipCheckMode: 'authorizationPolicy', includeMigratedFromLabel: true,
+        includeTlsPolicy: false, tlsIssuerKind: '', tlsIssuerName: '',
+        includeDnsPolicy: false, dnsHostname: '', dnsProviderSecretName: '',
+        namespace: '   ',
+      })}>
+        Convert blank namespace
+      </button>
       {loading && <span data-testid="loading">Loading...</span>}
       {error && <span data-testid="error">{error}</span>}
     </div>
@@ -91,7 +116,10 @@ import { conversionApi } from '../api/client';
 const mockConvert = vi.mocked(conversionApi.convert);
 
 describe('ConversionPage handleConvert', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    harness.namespace = 'test-ns';
+    vi.clearAllMocks();
+  });
   afterEach(() => cleanup());
 
   it('calls conversionApi.convert with correct payload on success', async () => {
@@ -131,5 +159,31 @@ describe('ConversionPage handleConvert', () => {
 
     expect(mockConvert).not.toHaveBeenCalled();
     expect(screen.getByTestId('error').textContent).toContain('Gateway hostname is required');
+  });
+
+  it('trims an explicit namespace and stores it', async () => {
+    mockConvert.mockResolvedValue({ data: { results: [{ name: 'gw', yaml: 'kind: Gateway' }] } } as never);
+
+    render(<ConversionPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('convert-explicit-ns'));
+    });
+
+    const call = mockConvert.mock.calls[0][0] as Record<string, unknown>;
+    expect(call.namespace).toBe('business-apis');
+    const updater = harness.setAppState.mock.calls[0][0] as (prev: { namespace: string }) => { namespace: string };
+    expect(updater({ namespace: 'old' }).namespace).toBe('business-apis');
+  });
+
+  it('rejects a blank namespace', async () => {
+    harness.namespace = '   ';
+
+    render(<ConversionPage />);
+    await act(async () => {
+      await userEvent.click(screen.getByTestId('convert-blank-ns'));
+    });
+
+    expect(mockConvert).not.toHaveBeenCalled();
+    expect(screen.getByTestId('error').textContent).toContain('conversion.namespaceHelper');
   });
 });

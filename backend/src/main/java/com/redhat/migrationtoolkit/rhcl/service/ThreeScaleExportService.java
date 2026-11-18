@@ -11,6 +11,7 @@ import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
 import com.redhat.migrationtoolkit.rhcl.model.Metric;
 import com.redhat.migrationtoolkit.rhcl.model.Policy;
+import com.redhat.migrationtoolkit.rhcl.service.conversion.ProxyConfigRules;
 import com.redhat.migrationtoolkit.rhcl.util.ConversionConstants;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;

@@ -1,4 +1,4 @@
-package com.redhat.migrationtoolkit.rhcl.service;
+package com.redhat.migrationtoolkit.rhcl.service.conversion;
 
 import com.redhat.migrationtoolkit.rhcl.model.Backend;
 import com.redhat.migrationtoolkit.rhcl.model.MappingRule;
